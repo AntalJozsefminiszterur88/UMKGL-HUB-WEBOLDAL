@@ -252,6 +252,7 @@
         <a href="#sorsolas" data-section="sorsolas">Hoi4 Sorsolás</a>
         <a href="#szavazas" data-section="szavazas">Szavazás</a>
         <a href="#programok" data-section="programok">Programok</a>
+        <a href="#admin" data-section="admin" id="adminNavBtn" style="display: none;">Admin Mód</a>
       </nav>
       <div class="auth-buttons">
         <button id="loginBtn">Bejelentkezés</button>
@@ -460,6 +461,11 @@
           </div>
         </div>
       </section>
+
+      <section id="admin">
+        <h2>Felhasználók Kezelése</h2>
+        <div id="userListContainer"></div>
+      </section>
     </main>
 
     <footer>
@@ -568,6 +574,8 @@
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
     const authButtonsContainer = document.querySelector(".auth-buttons");
+    const adminNavBtn = document.getElementById("adminNavBtn");
+    const userListContainer = document.getElementById("userListContainer");
 
     function openLoginModal() {
       loginModal.style.display = "flex";
@@ -580,17 +588,42 @@
       }
     }
 
+    function updateAdminNavVisibility() {
+      if (!adminNavBtn) return;
+
+      const isAdmin = localStorage.getItem("isAdmin") === "true";
+      adminNavBtn.style.display = isAdmin ? "inline-block" : "none";
+
+      if (!isAdmin) {
+        const adminSection = document.getElementById("admin");
+        if (adminSection && adminSection.classList.contains("active")) {
+          const homeLink = document.querySelector('nav a[data-section="home"]');
+          if (homeLink) {
+            homeLink.click();
+          } else {
+            adminSection.classList.remove("active");
+          }
+        }
+        if (userListContainer) {
+          userListContainer.innerHTML = "";
+        }
+      }
+    }
+
     function updateUIForLoggedIn(username) {
       authButtonsContainer.innerHTML = `
         <span>Szia, ${username}!</span>
         <button id="logoutBtn">Kijelentkezés</button>
       `;
 
+      updateAdminNavVisibility();
+
       const logoutBtn = document.getElementById("logoutBtn");
       if (logoutBtn) {
         logoutBtn.addEventListener("click", () => {
           localStorage.removeItem("token");
           localStorage.removeItem("username");
+          localStorage.removeItem("isAdmin");
           updateUIForLoggedOut();
           alert("Sikeresen kijelentkeztél.");
         });
@@ -603,11 +636,116 @@
         <a href="register.html" id="registerBtn">Regisztráció</a>
       `;
       attachLoginButtonListener();
+      updateAdminNavVisibility();
+    }
+
+    function renderUserList(users) {
+      if (!userListContainer) {
+        return;
+      }
+
+      userListContainer.innerHTML = "";
+
+      if (!Array.isArray(users) || users.length === 0) {
+        userListContainer.textContent = "Nincs megjeleníthető felhasználó.";
+        return;
+      }
+
+      users.forEach((user) => {
+        const row = document.createElement("div");
+        row.className = "admin-user-row";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = user.username;
+        row.appendChild(nameSpan);
+
+        const checkboxLabel = document.createElement("label");
+        checkboxLabel.className = "admin-upload-toggle";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = Number(user.can_upload) === 1;
+
+        checkbox.addEventListener("change", async () => {
+          const token = localStorage.getItem("token");
+          if (!token) {
+            alert("Nincs érvényes hitelesítés.");
+            checkbox.checked = !checkbox.checked;
+            return;
+          }
+
+          const newValue = checkbox.checked;
+          checkbox.disabled = true;
+
+          try {
+            const response = await fetch("/api/users/permissions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ userId: user.id, canUpload: newValue }),
+            });
+
+            const result = await response.json().catch(() => null);
+
+            if (!response.ok) {
+              const message = result && result.message ? result.message : "Nem sikerült frissíteni a jogosultságot.";
+              throw new Error(message);
+            }
+          } catch (error) {
+            console.error("Jogosultság frissítési hiba:", error);
+            alert(error.message || "Nem sikerült frissíteni a jogosultságot.");
+            checkbox.checked = !newValue;
+          } finally {
+            checkbox.disabled = false;
+          }
+        });
+
+        checkboxLabel.appendChild(checkbox);
+        checkboxLabel.append(" Feltölthet");
+        row.appendChild(checkboxLabel);
+
+        userListContainer.appendChild(row);
+      });
+    }
+
+    async function loadAdminPanel() {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        alert("Nincs érvényes hitelesítés.");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/users", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          const message = data && data.message ? data.message : "Nem sikerült betölteni a felhasználókat.";
+          throw new Error(message);
+        }
+
+        renderUserList(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Admin panel betöltési hiba:", error);
+        alert(error.message || "Nem sikerült betölteni az admin panel adatait.");
+      }
     }
 
     closeLogin.addEventListener("click", () => {
       loginModal.style.display = "none";
     });
+
+    if (adminNavBtn) {
+      adminNavBtn.addEventListener("click", loadAdminPanel);
+    }
 
     loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -626,6 +764,7 @@
         if (res.ok) {
           localStorage.setItem("token", data.token);
           localStorage.setItem("username", data.username);
+          localStorage.setItem("isAdmin", data.isAdmin ? "true" : "false");
           updateUIForLoggedIn(data.username);
           loginModal.style.display = "none";
           alert(data.message || "Sikeres bejelentkezés.");
@@ -645,6 +784,7 @@
       if (storedToken && storedUsername) {
         updateUIForLoggedIn(storedUsername);
       } else {
+        localStorage.removeItem("isAdmin");
         updateUIForLoggedOut();
       }
     });
