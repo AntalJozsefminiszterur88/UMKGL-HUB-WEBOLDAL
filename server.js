@@ -50,6 +50,14 @@ function authenticateToken(req, res, next) {
     });
 }
 
+function isAdmin(req, res, next) {
+    if (!req.user || !req.user.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required.' });
+    }
+
+    next();
+}
+
 // 4. Statikus fájlok kiszolgálása
 // Megmondjuk a szervernek, hogy a főkönyvtárban lévő fájlokat (pl. index.html, register.html)
 // és mappákat (pl. HOI4-Porgonc) tegye közvetlenül elérhetővé.
@@ -100,7 +108,7 @@ app.post('/login', (req, res) => {
         return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
     }
 
-    db.get('SELECT id, username, password FROM users WHERE username = ?', [username], (err, user) => {
+    db.get('SELECT id, username, password, is_admin FROM users WHERE username = ?', [username], (err, user) => {
         if (err) {
             console.error('Hiba a felhasználó lekérdezésekor:', err);
             return res.status(500).json({ message: 'Váratlan hiba történt. Próbáld meg később.' });
@@ -120,14 +128,53 @@ app.post('/login', (req, res) => {
                 return res.status(401).json({ message: 'Hibás felhasználónév vagy jelszó.' });
             }
 
-            const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+            const isAdmin = user.is_admin === 1;
+            const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: '1h' });
 
             return res.status(200).json({
                 message: 'Sikeres bejelentkezés.',
                 token,
-                username: user.username
+                username: user.username,
+                isAdmin
             });
         });
+    });
+});
+
+app.get('/api/users', authenticateToken, isAdmin, (req, res) => {
+    const query = 'SELECT id, username, can_upload FROM users';
+
+    db.all(query, [], (err, rows) => {
+        if (err) {
+            console.error('Hiba a felhasználók lekérdezésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült lekérdezni a felhasználókat.' });
+        }
+
+        return res.status(200).json(rows);
+    });
+});
+
+app.post('/api/users/permissions', authenticateToken, isAdmin, (req, res) => {
+    const { userId, canUpload } = req.body;
+
+    if (typeof userId === 'undefined' || typeof canUpload === 'undefined') {
+        return res.status(400).json({ message: 'userId és canUpload mezők megadása kötelező.' });
+    }
+
+    const canUploadValue = canUpload ? 1 : 0;
+    const updateQuery = 'UPDATE users SET can_upload = ? WHERE id = ?';
+
+    db.run(updateQuery, [canUploadValue, userId], function (err) {
+        if (err) {
+            console.error('Hiba a jogosultság frissítésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült frissíteni a jogosultságot.' });
+        }
+
+        if (this.changes === 0) {
+            return res.status(404).json({ message: 'A megadott felhasználó nem található.' });
+        }
+
+        return res.status(200).json({ message: 'Jogosultság sikeresen frissítve.' });
     });
 });
 

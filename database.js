@@ -19,7 +19,8 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
-        can_upload INTEGER DEFAULT 0
+        can_upload INTEGER DEFAULT 0,
+        is_admin INTEGER DEFAULT 0
     )`, (err) => {
         if (err) {
             console.error("Hiba a 'users' tábla létrehozásakor:", err.message);
