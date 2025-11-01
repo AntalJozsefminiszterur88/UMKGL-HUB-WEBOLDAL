@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <title>Regisztráció</title>
-  <link rel="stylesheet" href="HOI4-Porgonc/style.css">
+  <!-- A stíluslap hivatkozásod és a stílusok változatlanok maradnak -->
+  <link rel="stylesheet" href="HOI4-Porgonc/style.css"> 
   <style>
-    body { text-align: center; padding-top: 50px; }
+    :root { /* Hozzáadtam a hiányzó CSS változót a gomb színéhez */
+        --accent: #7289da;
+    }
+    body { text-align: center; padding-top: 50px; background: #36393f; color: #dcddde; font-family: sans-serif; }
+    h1 { color: var(--accent); }
     form { background: #2f3136; padding: 1rem; border-radius: 4px; width: 300px; margin: auto; }
-    input { width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background:#1e2124; color:#dcddde; border:1px solid #202225; border-radius:4px; }
+    input { width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; padding: 0.5rem; background:#1e2124; color:#dcddde; border:1px solid #202225; border-radius:4px; }
     button { background: var(--accent); color:#fff; border:none; padding:0.5rem 1rem; border-radius:4px; cursor:pointer; width:100%; }
+    a { color: var(--accent); display: inline-block; margin-top: 1rem; }
   </style>
 </head>
 <body>
@@ -18,22 +24,33 @@
     <input type="password" id="regPass" placeholder="Jelszó" required />
     <button type="submit">Regisztráció</button>
   </form>
+  <a href="/">Vissza a főoldalra</a>
 
   <script>
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
+      e.preventDefault(); // Megakadályozza az oldal alapértelmezett újratöltését
+
       const username = document.getElementById('regUser').value;
       const password = document.getElementById('regPass').value;
-      const res = await fetch('/register', {
+
+      // Adatok elküldése a szerver '/register' végpontjára
+      const response = await fetch('/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ username, password })
       });
-      if(res.ok){
-        alert('Sikeres regisztráció');
-        window.location.href = '/';
+
+      // Válasz feldolgozása
+      if (response.ok) {
+        // Ha a szerver 2xx státuszkóddal válaszolt (siker)
+        alert('Sikeres regisztráció! Most már bejelentkezhetsz.');
+        window.location.href = '/'; // Visszairányítás a főoldalra
       } else {
-        alert('Hiba a regisztráció során');
+        // Ha a szerver 4xx vagy 5xx státuszkóddal válaszolt (hiba)
+        const data = await response.json(); // A szerver által küldött hibaüzenet kiolvasása
+        alert(`Hiba a regisztráció során: ${data.message}`); // Részletes hibaüzenet megjelenítése
       }
     });
   </script>

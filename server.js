@@ -1,45 +1,32 @@
+// 1. A szükséges csomagok betöltése
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 
+// 2. Az Express alkalmazás létrehozása
 const app = express();
-const PORT = process.env.PORT || 3000;
-const usersFile = path.join(__dirname, 'users.json');
+const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
 
-app.use(express.json());
-app.use(express.static(__dirname));
+// 3. Middleware-ek (köztes szoftverek) beállítása
+// Ez a sor mondja meg az Expressnek, hogy a JSON formátumú kéréseket tudja értelmezni
+app.use(express.json()); 
+// Ez pedig a HTML formokból érkező adatokat segít feldolgozni
+app.use(express.urlencoded({ extended: true })); 
 
-function loadUsers() {
-  if (fs.existsSync(usersFile)) {
-    return JSON.parse(fs.readFileSync(usersFile, 'utf8'));
-  }
-  return {};
-}
+// 4. Statikus fájlok kiszolgálása
+// Megmondjuk a szervernek, hogy a főkönyvtárban lévő fájlokat (pl. index.html, register.html)
+// és mappákat (pl. HOI4-Porgonc) tegye közvetlenül elérhetővé.
+app.use(express.static(path.join(__dirname)));
 
-function saveUsers(users) {
-  fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
-}
-
-app.post('/register', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).end();
-  const users = loadUsers();
-  if (users[username]) return res.status(409).end();
-  users[username] = { password };
-  saveUsers(users);
-  res.status(200).end();
+// 5. Alapértelmezett útvonal (most még csak a statikus fájlt szolgálja ki)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  const users = loadUsers();
-  if (users[username] && users[username].password === password) {
-    res.status(200).end();
-  } else {
-    res.status(401).end();
-  }
-});
+// A jövőbeli API végpontjaink helye (regisztráció, bejelentkezés, stb.)
+// ... ide jönnek majd a többi funkciók ...
 
+
+// 6. A szerver elindítása
 app.listen(PORT, () => {
-  console.log('Server running on port ' + PORT);
+    console.log(`A szerver sikeresen elindult és fut a http://localhost:${PORT} címen`);
 });
