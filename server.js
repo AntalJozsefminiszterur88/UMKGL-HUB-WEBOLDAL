@@ -30,6 +30,36 @@ app.get('/', (req, res) => {
 // A jövőbeli API végpontjaink helye (regisztráció, bejelentkezés, stb.)
 // ... ide jönnek majd a többi funkciók ...
 
+app.post('/register', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
+    }
+
+    bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
+        if (hashErr) {
+            console.error('Hiba a jelszó titkosítása során:', hashErr);
+            return res.status(500).json({ message: 'Váratlan hiba történt. Próbáld meg később.' });
+        }
+
+        const insertQuery = 'INSERT INTO users (username, password) VALUES (?, ?)';
+
+        db.run(insertQuery, [username, hashedPassword], function (dbErr) {
+            if (dbErr) {
+                if (dbErr.code === 'SQLITE_CONSTRAINT') {
+                    return res.status(409).json({ message: 'A felhasználónév már létezik.' });
+                }
+
+                console.error('Hiba a felhasználó mentésekor:', dbErr);
+                return res.status(500).json({ message: 'Váratlan hiba történt. Próbáld meg később.' });
+            }
+
+            return res.status(201).json({ message: 'Sikeres regisztráció.' });
+        });
+    });
+});
+
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
 
