@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
 const db = require('./database');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
@@ -13,9 +14,41 @@ const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
 
 // 3. Middleware-ek (köztes szoftverek) beállítása
 // Ez a sor mondja meg az Expressnek, hogy a JSON formátumú kéréseket tudja értelmezni
-app.use(express.json()); 
+app.use(express.json());
 // Ez pedig a HTML formokból érkező adatokat segít feldolgozni
-app.use(express.urlencoded({ extended: true })); 
+app.use(express.urlencoded({ extended: true }));
+
+// Fájlfeltöltés beállítása a videókhoz
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, path.join(__dirname, 'uploads'));
+    },
+    filename: (req, file, cb) => {
+        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
+        cb(null, uniqueName);
+    }
+});
+
+const upload = multer({ storage });
+
+// Hitelesítési middleware a védett végpontokhoz
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ message: 'Hiányzó hitelesítési token.' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Érvénytelen vagy lejárt token.' });
+        }
+
+        req.user = user;
+        next();
+    });
+}
 
 // 4. Statikus fájlok kiszolgálása
 // Megmondjuk a szervernek, hogy a főkönyvtárban lévő fájlokat (pl. index.html, register.html)
@@ -95,6 +128,26 @@ app.post('/login', (req, res) => {
                 username: user.username
             });
         });
+    });
+});
+
+app.post('/upload', authenticateToken, upload.single('video'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
+    }
+
+    const uploaderId = req.user.id;
+    const { filename, originalname } = req.file;
+
+    const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id) VALUES (?, ?, ?)`;
+
+    db.run(insertVideoQuery, [filename, originalname, uploaderId], function (err) {
+        if (err) {
+            console.error('Hiba a videó mentésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült menteni a videó adatait.' });
+        }
+
+        return res.status(201).json({ message: 'Videó sikeresen feltöltve.' });
     });
 });
 
