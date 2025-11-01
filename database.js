@@ -28,8 +28,26 @@ db.serialize(() => {
         }
     });
 
-    // Később ide jön a videók táblája is
-    // ...
+    // VIDEÓK TÁBLA
+    // - id: Egyedi azonosító minden videónak
+    // - filename: A szerveren tárolt egyedi fájlnév
+    // - original_name: A felhasználó által feltöltött eredeti fájlnév
+    // - uploader_id: A feltöltést végző felhasználó azonosítója
+    // - uploaded_at: A feltöltés időpontja (alapértelmezett: aktuális időbélyeg)
+    db.run(`CREATE TABLE IF NOT EXISTS videos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        uploader_id INTEGER NOT NULL,
+        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (uploader_id) REFERENCES users(id)
+    )`, (err) => {
+        if (err) {
+            console.error("Hiba a 'videos' tábla létrehozásakor:", err.message);
+        } else {
+            console.log("'videos' tábla sikeresen létrehozva vagy már létezik.");
+        }
+    });
 });
 
 // Lezárjuk a kapcsolatot, miután a parancsok lefutottak
