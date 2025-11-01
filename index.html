@@ -564,14 +564,46 @@
   </script>
 
   <script>
-    const loginBtn = document.getElementById("loginBtn");
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
+    const authButtonsContainer = document.querySelector(".auth-buttons");
 
-    loginBtn.addEventListener("click", () => {
+    function openLoginModal() {
       loginModal.style.display = "flex";
-    });
+    }
+
+    function attachLoginButtonListener() {
+      const loginBtn = document.getElementById("loginBtn");
+      if (loginBtn) {
+        loginBtn.addEventListener("click", openLoginModal);
+      }
+    }
+
+    function updateUIForLoggedIn(username) {
+      authButtonsContainer.innerHTML = `
+        <span>Szia, ${username}!</span>
+        <button id="logoutBtn">Kijelentkezés</button>
+      `;
+
+      const logoutBtn = document.getElementById("logoutBtn");
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", () => {
+          localStorage.removeItem("token");
+          localStorage.removeItem("username");
+          updateUIForLoggedOut();
+          alert("Sikeresen kijelentkeztél.");
+        });
+      }
+    }
+
+    function updateUIForLoggedOut() {
+      authButtonsContainer.innerHTML = `
+        <button id="loginBtn">Bejelentkezés</button>
+        <a href="register.html" id="registerBtn">Regisztráció</a>
+      `;
+      attachLoginButtonListener();
+    }
 
     closeLogin.addEventListener("click", () => {
       loginModal.style.display = "none";
@@ -581,17 +613,40 @@
       e.preventDefault();
       const username = document.getElementById("loginUser").value;
       const password = document.getElementById("loginPass").value;
-      const res = await fetch("/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (res.ok) {
-        alert("Sikeres bejelentkezés");
-      } else {
-        alert("Hibás felhasználónév vagy jelszó");
+
+      try {
+        const res = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("username", data.username);
+          updateUIForLoggedIn(data.username);
+          loginModal.style.display = "none";
+          alert(data.message || "Sikeres bejelentkezés.");
+        } else {
+          alert(data.message || "Hibás felhasználónév vagy jelszó.");
+        }
+      } catch (error) {
+        console.error("Bejelentkezési hiba:", error);
+        alert("Hiba történt a bejelentkezés során. Próbáld meg később.");
       }
-      loginModal.style.display = "none";
+    });
+
+    window.addEventListener("load", () => {
+      const storedToken = localStorage.getItem("token");
+      const storedUsername = localStorage.getItem("username");
+
+      if (storedToken && storedUsername) {
+        updateUIForLoggedIn(storedUsername);
+      } else {
+        updateUIForLoggedOut();
+      }
     });
   </script>
 
