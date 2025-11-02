@@ -189,6 +189,15 @@
         position: absolute;
         top: 10px;
         right: 10px;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .auth-buttons__group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
       }
 
       .auth-buttons button,
@@ -255,8 +264,14 @@
         <a href="#admin" data-section="admin" id="adminNavBtn" style="display: none;">Admin Mód</a>
       </nav>
       <div class="auth-buttons">
-        <button id="loginBtn">Bejelentkezés</button>
-        <a href="register.html" id="registerBtn">Regisztráció</a>
+        <div id="authLoggedOut" class="auth-buttons__group">
+          <button id="loginBtn" type="button">Bejelentkezés</button>
+          <a href="register.html" id="registerBtn">Regisztráció</a>
+        </div>
+        <div id="authLoggedIn" class="auth-buttons__group" style="display: none">
+          <span id="userGreeting"></span>
+          <button id="logoutBtn" type="button">Kijelentkezés</button>
+        </div>
       </div>
     </header>
 
@@ -573,19 +588,19 @@
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
-    const authButtonsContainer = document.querySelector(".auth-buttons");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const authLoggedOut = document.getElementById("authLoggedOut");
+    const authLoggedIn = document.getElementById("authLoggedIn");
+    const userGreeting = document.getElementById("userGreeting");
     const adminNavBtn = document.getElementById("adminNavBtn");
     const userListContainer = document.getElementById("userListContainer");
 
     function openLoginModal() {
-      loginModal.style.display = "flex";
-    }
-
-    function attachLoginButtonListener() {
-      const loginBtn = document.getElementById("loginBtn");
-      if (loginBtn) {
-        loginBtn.addEventListener("click", openLoginModal);
+      if (loginForm) {
+        loginForm.reset();
       }
+      loginModal.style.display = "flex";
     }
 
     function updateAdminNavVisibility() {
@@ -611,32 +626,44 @@
     }
 
     function updateUIForLoggedIn(username) {
-      authButtonsContainer.innerHTML = `
-        <span>Szia, ${username}!</span>
-        <button id="logoutBtn">Kijelentkezés</button>
-      `;
+      if (userGreeting) {
+        userGreeting.textContent = `Szia, ${username}!`;
+      }
+      if (authLoggedOut) {
+        authLoggedOut.style.display = "none";
+      }
+      if (authLoggedIn) {
+        authLoggedIn.style.display = "flex";
+      }
 
       updateAdminNavVisibility();
-
-      const logoutBtn = document.getElementById("logoutBtn");
-      if (logoutBtn) {
-        logoutBtn.addEventListener("click", () => {
-          localStorage.removeItem("token");
-          localStorage.removeItem("username");
-          localStorage.removeItem("isAdmin");
-          updateUIForLoggedOut();
-          alert("Sikeresen kijelentkeztél.");
-        });
-      }
     }
 
     function updateUIForLoggedOut() {
-      authButtonsContainer.innerHTML = `
-        <button id="loginBtn">Bejelentkezés</button>
-        <a href="register.html" id="registerBtn">Regisztráció</a>
-      `;
-      attachLoginButtonListener();
+      if (authLoggedOut) {
+        authLoggedOut.style.display = "flex";
+      }
+      if (authLoggedIn) {
+        authLoggedIn.style.display = "none";
+      }
+      if (userGreeting) {
+        userGreeting.textContent = "";
+      }
       updateAdminNavVisibility();
+    }
+
+    if (loginBtn) {
+      loginBtn.addEventListener("click", openLoginModal);
+    }
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
+        localStorage.removeItem("isAdmin");
+        updateUIForLoggedOut();
+        alert("Sikeresen kijelentkeztél.");
+      });
     }
 
     function renderUserList(users) {
