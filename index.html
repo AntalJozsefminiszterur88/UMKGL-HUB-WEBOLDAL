@@ -255,6 +255,51 @@
         cursor: not-allowed;
       }
 
+      .admin-settings {
+        margin-top: 2rem;
+        background: #2c2f33;
+        padding: 1rem;
+        border-radius: 6px;
+        border: 1px solid #202225;
+      }
+
+      .admin-settings h3 {
+        margin-bottom: 1rem;
+      }
+
+      .settings-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .settings-field label {
+        font-weight: 500;
+      }
+
+      .settings-field input {
+        padding: 0.5rem;
+        border: 1px solid #202225;
+        border-radius: 4px;
+        background: #1e2124;
+        color: var(--text-primary);
+      }
+
+      #saveSettingsBtn {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 0.75rem 1.5rem;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      #saveSettingsBtn:hover {
+        background: #5b6dad;
+      }
+
       /* Auth buttons */
       .auth-buttons {
         position: absolute;
@@ -281,6 +326,82 @@
         border-radius: 4px;
         cursor: pointer;
         text-decoration: none;
+      }
+
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1000;
+        padding: 1rem;
+      }
+
+      .upload-modal-content {
+        background: var(--bg-secondary);
+        padding: 1.5rem;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 500px;
+        position: relative;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+      }
+
+      .upload-modal-content h3 {
+        margin-bottom: 1rem;
+      }
+
+      .close-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 1rem;
+        font-size: 1.5rem;
+        cursor: pointer;
+      }
+
+      #drop-zone {
+        border: 2px dashed var(--accent);
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        background: rgba(114, 137, 218, 0.1);
+        transition: background 0.2s, border-color 0.2s;
+        margin-bottom: 1rem;
+      }
+
+      #drop-zone.drag-over {
+        background: rgba(114, 137, 218, 0.2);
+        border-color: #99a9e6;
+      }
+
+      #drop-zone p {
+        margin-bottom: 0.5rem;
+      }
+
+      #uploadBtn {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 0.75rem 1.5rem;
+        cursor: pointer;
+        width: 100%;
+      }
+
+      #uploadBtn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .upload-status {
+        margin-top: 0.75rem;
+        min-height: 1.25rem;
       }
 
       /* Login modal */
@@ -379,8 +500,23 @@
           Hamarosan itt láthatod a közösség által feltöltött legjobb
           klippeket!
         </p>
+        <button id="showUploadModalBtn" style="float: right;">Feltöltés</button>
+        <div style="clear: both;"></div>
         <div id="video-grid-container">
           <!-- A videók dinamikusan ide fognak betöltődni a jövőben -->
+        </div>
+        <div id="uploadModal" class="modal-overlay" style="display: none;">
+          <div class="upload-modal-content">
+            <span class="close-btn" id="closeUploadModal">&times;</span>
+            <h3>Videó feltöltése</h3>
+            <div id="drop-zone">
+              <p>Húzd ide a videódat vagy kattints a tallózáshoz</p>
+              <p id="selectedFileName">Nincs kiválasztott fájl.</p>
+            </div>
+            <input type="file" id="fileInput" accept="video/*" style="display: none;" />
+            <button id="uploadBtn" disabled>Feltöltés</button>
+            <p id="uploadStatus" class="upload-status"></p>
+          </div>
         </div>
       </section>
 
@@ -564,6 +700,18 @@
         <h2>Felhasználók Kezelése</h2>
         <div id="userListContainer"></div>
         <button id="savePermissionsBtn">Változtatások Mentése</button>
+        <div class="admin-settings">
+          <h3>Általános Beállítások</h3>
+          <div class="settings-field">
+            <label for="maxFileSizeInput">Maximális fájlméret (MB)</label>
+            <input type="number" id="maxFileSizeInput" min="1" />
+          </div>
+          <div class="settings-field">
+            <label for="maxVideosPerUserInput">Felhasználónkénti videó limit</label>
+            <input type="number" id="maxVideosPerUserInput" min="1" />
+          </div>
+          <button id="saveSettingsBtn" type="button">Beállítások Mentése</button>
+        </div>
       </section>
     </main>
 
@@ -573,6 +721,15 @@
 
     <script>
       const videoGridContainer = document.getElementById("video-grid-container");
+      const showUploadModalBtn = document.getElementById("showUploadModalBtn");
+      const uploadModal = document.getElementById("uploadModal");
+      const closeUploadModalBtn = document.getElementById("closeUploadModal");
+      const dropZone = document.getElementById("drop-zone");
+      const fileInput = document.getElementById("fileInput");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const uploadStatus = document.getElementById("uploadStatus");
+      const selectedFileName = document.getElementById("selectedFileName");
+      let selectedVideoFile = null;
 
       async function loadVideos() {
         if (!videoGridContainer) {
@@ -616,6 +773,171 @@
           console.error("Videók betöltési hibája:", error);
           videoGridContainer.innerHTML = "<p>Nem sikerült betölteni a videókat.</p>";
         }
+      }
+
+      function resetUploadModal() {
+        selectedVideoFile = null;
+        if (uploadBtn) {
+          uploadBtn.disabled = true;
+        }
+        if (uploadStatus) {
+          uploadStatus.textContent = "";
+        }
+        if (selectedFileName) {
+          selectedFileName.textContent = "Nincs kiválasztott fájl.";
+        }
+        if (fileInput) {
+          fileInput.value = "";
+        }
+        if (dropZone) {
+          dropZone.classList.remove("drag-over");
+        }
+      }
+
+      function openUploadModal() {
+        if (uploadModal) {
+          uploadModal.style.display = "flex";
+        }
+        resetUploadModal();
+      }
+
+      function closeUploadModal() {
+        if (uploadModal) {
+          uploadModal.style.display = "none";
+        }
+        resetUploadModal();
+      }
+
+      function handleFileSelection(file) {
+        if (!file) {
+          return;
+        }
+        selectedVideoFile = file;
+        if (selectedFileName) {
+          selectedFileName.textContent = `Kiválasztott fájl: ${file.name}`;
+        }
+        if (uploadBtn) {
+          uploadBtn.disabled = false;
+        }
+        if (uploadStatus) {
+          uploadStatus.textContent = "";
+        }
+      }
+
+      if (showUploadModalBtn && uploadModal) {
+        showUploadModalBtn.addEventListener("click", () => {
+          const token = localStorage.getItem("token");
+          if (!token) {
+            alert("A feltöltéshez be kell jelentkezned.");
+            return;
+          }
+          openUploadModal();
+        });
+      }
+
+      if (closeUploadModalBtn) {
+        closeUploadModalBtn.addEventListener("click", closeUploadModal);
+      }
+
+      if (uploadModal) {
+        uploadModal.addEventListener("click", (event) => {
+          if (event.target === uploadModal) {
+            closeUploadModal();
+          }
+        });
+      }
+
+      if (dropZone && fileInput) {
+        dropZone.addEventListener("click", () => fileInput.click());
+
+        dropZone.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          dropZone.classList.add("drag-over");
+        });
+
+        ["dragleave", "dragend"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropZone.classList.remove("drag-over");
+          });
+        });
+
+        dropZone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          dropZone.classList.remove("drag-over");
+          const files = event.dataTransfer?.files;
+          if (files && files.length > 0) {
+            handleFileSelection(files[0]);
+          }
+        });
+      }
+
+      if (fileInput) {
+        fileInput.addEventListener("change", (event) => {
+          const files = event.target.files;
+          if (files && files.length > 0) {
+            handleFileSelection(files[0]);
+          } else {
+            resetUploadModal();
+          }
+        });
+      }
+
+      if (uploadBtn) {
+        uploadBtn.addEventListener("click", async () => {
+          const token = localStorage.getItem("token");
+          if (!token) {
+            alert("A feltöltéshez be kell jelentkezned.");
+            return;
+          }
+
+          if (!selectedVideoFile) {
+            alert("Válassz ki egy videófájlt a feltöltéshez.");
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append("video", selectedVideoFile);
+
+          uploadBtn.disabled = true;
+          if (uploadStatus) {
+            uploadStatus.textContent = "Feltöltés folyamatban...";
+          }
+
+          try {
+            const response = await fetch("/upload", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+              body: formData,
+            });
+
+            const result = await response.json().catch(() => null);
+
+            if (!response.ok) {
+              const message = (result && result.message) || "Nem sikerült feltölteni a videót.";
+              throw new Error(message);
+            }
+
+            if (uploadStatus) {
+              uploadStatus.textContent = (result && result.message) || "Videó sikeresen feltöltve.";
+            }
+            await loadVideos();
+            setTimeout(() => {
+              closeUploadModal();
+            }, 800);
+          } catch (error) {
+            console.error("Videó feltöltési hiba:", error);
+            if (uploadStatus) {
+              uploadStatus.textContent = error.message || "Nem sikerült feltölteni a videót.";
+            }
+          } finally {
+            if (uploadBtn) {
+              uploadBtn.disabled = false;
+            }
+          }
+        });
       }
 
       function showSection(target, shouldPushState = true) {
@@ -736,9 +1058,16 @@
     const adminNavBtn = document.getElementById("adminNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+    const maxFileSizeInput = document.getElementById("maxFileSizeInput");
+    const maxVideosPerUserInput = document.getElementById("maxVideosPerUserInput");
+    const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 
     if (savePermissionsBtn) {
       savePermissionsBtn.disabled = true;
+    }
+
+    if (saveSettingsBtn) {
+      saveSettingsBtn.disabled = true;
     }
 
     function openLoginModal() {
@@ -769,6 +1098,15 @@
         }
         if (savePermissionsBtn) {
           savePermissionsBtn.disabled = true;
+        }
+        if (maxFileSizeInput) {
+          maxFileSizeInput.value = "";
+        }
+        if (maxVideosPerUserInput) {
+          maxVideosPerUserInput.value = "";
+        }
+        if (saveSettingsBtn) {
+          saveSettingsBtn.disabled = true;
         }
       }
     }
@@ -872,6 +1210,50 @@
       }
     }
 
+    async function loadGeneralSettings() {
+      if (!maxFileSizeInput || !maxVideosPerUserInput) {
+        return;
+      }
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        return;
+      }
+
+      if (saveSettingsBtn) {
+        saveSettingsBtn.disabled = true;
+      }
+
+      try {
+        const response = await fetch("/api/settings", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const message = data && data.message ? data.message : "Nem sikerült betölteni a beállításokat.";
+          throw new Error(message);
+        }
+
+        if (typeof data.max_file_size_mb !== "undefined") {
+          maxFileSizeInput.value = Number.parseInt(data.max_file_size_mb, 10) || "";
+        }
+        if (typeof data.max_videos_per_user !== "undefined") {
+          maxVideosPerUserInput.value = Number.parseInt(data.max_videos_per_user, 10) || "";
+        }
+
+        if (saveSettingsBtn) {
+          saveSettingsBtn.disabled = false;
+        }
+      } catch (error) {
+        console.error("Beállítások betöltési hiba:", error);
+        alert(error.message || "Nem sikerült betölteni a beállításokat.");
+      }
+    }
+
     async function loadAdminPanel() {
       const token = localStorage.getItem("token");
 
@@ -895,11 +1277,15 @@
         }
 
         renderUserList(Array.isArray(data) ? data : []);
+        await loadGeneralSettings();
       } catch (error) {
         console.error("Admin panel betöltési hiba:", error);
         alert(error.message || "Nem sikerült betölteni az admin panel adatait.");
         if (savePermissionsBtn) {
           savePermissionsBtn.disabled = true;
+        }
+        if (saveSettingsBtn) {
+          saveSettingsBtn.disabled = true;
         }
       }
     }
@@ -980,6 +1366,64 @@
         } finally {
           savePermissionsBtn.disabled = false;
           savePermissionsBtn.textContent = originalButtonText;
+        }
+      });
+    }
+
+    if (saveSettingsBtn) {
+      const originalSettingsText = saveSettingsBtn.textContent;
+
+      saveSettingsBtn.addEventListener("click", async () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          alert("Nincs érvényes hitelesítés.");
+          return;
+        }
+
+        if (!maxFileSizeInput || !maxVideosPerUserInput) {
+          alert("Hiányzó beállítás mezők.");
+          return;
+        }
+
+        const maxFileSizeValue = Number(maxFileSizeInput.value);
+        const maxVideosValue = Number(maxVideosPerUserInput.value);
+
+        if (!Number.isFinite(maxFileSizeValue) || maxFileSizeValue <= 0 || !Number.isFinite(maxVideosValue) || maxVideosValue <= 0) {
+          alert("Adj meg érvényes, pozitív számokat.");
+          return;
+        }
+
+        saveSettingsBtn.disabled = true;
+        saveSettingsBtn.textContent = "Mentés folyamatban...";
+
+        try {
+          const response = await fetch("/api/settings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              max_file_size_mb: String(maxFileSizeValue),
+              max_videos_per_user: String(maxVideosValue),
+            }),
+          });
+
+          const result = await response.json().catch(() => null);
+
+          if (!response.ok) {
+            const message = (result && result.message) || "Nem sikerült menteni a beállításokat.";
+            throw new Error(message);
+          }
+
+          alert((result && result.message) || "Beállítások sikeresen frissítve.");
+          await loadGeneralSettings();
+        } catch (error) {
+          console.error("Beállítás mentési hiba:", error);
+          alert(error.message || "Nem sikerült menteni a beállításokat.");
+        } finally {
+          saveSettingsBtn.disabled = false;
+          saveSettingsBtn.textContent = originalSettingsText;
         }
       });
     }

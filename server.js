@@ -11,6 +11,7 @@ const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
 // 2. Az Express alkalmazás létrehozása
 const app = express();
 const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
+app.settings = app.settings || {};
 
 // 3. Middleware-ek (köztes szoftverek) beállítása
 // Ez a sor mondja meg az Expressnek, hogy a JSON formátumú kéréseket tudja értelmezni
@@ -29,7 +30,45 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ storage });
+let upload = multer({ storage });
+
+function getNumberSetting(value, defaultValue) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+    }
+    return defaultValue;
+}
+
+function applySettingsToUpload() {
+    const maxFileSizeMb = getNumberSetting(app.settings.max_file_size_mb, 50);
+    upload = multer({
+        storage,
+        limits: {
+            fileSize: maxFileSizeMb * 1024 * 1024
+        }
+    });
+}
+
+function loadAppSettings() {
+    return new Promise((resolve, reject) => {
+        db.all('SELECT key, value FROM settings', [], (err, rows) => {
+            if (err) {
+                console.error('Hiba a beállítások betöltésekor:', err);
+                return reject(err);
+            }
+
+            const settings = {};
+            rows.forEach((row) => {
+                settings[row.key] = row.value;
+            });
+
+            app.settings = settings;
+            applySettingsToUpload();
+            resolve(settings);
+        });
+    });
+}
 
 // Hitelesítési middleware a védett végpontokhoz
 function authenticateToken(req, res, next) {
@@ -56,6 +95,34 @@ function isAdmin(req, res, next) {
     }
 
     next();
+}
+
+function checkUploadLimits(req, res, next) {
+    const userId = req.user && req.user.id;
+
+    if (!userId) {
+        return res.status(403).json({ message: 'Hiányzó felhasználói információ.' });
+    }
+
+    const maxVideosSetting = getNumberSetting(app.settings.max_videos_per_user, 0);
+    if (maxVideosSetting <= 0) {
+        return next();
+    }
+
+    db.get('SELECT upload_count FROM users WHERE id = ?', [userId], (err, row) => {
+        if (err) {
+            console.error('Hiba a feltöltési számláló lekérdezésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült ellenőrizni a feltöltési limitet.' });
+        }
+
+        const uploadCount = row ? Number(row.upload_count) || 0 : 0;
+
+        if (uploadCount >= maxVideosSetting) {
+            return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
+        }
+
+        return next();
+    });
 }
 
 // 4. Statikus fájlok kiszolgálása
@@ -231,6 +298,72 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, (req
     });
 });
 
+app.get('/api/settings', authenticateToken, isAdmin, (req, res) => {
+    db.all('SELECT key, value FROM settings', [], (err, rows) => {
+        if (err) {
+            console.error('Hiba a beállítások lekérdezésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült lekérdezni a beállításokat.' });
+        }
+
+        const settings = {};
+        rows.forEach((row) => {
+            settings[row.key] = row.value;
+        });
+
+        return res.status(200).json(settings);
+    });
+});
+
+app.post('/api/settings', authenticateToken, isAdmin, (req, res) => {
+    if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ message: 'Érvénytelen beállítás adatok.' });
+    }
+
+    const entries = Object.entries(req.body);
+
+    if (entries.length === 0) {
+        return res.status(400).json({ message: 'Nincs frissítendő beállítás.' });
+    }
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (beginErr) => {
+            if (beginErr) {
+                console.error('Hiba a beállítások frissítésének indításakor:', beginErr);
+                return res.status(500).json({ message: 'Nem sikerült elkezdeni a beállítások frissítését.' });
+            }
+
+            const stmt = db.prepare('UPDATE settings SET value = ? WHERE key = ?');
+
+            entries.forEach(([key, value]) => {
+                stmt.run(String(value), key);
+            });
+
+            stmt.finalize((stmtErr) => {
+                if (stmtErr) {
+                    console.error('Hiba a beállítások frissítésekor:', stmtErr);
+                    return db.run('ROLLBACK', () => res.status(500).json({ message: 'Nem sikerült frissíteni a beállításokat.' }));
+                }
+
+                db.run('COMMIT', (commitErr) => {
+                    if (commitErr) {
+                        console.error('Hiba a beállítások mentésekor:', commitErr);
+                        return db.run('ROLLBACK', () => res.status(500).json({ message: 'Nem sikerült menteni a beállításokat.' }));
+                    }
+
+                    loadAppSettings()
+                        .then(() => {
+                            return res.status(200).json({ message: 'Beállítások sikeresen frissítve.', settings: app.settings });
+                        })
+                        .catch((loadErr) => {
+                            console.error('Nem sikerült újratölteni a beállításokat:', loadErr);
+                            return res.status(200).json({ message: 'Beállítások frissítve, de a friss beállítások betöltése sikertelen volt.' });
+                        });
+                });
+            });
+        });
+    });
+});
+
 app.get('/api/videos', (req, res) => {
     const query = `
         SELECT videos.filename, users.username
@@ -249,7 +382,14 @@ app.get('/api/videos', (req, res) => {
     });
 });
 
-app.post('/upload', authenticateToken, upload.single('video'), (req, res) => {
+app.post('/upload', authenticateToken, checkUploadLimits, (req, res, next) => {
+    return upload.single('video')(req, res, (err) => {
+        if (err) {
+            return next(err);
+        }
+        return next();
+    });
+}, (req, res) => {
     if (!req.file) {
         return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
     }
@@ -265,12 +405,38 @@ app.post('/upload', authenticateToken, upload.single('video'), (req, res) => {
             return res.status(500).json({ message: 'Nem sikerült menteni a videó adatait.' });
         }
 
-        return res.status(201).json({ message: 'Videó sikeresen feltöltve.' });
+        db.run('UPDATE users SET upload_count = upload_count + 1 WHERE id = ?', [uploaderId], (updateErr) => {
+            if (updateErr) {
+                console.error('Hiba a feltöltési számláló frissítésekor:', updateErr);
+                return res.status(500).json({ message: 'A videó feltöltve, de nem sikerült frissíteni a feltöltési számlálót.' });
+            }
+
+            return res.status(201).json({ message: 'Videó sikeresen feltöltve.' });
+        });
     });
 });
 
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        const message = err.code === 'LIMIT_FILE_SIZE'
+            ? 'A feltöltött fájl meghaladja a megengedett méretet.'
+            : err.message;
+        return res.status(400).json({ message });
+    }
+
+    console.error('Váratlan hiba a kérés feldolgozása közben:', err);
+    return res.status(500).json({ message: 'Váratlan hiba történt.' });
+});
 
 // 6. A szerver elindítása
-app.listen(PORT, () => {
-    console.log(`A szerver sikeresen elindult és fut a http://localhost:${PORT} címen`);
-});
+loadAppSettings()
+    .catch((err) => {
+        console.error('Nem sikerült betölteni a beállításokat induláskor:', err);
+        app.settings = app.settings || {};
+        applySettingsToUpload();
+    })
+    .finally(() => {
+        app.listen(PORT, () => {
+            console.log(`A szerver sikeresen elindult és fut a http://localhost:${PORT} címen`);
+        });
+    });
