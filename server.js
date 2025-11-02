@@ -30,24 +30,12 @@ const storage = multer.diskStorage({
     }
 });
 
-let upload = multer({ storage });
-
 function getNumberSetting(value, defaultValue) {
     const parsed = Number(value);
     if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
     }
     return defaultValue;
-}
-
-function applySettingsToUpload() {
-    const maxFileSizeMb = getNumberSetting(app.settings.max_file_size_mb, 50);
-    upload = multer({
-        storage,
-        limits: {
-            fileSize: maxFileSizeMb * 1024 * 1024
-        }
-    });
 }
 
 function loadAppSettings() {
@@ -64,7 +52,6 @@ function loadAppSettings() {
             });
 
             app.settings = settings;
-            applySettingsToUpload();
             resolve(settings);
         });
     });
@@ -97,29 +84,41 @@ function isAdmin(req, res, next) {
     next();
 }
 
-function checkUploadLimits(req, res, next) {
+function loadUserUploadSettings(req, res, next) {
     const userId = req.user && req.user.id;
 
     if (!userId) {
         return res.status(403).json({ message: 'Hiányzó felhasználói információ.' });
     }
 
-    const maxVideosSetting = getNumberSetting(app.settings.max_videos_per_user, 0);
-    if (maxVideosSetting <= 0) {
-        return next();
-    }
-
-    db.get('SELECT upload_count FROM users WHERE id = ?', [userId], (err, row) => {
+    db.get('SELECT can_upload, upload_count, max_file_size_mb, max_videos FROM users WHERE id = ?', [userId], (err, user) => {
         if (err) {
-            console.error('Hiba a feltöltési számláló lekérdezésekor:', err);
-            return res.status(500).json({ message: 'Nem sikerült ellenőrizni a feltöltési limitet.' });
+            console.error('Hiba a felhasználói beállítások lekérdezésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült lekérdezni a feltöltési beállításokat.' });
         }
 
-        const uploadCount = row ? Number(row.upload_count) || 0 : 0;
+        if (!user) {
+            return res.status(404).json({ message: 'A felhasználó nem található.' });
+        }
 
-        if (uploadCount >= maxVideosSetting) {
+        if (Number(user.can_upload) !== 1) {
+            return res.status(403).json({ message: 'Nincs feltöltési jogosultságod.' });
+        }
+
+        const defaultMaxFileSizeMb = getNumberSetting(app.settings && app.settings.max_file_size_mb, 50);
+        const maxFileSizeMb = getNumberSetting(user.max_file_size_mb, defaultMaxFileSizeMb);
+        const maxVideos = getNumberSetting(user.max_videos, 0);
+        const uploadCount = Number(user.upload_count) || 0;
+
+        if (maxVideos > 0 && uploadCount >= maxVideos) {
             return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
         }
+
+        req.uploadSettings = {
+            maxFileSizeBytes: maxFileSizeMb * 1024 * 1024,
+            maxVideos,
+            uploadCount
+        };
 
         return next();
     });
@@ -209,7 +208,7 @@ app.post('/login', (req, res) => {
 });
 
 app.get('/api/users', authenticateToken, isAdmin, (req, res) => {
-    const query = 'SELECT id, username, can_upload FROM users';
+    const query = 'SELECT id, username, can_upload, max_file_size_mb, max_videos, upload_count FROM users';
 
     db.all(query, [], (err, rows) => {
         if (err) {
@@ -230,19 +229,30 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, (req
         return res.status(200).json({ message: 'Nincs frissítendő jogosultság.' });
     }
 
-    const missingFields = req.body.find((item) => typeof item.userId === 'undefined' || typeof item.canUpload === 'undefined');
+    const missingFields = req.body.find((item) => typeof item.userId === 'undefined'
+        || typeof item.canUpload === 'undefined'
+        || typeof item.maxFileSizeMb === 'undefined'
+        || typeof item.maxVideos === 'undefined');
     if (missingFields) {
-        return res.status(400).json({ message: 'Minden elemhez userId és canUpload mezők szükségesek.' });
+        return res.status(400).json({ message: 'Minden elemhez userId, canUpload, maxFileSizeMb és maxVideos mezők szükségesek.' });
     }
 
     const updates = req.body.map((item) => ({
         userId: Number.parseInt(item.userId, 10),
-        canUpload: item.canUpload ? 1 : 0
+        canUpload: item.canUpload ? 1 : 0,
+        maxFileSizeMb: Number(item.maxFileSizeMb),
+        maxVideos: Number(item.maxVideos)
     }));
 
     const invalidId = updates.find((item) => Number.isNaN(item.userId));
     if (invalidId) {
         return res.status(400).json({ message: 'Érvénytelen felhasználó azonosító szerepel a kérésben.' });
+    }
+
+    const invalidNumbers = updates.find((item) => !Number.isFinite(item.maxFileSizeMb) || item.maxFileSizeMb <= 0
+        || !Number.isFinite(item.maxVideos) || item.maxVideos <= 0);
+    if (invalidNumbers) {
+        return res.status(400).json({ message: 'A megadott limiteknek pozitív számoknak kell lenniük.' });
     }
 
     db.serialize(() => {
@@ -279,7 +289,12 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, (req
                 }
 
                 const update = updates[index];
-                db.run('UPDATE users SET can_upload = ? WHERE id = ?', [update.canUpload, update.userId], function (err) {
+                db.run('UPDATE users SET can_upload = ?, max_file_size_mb = ?, max_videos = ? WHERE id = ?', [
+                    update.canUpload,
+                    Math.round(update.maxFileSizeMb),
+                    Math.round(update.maxVideos),
+                    update.userId
+                ], function (err) {
                     if (err) {
                         console.error('Hiba a jogosultság frissítésekor:', err);
                         return rollbackWithError(500, 'Nem sikerült frissíteni a jogosultságokat.');
@@ -382,8 +397,16 @@ app.get('/api/videos', (req, res) => {
     });
 });
 
-app.post('/upload', authenticateToken, checkUploadLimits, (req, res, next) => {
-    return upload.single('video')(req, res, (err) => {
+app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) => {
+    const limits = {};
+
+    if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
+        limits.fileSize = req.uploadSettings.maxFileSizeBytes;
+    }
+
+    const perUserUpload = multer({ storage, limits }).single('video');
+
+    return perUserUpload(req, res, (err) => {
         if (err) {
             return next(err);
         }
@@ -433,7 +456,6 @@ loadAppSettings()
     .catch((err) => {
         console.error('Nem sikerült betölteni a beállításokat induláskor:', err);
         app.settings = app.settings || {};
-        applySettingsToUpload();
     })
     .finally(() => {
         app.listen(PORT, () => {

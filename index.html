@@ -227,12 +227,33 @@
         border-bottom: 1px solid #4f545c;
       }
 
+      .user-table input[type="number"] {
+        width: 100%;
+        max-width: 120px;
+        padding: 0.4rem;
+        border-radius: 4px;
+        border: 1px solid #202225;
+        background: #1e2124;
+        color: var(--text-primary);
+      }
+
       .user-table th {
         background-color: var(--bg-secondary);
       }
 
       .user-table tbody tr:hover {
         background-color: #3c4046;
+      }
+
+      .permission-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .admin-description {
+        margin-top: 0.5rem;
+        max-width: 600px;
       }
 
       #savePermissionsBtn {
@@ -253,51 +274,6 @@
       #savePermissionsBtn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
-      }
-
-      .admin-settings {
-        margin-top: 2rem;
-        background: #2c2f33;
-        padding: 1rem;
-        border-radius: 6px;
-        border: 1px solid #202225;
-      }
-
-      .admin-settings h3 {
-        margin-bottom: 1rem;
-      }
-
-      .settings-field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-      }
-
-      .settings-field label {
-        font-weight: 500;
-      }
-
-      .settings-field input {
-        padding: 0.5rem;
-        border: 1px solid #202225;
-        border-radius: 4px;
-        background: #1e2124;
-        color: var(--text-primary);
-      }
-
-      #saveSettingsBtn {
-        background: var(--accent);
-        color: #fff;
-        border: none;
-        border-radius: 4px;
-        padding: 0.75rem 1.5rem;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-
-      #saveSettingsBtn:hover {
-        background: #5b6dad;
       }
 
       /* Auth buttons */
@@ -760,20 +736,11 @@
 
       <section id="admin">
         <h2>Felhasználók Kezelése</h2>
+        <p class="admin-description">
+          Állítsd be felhasználónként, hogy ki tölthet fel, valamint a feltöltésekhez tartozó méret- és darabkorlátokat.
+        </p>
         <div id="userListContainer"></div>
         <button id="savePermissionsBtn">Változtatások Mentése</button>
-        <div class="admin-settings">
-          <h3>Általános Beállítások</h3>
-          <div class="settings-field">
-            <label for="maxFileSizeInput">Maximális fájlméret (MB)</label>
-            <input type="number" id="maxFileSizeInput" min="1" />
-          </div>
-          <div class="settings-field">
-            <label for="maxVideosPerUserInput">Felhasználónkénti videó limit</label>
-            <input type="number" id="maxVideosPerUserInput" min="1" />
-          </div>
-          <button id="saveSettingsBtn" type="button">Beállítások Mentése</button>
-        </div>
       </section>
     </main>
 
@@ -1120,16 +1087,9 @@
     const adminNavBtn = document.getElementById("adminNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
-    const maxFileSizeInput = document.getElementById("maxFileSizeInput");
-    const maxVideosPerUserInput = document.getElementById("maxVideosPerUserInput");
-    const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 
     if (savePermissionsBtn) {
       savePermissionsBtn.disabled = true;
-    }
-
-    if (saveSettingsBtn) {
-      saveSettingsBtn.disabled = true;
     }
 
     function openLoginModal() {
@@ -1160,15 +1120,6 @@
         }
         if (savePermissionsBtn) {
           savePermissionsBtn.disabled = true;
-        }
-        if (maxFileSizeInput) {
-          maxFileSizeInput.value = "";
-        }
-        if (maxVideosPerUserInput) {
-          maxVideosPerUserInput.value = "";
-        }
-        if (saveSettingsBtn) {
-          saveSettingsBtn.disabled = true;
         }
       }
     }
@@ -1236,7 +1187,10 @@
       thead.innerHTML = `
         <tr>
           <th>Felhasználónév</th>
-          <th>Feltöltési Jogosultság</th>
+          <th>Feltöltési jogosultság</th>
+          <th>Max fájlméret (MB)</th>
+          <th>Videó limit</th>
+          <th>Feltöltött videók</th>
         </tr>
       `;
       table.appendChild(thead);
@@ -1253,6 +1207,7 @@
 
         const permissionCell = document.createElement("td");
         const label = document.createElement("label");
+        label.className = "permission-toggle";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = Number(user.can_upload) === 1;
@@ -1260,6 +1215,30 @@
         label.append(" Feltölthet");
         permissionCell.appendChild(label);
         row.appendChild(permissionCell);
+
+        const maxFileSizeCell = document.createElement("td");
+        const maxFileInput = document.createElement("input");
+        maxFileInput.type = "number";
+        maxFileInput.min = "1";
+        maxFileInput.required = true;
+        maxFileInput.name = "maxFileSizeMb";
+        maxFileInput.value = Number.parseInt(user.max_file_size_mb, 10) || "";
+        maxFileSizeCell.appendChild(maxFileInput);
+        row.appendChild(maxFileSizeCell);
+
+        const maxVideosCell = document.createElement("td");
+        const maxVideosInput = document.createElement("input");
+        maxVideosInput.type = "number";
+        maxVideosInput.min = "1";
+        maxVideosInput.required = true;
+        maxVideosInput.name = "maxVideos";
+        maxVideosInput.value = Number.parseInt(user.max_videos, 10) || "";
+        maxVideosCell.appendChild(maxVideosInput);
+        row.appendChild(maxVideosCell);
+
+        const uploadsCell = document.createElement("td");
+        uploadsCell.textContent = Number.parseInt(user.upload_count, 10) || 0;
+        row.appendChild(uploadsCell);
 
         tbody.appendChild(row);
       });
@@ -1269,50 +1248,6 @@
 
       if (savePermissionsBtn) {
         savePermissionsBtn.disabled = false;
-      }
-    }
-
-    async function loadGeneralSettings() {
-      if (!maxFileSizeInput || !maxVideosPerUserInput) {
-        return;
-      }
-
-      const token = localStorage.getItem("token");
-      if (!token) {
-        return;
-      }
-
-      if (saveSettingsBtn) {
-        saveSettingsBtn.disabled = true;
-      }
-
-      try {
-        const response = await fetch("/api/settings", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          const message = data && data.message ? data.message : "Nem sikerült betölteni a beállításokat.";
-          throw new Error(message);
-        }
-
-        if (typeof data.max_file_size_mb !== "undefined") {
-          maxFileSizeInput.value = Number.parseInt(data.max_file_size_mb, 10) || "";
-        }
-        if (typeof data.max_videos_per_user !== "undefined") {
-          maxVideosPerUserInput.value = Number.parseInt(data.max_videos_per_user, 10) || "";
-        }
-
-        if (saveSettingsBtn) {
-          saveSettingsBtn.disabled = false;
-        }
-      } catch (error) {
-        console.error("Beállítások betöltési hiba:", error);
-        alert(error.message || "Nem sikerült betölteni a beállításokat.");
       }
     }
 
@@ -1339,15 +1274,11 @@
         }
 
         renderUserList(Array.isArray(data) ? data : []);
-        await loadGeneralSettings();
       } catch (error) {
         console.error("Admin panel betöltési hiba:", error);
         alert(error.message || "Nem sikerült betölteni az admin panel adatait.");
         if (savePermissionsBtn) {
           savePermissionsBtn.disabled = true;
-        }
-        if (saveSettingsBtn) {
-          saveSettingsBtn.disabled = true;
         }
       }
     }
@@ -1374,12 +1305,15 @@
         }
 
         const rows = Array.from(tableBody.querySelectorAll("tr"));
+        const invalidEntries = [];
         const permissionsToUpdate = rows
           .map((row) => {
             const checkbox = row.querySelector('input[type="checkbox"]');
+            const maxFileSizeInput = row.querySelector('input[name="maxFileSizeMb"]');
+            const maxVideosInput = row.querySelector('input[name="maxVideos"]');
             const userIdAttr = row.dataset.userId;
 
-            if (!checkbox || !userIdAttr) {
+            if (!checkbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
               return null;
             }
 
@@ -1388,12 +1322,29 @@
               return null;
             }
 
+            const maxFileSizeValue = Number.parseInt(maxFileSizeInput.value, 10);
+            const maxVideosValue = Number.parseInt(maxVideosInput.value, 10);
+
+            if (!Number.isFinite(maxFileSizeValue) || maxFileSizeValue <= 0 || !Number.isFinite(maxVideosValue) || maxVideosValue <= 0) {
+              const usernameCell = row.querySelector("td");
+              const identifier = usernameCell ? usernameCell.textContent.trim() : `ID ${userId}`;
+              invalidEntries.push(identifier);
+              return null;
+            }
+
             return {
               userId,
               canUpload: checkbox.checked,
+              maxFileSizeMb: maxFileSizeValue,
+              maxVideos: maxVideosValue,
             };
           })
           .filter(Boolean);
+
+        if (invalidEntries.length > 0) {
+          alert(`Adj meg érvényes, pozitív limiteket a következő felhasználóknál: ${invalidEntries.join(", ")}.`);
+          return;
+        }
 
         if (permissionsToUpdate.length === 0) {
           alert("Nincs mentésre váró adat.");
@@ -1428,64 +1379,6 @@
         } finally {
           savePermissionsBtn.disabled = false;
           savePermissionsBtn.textContent = originalButtonText;
-        }
-      });
-    }
-
-    if (saveSettingsBtn) {
-      const originalSettingsText = saveSettingsBtn.textContent;
-
-      saveSettingsBtn.addEventListener("click", async () => {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          alert("Nincs érvényes hitelesítés.");
-          return;
-        }
-
-        if (!maxFileSizeInput || !maxVideosPerUserInput) {
-          alert("Hiányzó beállítás mezők.");
-          return;
-        }
-
-        const maxFileSizeValue = Number(maxFileSizeInput.value);
-        const maxVideosValue = Number(maxVideosPerUserInput.value);
-
-        if (!Number.isFinite(maxFileSizeValue) || maxFileSizeValue <= 0 || !Number.isFinite(maxVideosValue) || maxVideosValue <= 0) {
-          alert("Adj meg érvényes, pozitív számokat.");
-          return;
-        }
-
-        saveSettingsBtn.disabled = true;
-        saveSettingsBtn.textContent = "Mentés folyamatban...";
-
-        try {
-          const response = await fetch("/api/settings", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              max_file_size_mb: String(maxFileSizeValue),
-              max_videos_per_user: String(maxVideosValue),
-            }),
-          });
-
-          const result = await response.json().catch(() => null);
-
-          if (!response.ok) {
-            const message = (result && result.message) || "Nem sikerült menteni a beállításokat.";
-            throw new Error(message);
-          }
-
-          alert((result && result.message) || "Beállítások sikeresen frissítve.");
-          await loadGeneralSettings();
-        } catch (error) {
-          console.error("Beállítás mentési hiba:", error);
-          alert(error.message || "Nem sikerült menteni a beállításokat.");
-        } finally {
-          saveSettingsBtn.disabled = false;
-          saveSettingsBtn.textContent = originalSettingsText;
         }
       });
     }
