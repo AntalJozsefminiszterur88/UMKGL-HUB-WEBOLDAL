@@ -100,6 +100,34 @@
         display: block;
       }
 
+      #video-grid-container {
+        margin-top: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+      }
+
+      .video-card {
+        background: #2c2f33;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .video-card video {
+        width: 100%;
+        border-radius: 6px;
+        background: #000;
+      }
+
+      .video-card p {
+        margin: 0;
+        font-weight: 500;
+      }
+
       /* A HOI4 sorsoló szekciónál ne legyen szélességkorlát, hogy a négy doboz egymás mellett
          maradjon */
       #sorsolas {
@@ -543,37 +571,93 @@
     </footer>
 
     <script>
-      // Egyszerű kliensoldali navigáció a szekciók között
+      const videoGridContainer = document.getElementById("video-grid-container");
+
+      async function loadVideos() {
+        if (!videoGridContainer) {
+          return;
+        }
+
+        videoGridContainer.innerHTML = "";
+
+        try {
+          const response = await fetch("/api/videos");
+
+          if (!response.ok) {
+            throw new Error("Nem sikerült betölteni a videókat.");
+          }
+
+          const videos = await response.json();
+
+          if (!Array.isArray(videos) || videos.length === 0) {
+            videoGridContainer.innerHTML = "<p>Még senki nem töltött fel videót.</p>";
+            return;
+          }
+
+          videos.forEach((video) => {
+            const card = document.createElement("div");
+            card.className = "video-card";
+
+            const videoElement = document.createElement("video");
+            videoElement.src = `/uploads/${video.filename}`;
+            videoElement.controls = true;
+            videoElement.preload = "metadata";
+
+            const uploader = document.createElement("p");
+            uploader.textContent = `Feltöltötte: ${video.username || "Ismeretlen"}`;
+
+            card.appendChild(videoElement);
+            card.appendChild(uploader);
+
+            videoGridContainer.appendChild(card);
+          });
+        } catch (error) {
+          console.error("Videók betöltési hibája:", error);
+          videoGridContainer.innerHTML = "<p>Nem sikerült betölteni a videókat.</p>";
+        }
+      }
+
+      function showSection(target, shouldPushState = true) {
+        const navLinks = Array.from(document.querySelectorAll("nav a"));
+        const sections = document.querySelectorAll("main section");
+        const hasMatch = navLinks.some((link) => link.dataset.section === target);
+
+        if (!hasMatch) {
+          target = "home";
+        }
+
+        navLinks.forEach((link) => {
+          link.classList.toggle("active", link.dataset.section === target);
+        });
+
+        sections.forEach((sec) => {
+          if (sec.id === target) {
+            sec.classList.add("active");
+          } else {
+            sec.classList.remove("active");
+          }
+        });
+
+        if (target === "klipek") {
+          loadVideos();
+        }
+
+        if (shouldPushState) {
+          history.pushState(null, "", `#${target}`);
+        }
+      }
+
       document.querySelectorAll("nav a").forEach((link) => {
         link.addEventListener("click", (e) => {
           e.preventDefault();
-          const target = link.dataset.section;
-
-          // Aktív nav elem frissítése
-          document
-            .querySelectorAll("nav a")
-            .forEach((a) => a.classList.remove("active"));
-          link.classList.add("active");
-
-          // Szekciók váltása
-          document.querySelectorAll("main section").forEach((sec) => {
-            if (sec.id === target) {
-              sec.classList.add("active");
-            } else {
-              sec.classList.remove("active");
-            }
-          });
-
-          // URL hash frissítése (opcionális)
-          history.pushState(null, "", `#${target}`);
+          showSection(link.dataset.section);
         });
       });
 
       // Oldal betöltésekor a hash alapján nyitjuk meg a megfelelő szekciót
       window.addEventListener("load", () => {
         const hash = location.hash.replace("#", "") || "home";
-        const link = document.querySelector(`nav a[data-section="${hash}"]`);
-        if (link) link.click();
+        showSection(hash, false);
       });
     </script>
 

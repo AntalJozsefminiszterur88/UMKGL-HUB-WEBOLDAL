@@ -231,6 +231,24 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, (req
     });
 });
 
+app.get('/api/videos', (req, res) => {
+    const query = `
+        SELECT videos.filename, users.username
+        FROM videos
+        LEFT JOIN users ON videos.uploader_id = users.id
+        ORDER BY videos.uploaded_at DESC
+    `;
+
+    db.all(query, [], (err, rows) => {
+        if (err) {
+            console.error('Hiba a videók lekérdezésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült lekérdezni a videókat.' });
+        }
+
+        return res.status(200).json(rows || []);
+    });
+});
+
 app.post('/upload', authenticateToken, upload.single('video'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
