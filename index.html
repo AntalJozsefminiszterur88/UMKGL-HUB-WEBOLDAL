@@ -1088,6 +1088,28 @@
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
 
+    const SESSION_KEYS = {
+      token: "token",
+      username: "username",
+      isAdmin: "isAdmin",
+    };
+
+    function storeSessionData({ token, username, isAdmin }) {
+      if (typeof token === "string" && token.trim()) {
+        localStorage.setItem(SESSION_KEYS.token, token);
+      }
+      if (typeof username === "string" && username.trim()) {
+        localStorage.setItem(SESSION_KEYS.username, username);
+      }
+      localStorage.setItem(SESSION_KEYS.isAdmin, isAdmin ? "true" : "false");
+    }
+
+    function clearStoredSession() {
+      localStorage.removeItem(SESSION_KEYS.token);
+      localStorage.removeItem(SESSION_KEYS.username);
+      localStorage.removeItem(SESSION_KEYS.isAdmin);
+    }
+
     if (savePermissionsBtn) {
       savePermissionsBtn.disabled = true;
     }
@@ -1102,7 +1124,7 @@
     function updateAdminNavVisibility() {
       if (!adminNavBtn) return;
 
-      const isAdmin = localStorage.getItem("isAdmin") === "true";
+      const isAdmin = localStorage.getItem(SESSION_KEYS.isAdmin) === "true";
       adminNavBtn.style.display = isAdmin ? "inline-block" : "none";
 
       if (!isAdmin) {
@@ -1156,11 +1178,14 @@
     }
 
     if (logoutBtn) {
-      logoutBtn.addEventListener("click", () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("username");
-        localStorage.removeItem("isAdmin");
+      logoutBtn.addEventListener("click", async () => {
+        clearStoredSession();
         updateUIForLoggedOut();
+        try {
+          await fetch("/logout", { method: "POST" });
+        } catch (error) {
+          console.warn("Nem sikerült kijelentkeztetni a szerveren:", error);
+        }
         alert("Sikeresen kijelentkeztél.");
       });
     }
@@ -1438,9 +1463,11 @@
         const data = await res.json();
 
         if (res.ok) {
-          localStorage.setItem("token", data.token);
-          localStorage.setItem("username", data.username);
-          localStorage.setItem("isAdmin", data.isAdmin ? "true" : "false");
+          storeSessionData({
+            token: data.token,
+            username: data.username,
+            isAdmin: !!data.isAdmin,
+          });
           updateUIForLoggedIn(data.username);
           loginModal.style.display = "none";
           showLoginSuccessModal(data.message || "Sikeres bejelentkezés.");
@@ -1453,23 +1480,50 @@
       }
     });
 
-    window.addEventListener("load", () => {
-      const storedToken = localStorage.getItem("token");
-      const storedUsername = localStorage.getItem("username");
-      const isAdminStored = localStorage.getItem("isAdmin") === "true";
+    async function ensureSessionOnLoad() {
+      const storedToken = localStorage.getItem(SESSION_KEYS.token);
+      const headers = {};
 
-      if (storedToken && storedUsername) {
-        updateUIForLoggedIn(storedUsername);
+      if (storedToken) {
+        headers.Authorization = `Bearer ${storedToken}`;
+      }
+
+      try {
+        const response = await fetch("/auth/me", {
+          method: "GET",
+          headers,
+        });
+
+        if (!response.ok) {
+          throw new Error("Érvénytelen munkamenet");
+        }
+
+        const session = await response.json();
+
+        if (!session || !session.token || !session.username) {
+          throw new Error("Hiányos munkamenet adatok");
+        }
+
+        storeSessionData({
+          token: session.token,
+          username: session.username,
+          isAdmin: !!session.isAdmin,
+        });
+
+        updateUIForLoggedIn(session.username);
 
         if (adminNavBtn) {
-          adminNavBtn.style.display = isAdminStored ? "inline-block" : "none";
+          adminNavBtn.style.display = session.isAdmin ? "inline-block" : "none";
         }
-      } else {
-        localStorage.removeItem("token");
-        localStorage.removeItem("username");
-        localStorage.removeItem("isAdmin");
+      } catch (error) {
+        console.warn("Nem sikerült visszaállítani a munkamenetet:", error);
+        clearStoredSession();
         updateUIForLoggedOut();
       }
+    }
+
+    window.addEventListener("load", () => {
+      ensureSessionOnLoad();
     });
   </script>
 

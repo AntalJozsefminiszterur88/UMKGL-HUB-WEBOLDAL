@@ -4,9 +4,43 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const cookieParser = require('cookie-parser');
 const db = require('./database');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
+const COOKIE_NAME = 'authToken';
+const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 nap millisekundumban
+
+const COOKIE_BASE_OPTIONS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+};
+
+function setAuthCookie(res, token) {
+    res.cookie(COOKIE_NAME, token, { ...COOKIE_BASE_OPTIONS, maxAge: COOKIE_MAX_AGE });
+}
+
+function clearAuthCookie(res) {
+    res.clearCookie(COOKIE_NAME, COOKIE_BASE_OPTIONS);
+}
+
+function generateAuthToken(payload) {
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+}
+
+function getTokenFromRequest(req) {
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        return authHeader.split(' ')[1];
+    }
+
+    if (req.cookies && req.cookies[COOKIE_NAME]) {
+        return req.cookies[COOKIE_NAME];
+    }
+
+    return null;
+}
 
 // 2. Az Express alkalmazás létrehozása
 const app = express();
@@ -18,6 +52,7 @@ app.settings = app.settings || {};
 app.use(express.json());
 // Ez pedig a HTML formokból érkező adatokat segít feldolgozni
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Fájlfeltöltés beállítása a videókhoz
 const storage = multer.diskStorage({
@@ -59,8 +94,7 @@ function loadAppSettings() {
 
 // Hitelesítési middleware a védett végpontokhoz
 function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    const token = getTokenFromRequest(req);
 
     if (!token) {
         return res.status(401).json({ message: 'Hiányzó hitelesítési token.' });
@@ -71,7 +105,12 @@ function authenticateToken(req, res, next) {
             return res.status(403).json({ message: 'Érvénytelen vagy lejárt token.' });
         }
 
-        req.user = user;
+        req.user = {
+            id: user.id,
+            username: user.username,
+            isAdmin: !!user.isAdmin
+        };
+        req.token = token;
         next();
     });
 }
@@ -195,7 +234,10 @@ app.post('/login', (req, res) => {
             }
 
             const isAdmin = user.is_admin === 1;
-            const token = jwt.sign({ id: user.id, username: user.username, isAdmin }, JWT_SECRET, { expiresIn: '1h' });
+            const payload = { id: user.id, username: user.username, isAdmin };
+            const token = generateAuthToken(payload);
+
+            setAuthCookie(res, token);
 
             return res.status(200).json({
                 message: 'Sikeres bejelentkezés.',
@@ -205,6 +247,27 @@ app.post('/login', (req, res) => {
             });
         });
     });
+});
+
+app.get('/auth/me', authenticateToken, (req, res) => {
+    const payload = {
+        id: req.user.id,
+        username: req.user.username,
+        isAdmin: !!req.user.isAdmin
+    };
+
+    const refreshedToken = generateAuthToken(payload);
+    setAuthCookie(res, refreshedToken);
+
+    return res.status(200).json({
+        ...payload,
+        token: refreshedToken
+    });
+});
+
+app.post('/logout', (req, res) => {
+    clearAuthCookie(res);
+    return res.status(200).json({ message: 'Sikeres kijelentkezés.' });
 });
 
 app.get('/api/users', authenticateToken, isAdmin, (req, res) => {
