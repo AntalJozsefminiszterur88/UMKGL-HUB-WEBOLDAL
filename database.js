@@ -21,7 +21,9 @@ db.serialize(() => {
         password TEXT NOT NULL,
         can_upload INTEGER DEFAULT 0,
         is_admin INTEGER DEFAULT 0,
-        upload_count INTEGER DEFAULT 0
+        upload_count INTEGER DEFAULT 0,
+        max_file_size_mb INTEGER DEFAULT 50,
+        max_videos INTEGER DEFAULT 10
     )`, (err) => {
         if (err) {
             console.error("Hiba a 'users' tábla létrehozásakor:", err.message);
@@ -36,16 +38,35 @@ db.serialize(() => {
             return;
         }
 
-        const hasUploadCount = Array.isArray(columns) && columns.some((col) => col.name === 'upload_count');
-        if (!hasUploadCount) {
-            db.run(`ALTER TABLE users ADD COLUMN upload_count INTEGER DEFAULT 0`, (alterErr) => {
-                if (alterErr) {
-                    console.error("Nem sikerült hozzáadni az 'upload_count' oszlopot:", alterErr.message);
-                } else {
-                    console.log("'upload_count' oszlop sikeresen hozzáadva a 'users' táblához.");
-                }
-            });
-        }
+        const columnNames = new Set(Array.isArray(columns) ? columns.map((col) => col.name) : []);
+
+        const addColumnIfMissing = (name, definition, successMessage) => {
+            if (!columnNames.has(name)) {
+                db.run(`ALTER TABLE users ADD COLUMN ${name} ${definition}`, (alterErr) => {
+                    if (alterErr) {
+                        console.error(`Nem sikerült hozzáadni a(z) '${name}' oszlopot:`, alterErr.message);
+                    } else {
+                        console.log(successMessage);
+                    }
+                });
+            }
+        };
+
+        addColumnIfMissing('upload_count', 'INTEGER DEFAULT 0', "'upload_count' oszlop sikeresen hozzáadva a 'users' táblához.");
+        addColumnIfMissing('max_file_size_mb', 'INTEGER DEFAULT 50', "'max_file_size_mb' oszlop sikeresen hozzáadva a 'users' táblához.");
+        addColumnIfMissing('max_videos', 'INTEGER DEFAULT 10', "'max_videos' oszlop sikeresen hozzáadva a 'users' táblához.");
+
+        db.run(`UPDATE users SET max_file_size_mb = 50 WHERE max_file_size_mb IS NULL`, (updateErr) => {
+            if (updateErr) {
+                console.error("Nem sikerült alapértelmezett értéket beállítani a 'max_file_size_mb' oszlophoz:", updateErr.message);
+            }
+        });
+
+        db.run(`UPDATE users SET max_videos = 10 WHERE max_videos IS NULL`, (updateErr) => {
+            if (updateErr) {
+                console.error("Nem sikerült alapértelmezett értéket beállítani a 'max_videos' oszlophoz:", updateErr.message);
+            }
+        });
     });
 
     // VIDEÓK TÁBLA
