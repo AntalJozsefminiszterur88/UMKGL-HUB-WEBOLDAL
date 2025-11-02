@@ -184,6 +184,48 @@
         cursor: not-allowed;
       }
 
+      .user-table {
+        width: 100%;
+        max-width: 600px;
+        margin-top: 1rem;
+        border-collapse: collapse;
+      }
+
+      .user-table th,
+      .user-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #4f545c;
+      }
+
+      .user-table th {
+        background-color: var(--bg-secondary);
+      }
+
+      .user-table tbody tr:hover {
+        background-color: #3c4046;
+      }
+
+      #savePermissionsBtn {
+        margin-top: 1.5rem;
+        padding: 0.75rem 1.5rem;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      #savePermissionsBtn:hover:not(:disabled) {
+        background: #5b6dad;
+      }
+
+      #savePermissionsBtn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
       /* Auth buttons */
       .auth-buttons {
         position: absolute;
@@ -480,6 +522,7 @@
       <section id="admin">
         <h2>Felhasználók Kezelése</h2>
         <div id="userListContainer"></div>
+        <button id="savePermissionsBtn">Változtatások Mentése</button>
       </section>
     </main>
 
@@ -595,6 +638,11 @@
     const userGreeting = document.getElementById("userGreeting");
     const adminNavBtn = document.getElementById("adminNavBtn");
     const userListContainer = document.getElementById("userListContainer");
+    const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+
+    if (savePermissionsBtn) {
+      savePermissionsBtn.disabled = true;
+    }
 
     function openLoginModal() {
       if (loginForm) {
@@ -621,6 +669,9 @@
         }
         if (userListContainer) {
           userListContainer.innerHTML = "";
+        }
+        if (savePermissionsBtn) {
+          savePermissionsBtn.disabled = true;
         }
       }
     }
@@ -675,66 +726,53 @@
 
       if (!Array.isArray(users) || users.length === 0) {
         userListContainer.textContent = "Nincs megjeleníthető felhasználó.";
+        if (savePermissionsBtn) {
+          savePermissionsBtn.disabled = true;
+        }
         return;
       }
 
+      const table = document.createElement("table");
+      table.className = "user-table";
+
+      const thead = document.createElement("thead");
+      thead.innerHTML = `
+        <tr>
+          <th>Felhasználónév</th>
+          <th>Feltöltési Jogosultság</th>
+        </tr>
+      `;
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+
       users.forEach((user) => {
-        const row = document.createElement("div");
-        row.className = "admin-user-row";
+        const row = document.createElement("tr");
+        row.dataset.userId = user.id;
 
-        const nameSpan = document.createElement("span");
-        nameSpan.textContent = user.username;
-        row.appendChild(nameSpan);
+        const usernameCell = document.createElement("td");
+        usernameCell.textContent = user.username;
+        row.appendChild(usernameCell);
 
-        const checkboxLabel = document.createElement("label");
-        checkboxLabel.className = "admin-upload-toggle";
-
+        const permissionCell = document.createElement("td");
+        const label = document.createElement("label");
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = Number(user.can_upload) === 1;
+        label.appendChild(checkbox);
+        label.append(" Feltölthet");
+        permissionCell.appendChild(label);
+        row.appendChild(permissionCell);
 
-        checkbox.addEventListener("change", async () => {
-          const token = localStorage.getItem("token");
-          if (!token) {
-            alert("Nincs érvényes hitelesítés.");
-            checkbox.checked = !checkbox.checked;
-            return;
-          }
-
-          const newValue = checkbox.checked;
-          checkbox.disabled = true;
-
-          try {
-            const response = await fetch("/api/users/permissions", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({ userId: user.id, canUpload: newValue }),
-            });
-
-            const result = await response.json().catch(() => null);
-
-            if (!response.ok) {
-              const message = result && result.message ? result.message : "Nem sikerült frissíteni a jogosultságot.";
-              throw new Error(message);
-            }
-          } catch (error) {
-            console.error("Jogosultság frissítési hiba:", error);
-            alert(error.message || "Nem sikerült frissíteni a jogosultságot.");
-            checkbox.checked = !newValue;
-          } finally {
-            checkbox.disabled = false;
-          }
-        });
-
-        checkboxLabel.appendChild(checkbox);
-        checkboxLabel.append(" Feltölthet");
-        row.appendChild(checkboxLabel);
-
-        userListContainer.appendChild(row);
+        tbody.appendChild(row);
       });
+
+      table.appendChild(tbody);
+      userListContainer.appendChild(table);
+
+      if (savePermissionsBtn) {
+        savePermissionsBtn.disabled = false;
+      }
     }
 
     async function loadAdminPanel() {
@@ -763,7 +801,90 @@
       } catch (error) {
         console.error("Admin panel betöltési hiba:", error);
         alert(error.message || "Nem sikerült betölteni az admin panel adatait.");
+        if (savePermissionsBtn) {
+          savePermissionsBtn.disabled = true;
+        }
       }
+    }
+
+    if (savePermissionsBtn) {
+      const originalButtonText = savePermissionsBtn.textContent;
+
+      savePermissionsBtn.addEventListener("click", async () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          alert("Nincs érvényes hitelesítés.");
+          return;
+        }
+
+        if (!userListContainer) {
+          alert("Nem található a felhasználói lista.");
+          return;
+        }
+
+        const tableBody = userListContainer.querySelector("tbody");
+        if (!tableBody) {
+          alert("Nincs mentésre váró adat.");
+          return;
+        }
+
+        const rows = Array.from(tableBody.querySelectorAll("tr"));
+        const permissionsToUpdate = rows
+          .map((row) => {
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            const userIdAttr = row.dataset.userId;
+
+            if (!checkbox || !userIdAttr) {
+              return null;
+            }
+
+            const userId = Number.parseInt(userIdAttr, 10);
+            if (Number.isNaN(userId)) {
+              return null;
+            }
+
+            return {
+              userId,
+              canUpload: checkbox.checked,
+            };
+          })
+          .filter(Boolean);
+
+        if (permissionsToUpdate.length === 0) {
+          alert("Nincs mentésre váró adat.");
+          return;
+        }
+
+        savePermissionsBtn.disabled = true;
+        savePermissionsBtn.textContent = "Mentés folyamatban...";
+
+        try {
+          const response = await fetch("/api/users/permissions/batch-update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(permissionsToUpdate),
+          });
+
+          const result = await response.json().catch(() => null);
+
+          if (!response.ok) {
+            const message = result && result.message ? result.message : "Nem sikerült menteni a jogosultságokat.";
+            throw new Error(message);
+          }
+
+          alert((result && result.message) || "Jogosultságok sikeresen frissítve.");
+          await loadAdminPanel();
+        } catch (error) {
+          console.error("Jogosultság mentési hiba:", error);
+          alert(error.message || "Nem sikerült menteni a jogosultságokat.");
+        } finally {
+          savePermissionsBtn.disabled = false;
+          savePermissionsBtn.textContent = originalButtonText;
+        }
+      });
     }
 
     closeLogin.addEventListener("click", () => {

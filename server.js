@@ -154,27 +154,80 @@ app.get('/api/users', authenticateToken, isAdmin, (req, res) => {
     });
 });
 
-app.post('/api/users/permissions', authenticateToken, isAdmin, (req, res) => {
-    const { userId, canUpload } = req.body;
-
-    if (typeof userId === 'undefined' || typeof canUpload === 'undefined') {
-        return res.status(400).json({ message: 'userId és canUpload mezők megadása kötelező.' });
+app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, (req, res) => {
+    if (!Array.isArray(req.body)) {
+        return res.status(400).json({ message: 'A kérés törzsében egy tömbnek kell szerepelnie.' });
     }
 
-    const canUploadValue = canUpload ? 1 : 0;
-    const updateQuery = 'UPDATE users SET can_upload = ? WHERE id = ?';
+    if (req.body.length === 0) {
+        return res.status(200).json({ message: 'Nincs frissítendő jogosultság.' });
+    }
 
-    db.run(updateQuery, [canUploadValue, userId], function (err) {
-        if (err) {
-            console.error('Hiba a jogosultság frissítésekor:', err);
-            return res.status(500).json({ message: 'Nem sikerült frissíteni a jogosultságot.' });
-        }
+    const missingFields = req.body.find((item) => typeof item.userId === 'undefined' || typeof item.canUpload === 'undefined');
+    if (missingFields) {
+        return res.status(400).json({ message: 'Minden elemhez userId és canUpload mezők szükségesek.' });
+    }
 
-        if (this.changes === 0) {
-            return res.status(404).json({ message: 'A megadott felhasználó nem található.' });
-        }
+    const updates = req.body.map((item) => ({
+        userId: Number.parseInt(item.userId, 10),
+        canUpload: item.canUpload ? 1 : 0
+    }));
 
-        return res.status(200).json({ message: 'Jogosultság sikeresen frissítve.' });
+    const invalidId = updates.find((item) => Number.isNaN(item.userId));
+    if (invalidId) {
+        return res.status(400).json({ message: 'Érvénytelen felhasználó azonosító szerepel a kérésben.' });
+    }
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (beginErr) => {
+            if (beginErr) {
+                console.error('Hiba a tranzakció indításakor:', beginErr);
+                return res.status(500).json({ message: 'Nem sikerült elindítani a jogosultság frissítését.' });
+            }
+
+            const rollbackWithError = (statusCode, message) => {
+                db.run('ROLLBACK', (rollbackErr) => {
+                    if (rollbackErr) {
+                        console.error('Hiba a tranzakció visszagörgetésekor:', rollbackErr);
+                    }
+                    return res.status(statusCode).json({ message });
+                });
+            };
+
+            const processUpdate = (index) => {
+                if (index >= updates.length) {
+                    return db.run('COMMIT', (commitErr) => {
+                        if (commitErr) {
+                            console.error('Hiba a tranzakció lezárásakor:', commitErr);
+                            return db.run('ROLLBACK', (rollbackErr) => {
+                                if (rollbackErr) {
+                                    console.error('Hiba a tranzakció visszagörgetésekor:', rollbackErr);
+                                }
+                                return res.status(500).json({ message: 'Nem sikerült menteni a jogosultság frissítéseket.' });
+                            });
+                        }
+
+                        return res.status(200).json({ message: 'Jogosultságok sikeresen frissítve.' });
+                    });
+                }
+
+                const update = updates[index];
+                db.run('UPDATE users SET can_upload = ? WHERE id = ?', [update.canUpload, update.userId], function (err) {
+                    if (err) {
+                        console.error('Hiba a jogosultság frissítésekor:', err);
+                        return rollbackWithError(500, 'Nem sikerült frissíteni a jogosultságokat.');
+                    }
+
+                    if (this.changes === 0) {
+                        return rollbackWithError(404, 'A megadott felhasználó nem található.');
+                    }
+
+                    processUpdate(index + 1);
+                });
+            };
+
+            processUpdate(0);
+        });
     });
 });
 
