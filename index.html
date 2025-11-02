@@ -1456,10 +1456,17 @@
     window.addEventListener("load", () => {
       const storedToken = localStorage.getItem("token");
       const storedUsername = localStorage.getItem("username");
+      const isAdminStored = localStorage.getItem("isAdmin") === "true";
 
       if (storedToken && storedUsername) {
         updateUIForLoggedIn(storedUsername);
+
+        if (adminNavBtn) {
+          adminNavBtn.style.display = isAdminStored ? "inline-block" : "none";
+        }
       } else {
+        localStorage.removeItem("token");
+        localStorage.removeItem("username");
         localStorage.removeItem("isAdmin");
         updateUIForLoggedOut();
       }
