@@ -316,6 +316,69 @@
       #loginModal button {
         width: 100%;
       }
+
+      /* Success modal */
+      #loginSuccessModal {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+      }
+
+      #loginSuccessModal.visible {
+        display: flex;
+      }
+
+      #loginSuccessModal .modal-content {
+        position: relative;
+        background: var(--bg-secondary);
+        border-radius: 6px;
+        padding: 1.5rem;
+        width: min(90%, 320px);
+        text-align: center;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      }
+
+      #loginSuccessModal h3 {
+        margin-bottom: 0.75rem;
+        color: var(--accent);
+      }
+
+      #loginSuccessModal p {
+        margin-bottom: 1.25rem;
+        color: var(--text-primary);
+        line-height: 1.5;
+      }
+
+      #loginSuccessModal button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      #closeLoginSuccess {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 1.25rem;
+        cursor: pointer;
+      }
+
+      #closeLoginSuccess:hover {
+        color: #fff;
+      }
     </style>
   </head>
   <body>
@@ -356,6 +419,15 @@
           <input type="password" id="loginPass" placeholder="Jelszó" required />
           <button type="submit">Belépés</button>
         </form>
+      </div>
+    </div>
+
+    <div id="loginSuccessModal" role="dialog" aria-modal="true" aria-labelledby="loginSuccessTitle">
+      <div class="modal-content">
+        <button id="closeLoginSuccess" type="button" aria-label="Bezárás">&times;</button>
+        <h3 id="loginSuccessTitle">Sikeres bejelentkezés</h3>
+        <p id="loginSuccessMessage">Sikeresen bejelentkeztél.</p>
+        <button id="confirmLoginSuccess" type="button">OK</button>
       </div>
     </div>
 
@@ -736,9 +808,28 @@
     const adminNavBtn = document.getElementById("adminNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+    const loginSuccessModal = document.getElementById("loginSuccessModal");
+    const loginSuccessMessage = document.getElementById("loginSuccessMessage");
+    const closeLoginSuccessBtn = document.getElementById("closeLoginSuccess");
+    const confirmLoginSuccessBtn = document.getElementById("confirmLoginSuccess");
 
     if (savePermissionsBtn) {
       savePermissionsBtn.disabled = true;
+    }
+
+    function openLoginSuccessModal(message) {
+      if (loginSuccessMessage) {
+        loginSuccessMessage.textContent = message || "Sikeresen bejelentkeztél.";
+      }
+      if (loginSuccessModal) {
+        loginSuccessModal.classList.add("visible");
+      }
+    }
+
+    function closeLoginSuccessModal() {
+      if (loginSuccessModal) {
+        loginSuccessModal.classList.remove("visible");
+      }
     }
 
     function openLoginModal() {
@@ -811,6 +902,22 @@
         localStorage.removeItem("isAdmin");
         updateUIForLoggedOut();
         alert("Sikeresen kijelentkeztél.");
+      });
+    }
+
+    if (closeLoginSuccessBtn) {
+      closeLoginSuccessBtn.addEventListener("click", closeLoginSuccessModal);
+    }
+
+    if (confirmLoginSuccessBtn) {
+      confirmLoginSuccessBtn.addEventListener("click", closeLoginSuccessModal);
+    }
+
+    if (loginSuccessModal) {
+      loginSuccessModal.addEventListener("click", (event) => {
+        if (event.target === loginSuccessModal) {
+          closeLoginSuccessModal();
+        }
       });
     }
 
@@ -1012,7 +1119,7 @@
           localStorage.setItem("isAdmin", data.isAdmin ? "true" : "false");
           updateUIForLoggedIn(data.username);
           loginModal.style.display = "none";
-          alert(data.message || "Sikeres bejelentkezés.");
+          openLoginSuccessModal(data.message || "Sikeresen bejelentkeztél.");
         } else {
           alert(data.message || "Hibás felhasználónév vagy jelszó.");
         }
