@@ -20,12 +20,31 @@ db.serialize(() => {
         username TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
         can_upload INTEGER DEFAULT 0,
-        is_admin INTEGER DEFAULT 0
+        is_admin INTEGER DEFAULT 0,
+        upload_count INTEGER DEFAULT 0
     )`, (err) => {
         if (err) {
             console.error("Hiba a 'users' tábla létrehozásakor:", err.message);
         } else {
             console.log("'users' tábla sikeresen létrehozva vagy már létezik.");
+        }
+    });
+
+    db.all(`PRAGMA table_info(users)`, (err, columns) => {
+        if (err) {
+            console.error("Nem sikerült lekérdezni a 'users' tábla sémáját:", err.message);
+            return;
+        }
+
+        const hasUploadCount = Array.isArray(columns) && columns.some((col) => col.name === 'upload_count');
+        if (!hasUploadCount) {
+            db.run(`ALTER TABLE users ADD COLUMN upload_count INTEGER DEFAULT 0`, (alterErr) => {
+                if (alterErr) {
+                    console.error("Nem sikerült hozzáadni az 'upload_count' oszlopot:", alterErr.message);
+                } else {
+                    console.log("'upload_count' oszlop sikeresen hozzáadva a 'users' táblához.");
+                }
+            });
         }
     });
 
@@ -47,6 +66,29 @@ db.serialize(() => {
             console.error("Hiba a 'videos' tábla létrehozásakor:", err.message);
         } else {
             console.log("'videos' tábla sikeresen létrehozva vagy már létezik.");
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+    )`, (err) => {
+        if (err) {
+            console.error("Hiba a 'settings' tábla létrehozásakor:", err.message);
+        } else {
+            console.log("'settings' tábla sikeresen létrehozva vagy már létezik.");
+        }
+    });
+
+    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, ['max_file_size_mb', '50'], (err) => {
+        if (err) {
+            console.error("Hiba az alapértelmezett 'max_file_size_mb' beállítás mentésekor:", err.message);
+        }
+    });
+
+    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, ['max_videos_per_user', '10'], (err) => {
+        if (err) {
+            console.error("Hiba az alapértelmezett 'max_videos_per_user' beállítás mentésekor:", err.message);
         }
     });
 });
