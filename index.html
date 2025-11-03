@@ -740,7 +740,10 @@
           <a href="register.html" id="registerBtn" class="auth-button">Regisztráció</a>
         </div>
         <div id="authLoggedIn" class="auth-buttons__group" style="display: none">
-          <span id="userGreeting"></span>
+          <a href="#profile" id="userProfileLink" data-section="profile" style="display: flex; align-items: center; text-decoration: none; color: inherit;">
+            <img id="userAvatar" src="program_icons/default-avatar.png" alt="User Avatar" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px;">
+            <span id="userGreeting"></span>
+          </a>
           <button id="logoutBtn" type="button" class="auth-button">Kijelentkezés</button>
         </div>
       </div>
@@ -1001,6 +1004,32 @@
         </p>
         <div id="userListContainer"></div>
         <button id="savePermissionsBtn">Változtatások Mentése</button>
+      </section>
+
+      <section id="profile">
+        <h2>Profil Beállítások</h2>
+        <div class="poll-card">
+          <h3>Profilkép Módosítása</h3>
+          <img id="profileAvatarPreview" src="program_icons/default-avatar.png" alt="Profile Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem;">
+          <input type="file" id="avatarInput" accept="image/*" style="display: block; margin-bottom: 1rem;">
+          <button id="uploadAvatarBtn" class="poll-button">Feltöltés</button>
+          <p id="avatarUploadStatus" class="upload-status"></p>
+        </div>
+        <div class="poll-card" style="margin-top: 1rem;">
+          <h3>Felhasználónév Módosítása</h3>
+          <form id="updateUsernameForm">
+            <input type="text" id="newUsername" class="poll-text-input" placeholder="Új felhasználónév" required>
+            <button type="submit" class="poll-button">Mentés</button>
+          </form>
+        </div>
+        <div class="poll-card" style="margin-top: 1rem;">
+          <h3>Jelszó Módosítása</h3>
+          <form id="updatePasswordForm">
+            <input type="password" id="currentPassword" class="poll-text-input" placeholder="Jelenlegi jelszó" required>
+            <input type="password" id="newPassword" class="poll-text-input" placeholder="Új jelszó" required>
+            <button type="submit" class="poll-button">Mentés</button>
+          </form>
+        </div>
       </section>
     </main>
 
@@ -1332,6 +1361,7 @@
       token: "token",
       username: "username",
       isAdmin: ADMIN_SESSION_KEY,
+      profilePictureFilename: "profilePictureFilename",
     };
     const POLL_MIN_OPTIONS = 2;
     let pollsShouldRefresh = true;
@@ -1354,7 +1384,7 @@
       refreshPollsIfVisible();
     }
 
-    function storeSessionData({ token, username, isAdmin }) {
+    function storeSessionData({ token, username, isAdmin, profilePictureFilename }) {
       if (typeof token === "string" && token.trim()) {
         localStorage.setItem(SESSION_KEYS.token, token);
       }
@@ -1362,12 +1392,16 @@
         localStorage.setItem(SESSION_KEYS.username, username);
       }
       localStorage.setItem(SESSION_KEYS.isAdmin, isAdmin ? "true" : "false");
+      if (typeof profilePictureFilename === "string" && profilePictureFilename.trim()) {
+        localStorage.setItem(SESSION_KEYS.profilePictureFilename, profilePictureFilename);
+      }
     }
 
     function clearStoredSession() {
       localStorage.removeItem(SESSION_KEYS.token);
       localStorage.removeItem(SESSION_KEYS.username);
       localStorage.removeItem(SESSION_KEYS.isAdmin);
+      localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
     }
 
     function getStoredToken() {
@@ -1896,9 +1930,17 @@
       }
     }
 
-    function updateUIForLoggedIn(username) {
+    function updateUIForLoggedIn(username, profilePictureFilename) {
       if (userGreeting) {
         userGreeting.textContent = `Szia, ${username}!`;
+      }
+      const userAvatar = document.getElementById('userAvatar');
+      if (userAvatar) {
+          userAvatar.src = profilePictureFilename ? `/uploads/avatars/${profilePictureFilename}` : 'program_icons/default-avatar.png';
+      }
+      const profileAvatarPreview = document.getElementById('profileAvatarPreview');
+      if (profileAvatarPreview) {
+          profileAvatarPreview.src = profilePictureFilename ? `/uploads/avatars/${profilePictureFilename}` : 'program_icons/default-avatar.png';
       }
       if (authLoggedOut) {
         authLoggedOut.style.display = "none";
@@ -2234,8 +2276,9 @@
             token: data.token,
             username: data.username,
             isAdmin: !!data.isAdmin,
+            profilePictureFilename: data.profile_picture_filename
           });
-          updateUIForLoggedIn(data.username);
+          updateUIForLoggedIn(data.username, data.profile_picture_filename);
           loginModal.style.display = "none";
           showFeedbackModal({
             title: "Sikeres bejelentkezés",
@@ -2278,9 +2321,10 @@
           token: session.token,
           username: session.username,
           isAdmin: !!session.isAdmin,
+          profilePictureFilename: session.profile_picture_filename
         });
 
-        updateUIForLoggedIn(session.username);
+        updateUIForLoggedIn(session.username, session.profile_picture_filename);
 
         updateAdminNavVisibility();
       } catch (error) {
@@ -2293,6 +2337,119 @@
     window.addEventListener("load", () => {
       ensureSessionOnLoad();
     });
+
+    const userProfileLink = document.getElementById('userProfileLink');
+    if (userProfileLink) {
+        userProfileLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            showSection('profile');
+        });
+    }
+
+    const uploadAvatarBtn = document.getElementById('uploadAvatarBtn');
+    const avatarInput = document.getElementById('avatarInput');
+    const avatarUploadStatus = document.getElementById('avatarUploadStatus');
+
+    if (uploadAvatarBtn) {
+        uploadAvatarBtn.addEventListener('click', async () => {
+            const token = getStoredToken();
+            if (!token) {
+                alert("A feltöltéshez be kell jelentkezned.");
+                return;
+            }
+
+            const file = avatarInput.files[0];
+            if (!file) {
+                alert("Válassz ki egy képfájlt a feltöltéshez.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('avatar', file);
+
+            uploadAvatarBtn.disabled = true;
+            avatarUploadStatus.textContent = "Feltöltés folyamatban...";
+
+            try {
+                const response = await fetch('/api/profile/upload-avatar', {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: formData,
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || 'Nem sikerült feltölteni a profilképet.');
+                }
+
+                avatarUploadStatus.textContent = result.message;
+                await ensureSessionOnLoad(); // Refresh session data to get new avatar filename
+            } catch (error) {
+                console.error('Profilkép feltöltési hiba:', error);
+                avatarUploadStatus.textContent = error.message;
+            } finally {
+                uploadAvatarBtn.disabled = false;
+            }
+        });
+    }
+
+    const updateUsernameForm = document.getElementById('updateUsernameForm');
+    if (updateUsernameForm) {
+        updateUsernameForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newUsername = document.getElementById('newUsername').value;
+            const token = getStoredToken();
+
+            try {
+                const res = await fetch('/api/profile/update-name', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ newUsername }),
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message);
+                    await ensureSessionOnLoad();
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                alert('Hiba történt a felhasználónév frissítése során.');
+            }
+        });
+    }
+
+    const updatePasswordForm = document.getElementById('updatePasswordForm');
+    if (updatePasswordForm) {
+        updatePasswordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const token = getStoredToken();
+
+            try {
+                const res = await fetch('/api/profile/update-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ currentPassword, newPassword }),
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message);
+                    updatePasswordForm.reset();
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                alert('Hiba történt a jelszó frissítése során.');
+            }
+        });
+    }
   </script>
 
   <script src="HOI4-Porgonc/script.js"></script>
