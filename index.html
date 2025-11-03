@@ -1378,25 +1378,6 @@
       refreshPollsIfVisible();
     }
 
-    function storeSessionData({ token, username, isAdmin, profilePictureFilename }) {
-      if (typeof token === "string" && token.trim()) {
-        localStorage.setItem(SESSION_KEYS.token, token);
-      }
-      if (typeof username === "string" && username.trim()) {
-        localStorage.setItem(SESSION_KEYS.username, username);
-      }
-      localStorage.setItem(SESSION_KEYS.isAdmin, isAdmin ? "true" : "false");
-      if (typeof profilePictureFilename === "string" && profilePictureFilename.trim()) {
-        localStorage.setItem(SESSION_KEYS.profilePictureFilename, profilePictureFilename);
-      }
-    }
-
-    function clearStoredSession() {
-      localStorage.removeItem(SESSION_KEYS.token);
-      localStorage.removeItem(SESSION_KEYS.username);
-      localStorage.removeItem(SESSION_KEYS.isAdmin);
-      localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
-    }
 
     function getStoredToken() {
       return localStorage.getItem(SESSION_KEYS.token) || "";
@@ -2237,7 +2218,6 @@
 
     if (logoutBtn) {
       logoutBtn.addEventListener("click", async () => {
-        clearStoredSession();
         updateUIForLoggedOut();
         try {
           await fetch("/logout", { method: "POST" });
@@ -2266,12 +2246,6 @@
         const data = await res.json();
 
         if (res.ok) {
-          storeSessionData({
-            token: data.token,
-            username: data.username,
-            isAdmin: !!data.isAdmin,
-            profilePictureFilename: data.profile_picture_filename
-          });
           updateUIForLoggedIn(data.username, data.profile_picture_filename);
           loginModal.style.display = "none";
           showFeedbackModal({
@@ -2288,17 +2262,9 @@
     });
 
     async function ensureSessionOnLoad() {
-      const storedToken = localStorage.getItem(SESSION_KEYS.token);
-      const headers = {};
-
-      if (storedToken) {
-        headers.Authorization = `Bearer ${storedToken}`;
-      }
-
       try {
         const response = await fetch("/auth/me", {
-          method: "GET",
-          headers,
+          method: "GET"
         });
 
         if (!response.ok) {
@@ -2307,23 +2273,15 @@
 
         const session = await response.json();
 
-        if (!session || !session.token || !session.username) {
+        if (!session || !session.username) {
           throw new Error("Hiányos munkamenet adatok");
         }
-
-        storeSessionData({
-          token: session.token,
-          username: session.username,
-          isAdmin: !!session.isAdmin,
-          profilePictureFilename: session.profile_picture_filename
-        });
 
         updateUIForLoggedIn(session.username, session.profile_picture_filename);
 
         updateAdminNavVisibility();
       } catch (error) {
         console.warn("Nem sikerült visszaállítani a munkamenetet:", error);
-        clearStoredSession();
         updateUIForLoggedOut();
       }
     }
