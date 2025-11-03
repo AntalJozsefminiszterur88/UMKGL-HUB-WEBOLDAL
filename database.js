@@ -90,6 +90,55 @@ db.serialize(() => {
         }
     });
 
+    db.run(`CREATE TABLE IF NOT EXISTS polls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question TEXT NOT NULL,
+        creator_id INTEGER NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        closed_at DATETIME,
+        FOREIGN KEY (creator_id) REFERENCES users(id)
+    )`, (err) => {
+        if (err) {
+            console.error("Hiba a 'polls' tábla létrehozásakor:", err.message);
+        } else {
+            console.log("'polls' tábla sikeresen létrehozva vagy már létezik.");
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS poll_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        poll_id INTEGER NOT NULL,
+        option_text TEXT NOT NULL,
+        position INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE
+    )`, (err) => {
+        if (err) {
+            console.error("Hiba a 'poll_options' tábla létrehozásakor:", err.message);
+        } else {
+            console.log("'poll_options' tábla sikeresen létrehozva vagy már létezik.");
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS poll_votes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        poll_id INTEGER NOT NULL,
+        option_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        voted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
+        FOREIGN KEY (option_id) REFERENCES poll_options(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE(poll_id, user_id)
+    )`, (err) => {
+        if (err) {
+            console.error("Hiba a 'poll_votes' tábla létrehozásakor:", err.message);
+        } else {
+            console.log("'poll_votes' tábla sikeresen létrehozva vagy már létezik.");
+        }
+    });
+
     db.run(`CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
