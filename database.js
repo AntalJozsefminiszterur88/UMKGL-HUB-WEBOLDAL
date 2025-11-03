@@ -1,22 +1,18 @@
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 
-// Létrehoz egy 'umgkl_hub.db' nevű fájlt, ha még nem létezik, és megnyitja azt.
-const db = new sqlite3.Database('./umgkl_hub.db', (err) => {
-    if (err) {
-        console.error("Hiba az adatbázis megnyitása közben:", err.message);
-    }
-    console.log('Sikeresen csatlakozva a SQLite adatbázishoz.');
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
 });
 
-// Ez a rész létrehozza a táblákat, ha még nem léteznek.
-db.serialize(() => {
-    // FELHASZNÁLÓK TÁBLA
-    // - id: Egyedi azonosító minden felhasználónak
-    // - username: A felhasználónév, aminek egyedinek kell lennie
-    // - password: A titkosított jelszó helye
-    // - can_upload: A jogosultság (0 = nem tölthet fel, 1 = feltölthet)
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+async function initializeDatabase() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
         can_upload INTEGER DEFAULT 0,
@@ -24,147 +20,80 @@ db.serialize(() => {
         upload_count INTEGER DEFAULT 0,
         max_file_size_mb INTEGER DEFAULT 50,
         max_videos INTEGER DEFAULT 10
-    )`, (err) => {
-        if (err) {
-            console.error("Hiba a 'users' tábla létrehozásakor:", err.message);
-        } else {
-            console.log("'users' tábla sikeresen létrehozva vagy már létezik.");
-        }
-    });
+      )
+    `);
 
-    db.all(`PRAGMA table_info(users)`, (err, columns) => {
-        if (err) {
-            console.error("Nem sikerült lekérdezni a 'users' tábla sémáját:", err.message);
-            return;
-        }
-
-        const columnNames = new Set(Array.isArray(columns) ? columns.map((col) => col.name) : []);
-
-        const ensureDefaultValue = (column, value) => {
-            db.run(`UPDATE users SET ${column} = ${value} WHERE ${column} IS NULL`, (updateErr) => {
-                if (updateErr) {
-                    console.error(`Nem sikerült alapértelmezett értéket beállítani a(z) '${column}' oszlophoz:`, updateErr.message);
-                }
-            });
-        };
-
-        const ensureColumn = (name, definition, successMessage, defaultValue) => {
-            if (!columnNames.has(name)) {
-                db.run(`ALTER TABLE users ADD COLUMN ${name} ${definition}`, (alterErr) => {
-                    if (alterErr) {
-                        console.error(`Nem sikerült hozzáadni a(z) '${name}' oszlopot:`, alterErr.message);
-                    } else {
-                        console.log(successMessage);
-                        ensureDefaultValue(name, defaultValue);
-                    }
-                });
-            } else {
-                ensureDefaultValue(name, defaultValue);
-            }
-        };
-
-        ensureColumn('is_admin', 'INTEGER DEFAULT 0', "'is_admin' oszlop sikeresen hozzáadva a 'users' táblához.", 0);
-        ensureColumn('upload_count', 'INTEGER DEFAULT 0', "'upload_count' oszlop sikeresen hozzáadva a 'users' táblához.", 0);
-        ensureColumn('max_file_size_mb', 'INTEGER DEFAULT 50', "'max_file_size_mb' oszlop sikeresen hozzáadva a 'users' táblához.", 50);
-        ensureColumn('max_videos', 'INTEGER DEFAULT 10', "'max_videos' oszlop sikeresen hozzáadva a 'users' táblához.", 10);
-    });
-
-    // VIDEÓK TÁBLA
-    // - id: Egyedi azonosító minden videónak
-    // - filename: A szerveren tárolt egyedi fájlnév
-    // - original_name: A felhasználó által feltöltött eredeti fájlnév
-    // - uploader_id: A feltöltést végző felhasználó azonosítója
-    // - uploaded_at: A feltöltés időpontja (alapértelmezett: aktuális időbélyeg)
-    db.run(`CREATE TABLE IF NOT EXISTS videos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS videos (
+        id SERIAL PRIMARY KEY,
         filename TEXT NOT NULL,
         original_name TEXT NOT NULL,
         uploader_id INTEGER NOT NULL,
-        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        uploaded_at TIMESTAMPTZ DEFAULT NOW(),
         FOREIGN KEY (uploader_id) REFERENCES users(id)
-    )`, (err) => {
-        if (err) {
-            console.error("Hiba a 'videos' tábla létrehozásakor:", err.message);
-        } else {
-            console.log("'videos' tábla sikeresen létrehozva vagy már létezik.");
-        }
-    });
+      )
+    `);
 
-    db.run(`CREATE TABLE IF NOT EXISTS polls (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        question TEXT NOT NULL,
-        creator_id INTEGER NOT NULL,
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        closed_at DATETIME,
-        FOREIGN KEY (creator_id) REFERENCES users(id)
-    )`, (err) => {
-        if (err) {
-            console.error("Hiba a 'polls' tábla létrehozásakor:", err.message);
-        } else {
-            console.log("'polls' tábla sikeresen létrehozva vagy már létezik.");
-        }
-    });
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS polls (
+          id SERIAL PRIMARY KEY,
+          question TEXT NOT NULL,
+          creator_id INTEGER NOT NULL,
+          is_active INTEGER DEFAULT 1,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          closed_at TIMESTAMPTZ,
+          FOREIGN KEY (creator_id) REFERENCES users(id)
+      )
+    `);
 
-    db.run(`CREATE TABLE IF NOT EXISTS poll_options (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        poll_id INTEGER NOT NULL,
-        option_text TEXT NOT NULL,
-        position INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE
-    )`, (err) => {
-        if (err) {
-            console.error("Hiba a 'poll_options' tábla létrehozásakor:", err.message);
-        } else {
-            console.log("'poll_options' tábla sikeresen létrehozva vagy már létezik.");
-        }
-    });
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS poll_options (
+            id SERIAL PRIMARY KEY,
+            poll_id INTEGER NOT NULL,
+            option_text TEXT NOT NULL,
+            position INTEGER DEFAULT 0,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE
+        )
+    `);
 
-    db.run(`CREATE TABLE IF NOT EXISTS poll_votes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        poll_id INTEGER NOT NULL,
-        option_id INTEGER NOT NULL,
-        user_id INTEGER NOT NULL,
-        voted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
-        FOREIGN KEY (option_id) REFERENCES poll_options(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        UNIQUE(poll_id, user_id)
-    )`, (err) => {
-        if (err) {
-            console.error("Hiba a 'poll_votes' tábla létrehozásakor:", err.message);
-        } else {
-            console.log("'poll_votes' tábla sikeresen létrehozva vagy már létezik.");
-        }
-    });
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS poll_votes (
+            id SERIAL PRIMARY KEY,
+            poll_id INTEGER NOT NULL,
+            option_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            voted_at TIMESTAMPTZ DEFAULT NOW(),
+            FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
+            FOREIGN KEY (option_id) REFERENCES poll_options(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(poll_id, user_id)
+        )
+    `);
 
-    db.run(`CREATE TABLE IF NOT EXISTS settings (
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
-    )`, (err) => {
-        if (err) {
-            console.error("Hiba a 'settings' tábla létrehozásakor:", err.message);
-        } else {
-            console.log("'settings' tábla sikeresen létrehozva vagy már létezik.");
-        }
-    });
+      )
+    `);
 
-    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, ['max_file_size_mb', '50'], (err) => {
-        if (err) {
-            console.error("Hiba az alapértelmezett 'max_file_size_mb' beállítás mentésekor:", err.message);
-        }
-    });
+    await client.query(`
+      INSERT INTO settings (key, value) VALUES ('max_file_size_mb', '50') ON CONFLICT (key) DO NOTHING
+    `);
 
-    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, ['max_videos_per_user', '10'], (err) => {
-        if (err) {
-            console.error("Hiba az alapértelmezett 'max_videos_per_user' beállítás mentésekor:", err.message);
-        }
-    });
-});
+    await client.query(`
+      INSERT INTO settings (key, value) VALUES ('max_videos_per_user', '10') ON CONFLICT (key) DO NOTHING
+    `);
 
-// Lezárjuk a kapcsolatot, miután a parancsok lefutottak
-// db.close(); // Ezt most kikommenteljük, hogy a fő szerver tudja használni
+    console.log('Database tables are successfully created or already exist.');
+  } finally {
+    client.release();
+  }
+}
 
-// Exportáljuk az adatbázis kapcsolatot, hogy a server.js is elérje
-module.exports = db;
+module.exports = {
+  query: (text, params) => pool.query(text, params),
+  initializeDatabase,
+  pool,
+};
