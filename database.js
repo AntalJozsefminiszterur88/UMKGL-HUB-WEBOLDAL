@@ -19,7 +19,8 @@ async function initializeDatabase() {
         is_admin INTEGER DEFAULT 0,
         upload_count INTEGER DEFAULT 0,
         max_file_size_mb INTEGER DEFAULT 50,
-        max_videos INTEGER DEFAULT 10
+        max_videos INTEGER DEFAULT 10,
+        profile_picture_filename TEXT
       )
     `);
 
