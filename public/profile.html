@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <title>UMGKL HUB - Profil Beállítások</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="program_icons/oldal_logo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=Roboto+Condensed:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="HOI4-Porgonc/style.css" />
+    <link rel="stylesheet" href="css/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  </head>
+  <body>
+    <header>
+      <!-- Placeholder banner image -->
+      <img
+        src="https://via.placeholder.com/1200x300?text=Banner+kép"
+        alt="Banner"
+        class="banner"
+      />
+      <h1>UMGKL HUB</h1>
+      <nav>
+        <a href="home.html" data-section="home">Főoldal</a>
+        <a href="klipek.html" data-section="klipek">Klippek</a>
+        <a href="sorsolas.html" data-section="sorsolas">Hoi4 Sorsolás</a>
+        <a href="szavazas.html" data-section="szavazas">Szavazás</a>
+        <a
+          href="programok.html"
+          data-section="programok"
+          id="programNavBtn"
+          data-requires-admin="true"
+          style="display: none;"
+          >Programok</a
+        >
+        <a
+          href="admin.html"
+          data-section="admin"
+          id="adminNavBtn"
+          data-requires-admin="true"
+          style="display: none;"
+          >Admin Mód</a
+        >
+      </nav>
+      <div class="auth-buttons">
+        <div id="authLoggedOut" class="auth-buttons__group">
+          <button id="loginBtn" type="button" class="auth-button">Bejelentkezés</button>
+          <a href="register.html" id="registerBtn" class="auth-button">Regisztráció</a>
+        </div>
+        <div id="authLoggedIn" class="auth-buttons__group" style="display: none">
+          <a href="profile.html" id="userProfileLink" data-section="profile" style="display: flex; align-items: center; text-decoration: none; color: inherit;">
+            <img id="userAvatar" src="program_icons/default-avatar.png" alt="User Avatar" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px;">
+            <span id="userGreeting"></span>
+          </a>
+          <button id="logoutBtn" type="button" class="auth-button">Kijelentkezés</button>
+        </div>
+      </div>
+    </header>
+
+    <div id="loginModal">
+      <div class="modal-content">
+        <span id="closeLogin" style="float: right; cursor: pointer">&times;</span>
+        <h2>Bejelentkezés</h2>
+        <form id="loginForm">
+          <input type="text" id="loginUser" placeholder="Felhasználónév" required />
+          <input type="password" id="loginPass" placeholder="Jelszó" required />
+          <button type="submit">Belépés</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="feedbackModal" class="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle" style="display: none">
+      <div class="feedback-modal__content">
+        <button id="feedbackModalClose" class="feedback-modal__close" type="button" aria-label="Bezárás">&times;</button>
+        <h3 id="feedbackModalTitle" class="feedback-modal__title"></h3>
+        <p id="feedbackModalMessage" class="feedback-modal__message"></p>
+        <div class="feedback-modal__actions">
+          <button id="feedbackModalOk" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      <section id="profile" class="active">
+        <h2>Profil Beállítások</h2>
+        <div class="poll-card">
+          <h3>Profilkép Módosítása</h3>
+          <img id="profileAvatarPreview" src="program_icons/default-avatar.png" alt="Profile Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem;">
+          <input type="file" id="avatarInput" accept="image/*" style="display: block; margin-bottom: 1rem;">
+          <button id="uploadAvatarBtn" class="poll-button">Feltöltés</button>
+          <p id="avatarUploadStatus" class="upload-status"></p>
+        </div>
+        <div class="poll-card" style="margin-top: 1rem;">
+          <h3>Felhasználónév Módosítása</h3>
+          <form id="updateUsernameForm">
+            <input type="text" id="newUsername" class="poll-text-input" placeholder="Új felhasználónév" required>
+            <button type="submit" class="poll-button">Mentés</button>
+          </form>
+        </div>
+        <div class="poll-card" style="margin-top: 1rem;">
+          <h3>Jelszó Módosítása</h3>
+          <form id="updatePasswordForm">
+            <input type="password" id="currentPassword" class="poll-text-input" placeholder="Jelenlegi jelszó" required>
+            <input type="password" id="newPassword" class="poll-text-input" placeholder="Új jelszó" required>
+            <button type="submit" class="poll-button">Mentés</button>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>© 2025 UMGKL HUB Minden jog fenntartva</p>
+    </footer>
+
+    <script src="js/app.js"></script>
+    <script src="js/auth.js"></script>
+  </body>
+</html>
