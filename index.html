@@ -480,8 +480,22 @@
         <a href="#klipek" data-section="klipek">Klippek</a>
         <a href="#sorsolas" data-section="sorsolas">Hoi4 Sorsolás</a>
         <a href="#szavazas" data-section="szavazas">Szavazás</a>
-        <a href="#programok" data-section="programok">Programok</a>
-        <a href="#admin" data-section="admin" id="adminNavBtn" style="display: none;">Admin Mód</a>
+        <a
+          href="#programok"
+          data-section="programok"
+          id="programNavBtn"
+          data-requires-admin="true"
+          style="display: none;"
+          >Programok</a
+        >
+        <a
+          href="#admin"
+          data-section="admin"
+          id="adminNavBtn"
+          data-requires-admin="true"
+          style="display: none;"
+          >Admin Mód</a
+        >
       </nav>
       <div class="auth-buttons">
         <div id="authLoggedOut" class="auth-buttons__group">
@@ -758,7 +772,19 @@
       const uploadBtn = document.getElementById("uploadBtn");
       const uploadStatus = document.getElementById("uploadStatus");
       const selectedFileName = document.getElementById("selectedFileName");
+      const ADMIN_SESSION_KEY = "isAdmin";
+      const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
       let selectedVideoFile = null;
+
+      function isAdminUser() {
+        return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
+      }
+
+      function getAccessibleNavLinks() {
+        return Array.from(document.querySelectorAll("nav a")).filter((link) => {
+          return !(link.dataset.requiresAdmin === "true" && !isAdminUser());
+        });
+      }
 
       async function loadVideos() {
         if (!videoGridContainer) {
@@ -970,20 +996,30 @@
       }
 
       function showSection(target, shouldPushState = true) {
-        const navLinks = Array.from(document.querySelectorAll("nav a"));
+        const navLinks = getAccessibleNavLinks();
         const sections = document.querySelectorAll("main section");
-        const hasMatch = navLinks.some((link) => link.dataset.section === target);
+        const availableTargets = new Set(navLinks.map((link) => link.dataset.section));
 
-        if (!hasMatch) {
+        if (!availableTargets.has(target)) {
           target = "home";
         }
 
-        navLinks.forEach((link) => {
-          link.classList.toggle("active", link.dataset.section === target);
+        document.querySelectorAll("nav a").forEach((link) => {
+          const requiresAdmin = link.dataset.requiresAdmin === "true";
+          const isActive = link.dataset.section === target;
+
+          if (requiresAdmin && !isAdminUser()) {
+            link.classList.remove("active");
+            return;
+          }
+
+          link.classList.toggle("active", isActive);
         });
 
         sections.forEach((sec) => {
-          if (sec.id === target) {
+          const requiresAdmin = ADMIN_ONLY_SECTIONS.has(sec.id);
+
+          if (sec.id === target && (!requiresAdmin || isAdminUser())) {
             sec.classList.add("active");
           } else {
             sec.classList.remove("active");
@@ -1001,6 +1037,13 @@
 
       document.querySelectorAll("nav a").forEach((link) => {
         link.addEventListener("click", (e) => {
+          const requiresAdmin = link.dataset.requiresAdmin === "true";
+
+          if (requiresAdmin && !isAdminUser()) {
+            e.preventDefault();
+            return;
+          }
+
           e.preventDefault();
           showSection(link.dataset.section);
         });
@@ -1085,13 +1128,14 @@
     const authLoggedIn = document.getElementById("authLoggedIn");
     const userGreeting = document.getElementById("userGreeting");
     const adminNavBtn = document.getElementById("adminNavBtn");
+    const programNavBtn = document.getElementById("programNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
 
     const SESSION_KEYS = {
       token: "token",
       username: "username",
-      isAdmin: "isAdmin",
+      isAdmin: ADMIN_SESSION_KEY,
     };
 
     function storeSessionData({ token, username, isAdmin }) {
@@ -1122,20 +1166,24 @@
     }
 
     function updateAdminNavVisibility() {
-      if (!adminNavBtn) return;
+      const isAdmin = isAdminUser();
 
-      const isAdmin = localStorage.getItem(SESSION_KEYS.isAdmin) === "true";
-      adminNavBtn.style.display = isAdmin ? "inline-block" : "none";
+      if (adminNavBtn) {
+        adminNavBtn.style.display = isAdmin ? "inline-block" : "none";
+      }
+
+      if (programNavBtn) {
+        programNavBtn.style.display = isAdmin ? "inline-block" : "none";
+      }
 
       if (!isAdmin) {
-        const adminSection = document.getElementById("admin");
-        if (adminSection && adminSection.classList.contains("active")) {
-          const homeLink = document.querySelector('nav a[data-section="home"]');
-          if (homeLink) {
-            homeLink.click();
-          } else {
-            adminSection.classList.remove("active");
-          }
+        const activeSection = document.querySelector("main section.active");
+        if (
+          activeSection &&
+          typeof ADMIN_ONLY_SECTIONS !== "undefined" &&
+          ADMIN_ONLY_SECTIONS.has(activeSection.id)
+        ) {
+          showSection("home");
         }
         if (userListContainer) {
           userListContainer.innerHTML = "";
@@ -1512,9 +1560,7 @@
 
         updateUIForLoggedIn(session.username);
 
-        if (adminNavBtn) {
-          adminNavBtn.style.display = session.isAdmin ? "inline-block" : "none";
-        }
+        updateAdminNavVisibility();
       } catch (error) {
         console.warn("Nem sikerült visszaállítani a munkamenetet:", error);
         clearStoredSession();
