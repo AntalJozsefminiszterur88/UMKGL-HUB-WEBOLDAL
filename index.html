@@ -292,16 +292,20 @@
         align-items: center;
       }
 
-      .auth-buttons button,
-      .auth-buttons a {
+      .auth-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         background: var(--accent);
         color: #fff;
         border: none;
-        padding: 0.5rem 1rem;
+        padding: 0.6rem 1.4rem;
         margin-left: 0.25rem;
         border-radius: 4px;
         cursor: pointer;
         text-decoration: none;
+        min-width: 150px;
+        font-weight: 600;
       }
 
       .modal-overlay {
@@ -485,12 +489,12 @@
       </nav>
       <div class="auth-buttons">
         <div id="authLoggedOut" class="auth-buttons__group">
-          <button id="loginBtn" type="button">Bejelentkezés</button>
-          <a href="register.html" id="registerBtn">Regisztráció</a>
+          <button id="loginBtn" type="button" class="auth-button">Bejelentkezés</button>
+          <a href="register.html" id="registerBtn" class="auth-button">Regisztráció</a>
         </div>
         <div id="authLoggedIn" class="auth-buttons__group" style="display: none">
           <span id="userGreeting"></span>
-          <button id="logoutBtn" type="button">Kijelentkezés</button>
+          <button id="logoutBtn" type="button" class="auth-button">Kijelentkezés</button>
         </div>
       </div>
     </header>
