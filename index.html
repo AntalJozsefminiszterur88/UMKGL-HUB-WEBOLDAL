@@ -1257,6 +1257,10 @@
           loadVideos();
         }
 
+        if (target === "szavazas") {
+          refreshPollsIfVisible();
+        }
+
         if (shouldPushState) {
           history.pushState(null, "", `#${target}`);
         }
@@ -1303,6 +1307,7 @@
     const optionsContainer = document.getElementById("optionsContainer");
     const addOptionBtn = document.getElementById("addOptionBtn");
     const pollListContainer = document.getElementById("pollList");
+    const pollSection = document.getElementById("szavazas");
 
     const SESSION_KEYS = {
       token: "token",
@@ -1310,6 +1315,25 @@
       isAdmin: ADMIN_SESSION_KEY,
     };
     const POLL_MIN_OPTIONS = 2;
+    let pollsShouldRefresh = true;
+
+    function isPollSectionActive() {
+      return pollSection?.classList.contains("active");
+    }
+
+    function refreshPollsIfVisible() {
+      if (!isPollSectionActive() || !pollsShouldRefresh) {
+        return;
+      }
+
+      pollsShouldRefresh = false;
+      loadPolls();
+    }
+
+    function markPollsForRefresh() {
+      pollsShouldRefresh = true;
+      refreshPollsIfVisible();
+    }
 
     function storeSessionData({ token, username, isAdmin }) {
       if (typeof token === "string" && token.trim()) {
@@ -1594,6 +1618,8 @@
         return;
       }
 
+      pollsShouldRefresh = false;
+
       pollListContainer.innerHTML = "";
       const loadingElement = document.createElement("div");
       loadingElement.className = "poll-empty";
@@ -1820,7 +1846,7 @@
 
     ensureMinimumOptionRows();
     updatePollCreatorState();
-    loadPolls();
+    markPollsForRefresh();
 
     function updateAdminNavVisibility() {
       const isAdmin = isAdminUser();
@@ -1864,7 +1890,7 @@
 
       updateAdminNavVisibility();
       updatePollCreatorState(true);
-      loadPolls();
+      markPollsForRefresh();
     }
 
     function updateUIForLoggedOut() {
@@ -1879,7 +1905,7 @@
       }
       updateAdminNavVisibility();
       updatePollCreatorState(false);
-      loadPolls();
+      markPollsForRefresh();
     }
 
     if (loginBtn) {
