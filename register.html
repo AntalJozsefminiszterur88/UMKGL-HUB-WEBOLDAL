@@ -16,6 +16,58 @@
     input { width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; padding: 0.5rem; background:#1e2124; color:#dcddde; border:1px solid #202225; border-radius:4px; }
     button { background: var(--accent); color:#fff; border:none; padding:0.5rem 1rem; border-radius:4px; cursor:pointer; width:100%; }
     a { color: var(--accent); display: inline-block; margin-top: 1rem; }
+
+    .feedback-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1100;
+      padding: 1rem;
+    }
+
+    .feedback-modal__content {
+      background: #2f3136;
+      color: #dcddde;
+      padding: 1.5rem;
+      border-radius: 8px;
+      width: min(90%, 360px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      position: relative;
+      text-align: center;
+    }
+
+    .feedback-modal__title {
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .feedback-modal__message {
+      margin-bottom: 1.25rem;
+    }
+
+    .feedback-modal__close {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.75rem;
+      background: none;
+      border: none;
+      color: inherit;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .feedback-modal__actions button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      width: auto;
+    }
   </style>
 </head>
 <body>
@@ -27,7 +79,58 @@
   </form>
   <a href="/">Vissza a főoldalra</a>
 
+  <div id="feedbackModal" class="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle" style="display: none">
+    <div class="feedback-modal__content">
+      <button id="feedbackModalClose" class="feedback-modal__close" type="button" aria-label="Bezárás">&times;</button>
+      <h3 id="feedbackModalTitle" class="feedback-modal__title"></h3>
+      <p id="feedbackModalMessage" class="feedback-modal__message"></p>
+      <div class="feedback-modal__actions">
+        <button id="feedbackModalOk" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    const feedbackModal = document.getElementById('feedbackModal');
+    const feedbackModalTitle = document.getElementById('feedbackModalTitle');
+    const feedbackModalMessage = document.getElementById('feedbackModalMessage');
+    const feedbackModalClose = document.getElementById('feedbackModalClose');
+    const feedbackModalOk = document.getElementById('feedbackModalOk');
+    let feedbackModalOnClose = null;
+
+    const hideFeedbackModal = () => {
+      feedbackModal.style.display = 'none';
+      feedbackModalTitle.textContent = '';
+      feedbackModalMessage.textContent = '';
+      const onClose = feedbackModalOnClose;
+      feedbackModalOnClose = null;
+      if (typeof onClose === 'function') {
+        onClose();
+      }
+    };
+
+    const showFeedbackModal = ({ title, message, onClose }) => {
+      feedbackModalTitle.textContent = title;
+      feedbackModalMessage.textContent = message;
+      feedbackModalOnClose = typeof onClose === 'function' ? onClose : null;
+      feedbackModal.style.display = 'flex';
+      feedbackModalOk.focus();
+    };
+
+    feedbackModalClose.addEventListener('click', hideFeedbackModal);
+    feedbackModalOk.addEventListener('click', hideFeedbackModal);
+    feedbackModal.addEventListener('click', (event) => {
+      if (event.target === feedbackModal) {
+        hideFeedbackModal();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && feedbackModal.style.display === 'flex') {
+        hideFeedbackModal();
+      }
+    });
+
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault(); // Megakadályozza az oldal alapértelmezett újratöltését
 
@@ -46,8 +149,14 @@
       // Válasz feldolgozása
       if (response.ok) {
         // Ha a szerver 2xx státuszkóddal válaszolt (siker)
-        alert('Sikeres regisztráció! Most már bejelentkezhetsz.');
-        window.location.href = '/'; // Visszairányítás a főoldalra
+        document.getElementById('registerForm').reset();
+        showFeedbackModal({
+          title: 'Sikeres regisztráció',
+          message: 'Most már bejelentkezhetsz.',
+          onClose: () => {
+            window.location.href = '/';
+          },
+        });
       } else {
         // Ha a szerver 4xx vagy 5xx státuszkóddal válaszolt (hiba)
         const data = await response.json(); // A szerver által küldött hibaüzenet kiolvasása

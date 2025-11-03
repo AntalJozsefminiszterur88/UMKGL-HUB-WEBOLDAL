@@ -739,13 +739,13 @@
       </div>
     </div>
 
-    <div id="loginSuccessModal" class="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="loginSuccessTitle" style="display: none">
+    <div id="feedbackModal" class="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle" style="display: none">
       <div class="feedback-modal__content">
-        <button id="loginSuccessClose" class="feedback-modal__close" type="button" aria-label="Bezárás">&times;</button>
-        <h3 id="loginSuccessTitle" class="feedback-modal__title">Sikeres bejelentkezés</h3>
-        <p id="loginSuccessMessage" class="feedback-modal__message"></p>
+        <button id="feedbackModalClose" class="feedback-modal__close" type="button" aria-label="Bezárás">&times;</button>
+        <h3 id="feedbackModalTitle" class="feedback-modal__title"></h3>
+        <p id="feedbackModalMessage" class="feedback-modal__message"></p>
         <div class="feedback-modal__actions">
-          <button id="loginSuccessOk" type="button">OK</button>
+          <button id="feedbackModalOk" type="button">OK</button>
         </div>
       </div>
     </div>
@@ -1912,19 +1912,6 @@
       loginBtn.addEventListener("click", openLoginModal);
     }
 
-    if (logoutBtn) {
-      logoutBtn.addEventListener("click", async () => {
-        clearStoredSession();
-        updateUIForLoggedOut();
-        try {
-          await fetch("/logout", { method: "POST" });
-        } catch (error) {
-          console.warn("Nem sikerült kijelentkeztetni a szerveren:", error);
-        }
-        alert("Sikeresen kijelentkeztél.");
-      });
-    }
-
     function renderUserList(users) {
       if (!userListContainer) {
         return;
@@ -2153,35 +2140,61 @@
       adminNavBtn.addEventListener("click", loadAdminPanel);
     }
 
-    const loginSuccessModal = document.getElementById("loginSuccessModal");
-    const loginSuccessMessage = document.getElementById("loginSuccessMessage");
-    const loginSuccessClose = document.getElementById("loginSuccessClose");
-    const loginSuccessOk = document.getElementById("loginSuccessOk");
+    const feedbackModal = document.getElementById("feedbackModal");
+    const feedbackModalTitle = document.getElementById("feedbackModalTitle");
+    const feedbackModalMessage = document.getElementById("feedbackModalMessage");
+    const feedbackModalClose = document.getElementById("feedbackModalClose");
+    const feedbackModalOk = document.getElementById("feedbackModalOk");
+    let feedbackModalOnClose = null;
 
-    const hideLoginSuccessModal = () => {
-      loginSuccessModal.style.display = "none";
-      loginSuccessMessage.textContent = "";
+    const hideFeedbackModal = () => {
+      feedbackModal.style.display = "none";
+      feedbackModalTitle.textContent = "";
+      feedbackModalMessage.textContent = "";
+      const onClose = feedbackModalOnClose;
+      feedbackModalOnClose = null;
+      if (typeof onClose === "function") {
+        onClose();
+      }
     };
 
-    const showLoginSuccessModal = (message) => {
-      loginSuccessMessage.textContent = message;
-      loginSuccessModal.style.display = "flex";
-      loginSuccessOk.focus();
+    const showFeedbackModal = ({ title, message, onClose }) => {
+      feedbackModalTitle.textContent = title;
+      feedbackModalMessage.textContent = message;
+      feedbackModalOnClose = typeof onClose === "function" ? onClose : null;
+      feedbackModal.style.display = "flex";
+      feedbackModalOk.focus();
     };
 
-    loginSuccessClose.addEventListener("click", hideLoginSuccessModal);
-    loginSuccessOk.addEventListener("click", hideLoginSuccessModal);
-    loginSuccessModal.addEventListener("click", (event) => {
-      if (event.target === loginSuccessModal) {
-        hideLoginSuccessModal();
+    feedbackModalClose.addEventListener("click", hideFeedbackModal);
+    feedbackModalOk.addEventListener("click", hideFeedbackModal);
+    feedbackModal.addEventListener("click", (event) => {
+      if (event.target === feedbackModal) {
+        hideFeedbackModal();
       }
     });
 
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && loginSuccessModal.style.display === "flex") {
-        hideLoginSuccessModal();
+      if (event.key === "Escape" && feedbackModal.style.display === "flex") {
+        hideFeedbackModal();
       }
     });
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async () => {
+        clearStoredSession();
+        updateUIForLoggedOut();
+        try {
+          await fetch("/logout", { method: "POST" });
+        } catch (error) {
+          console.warn("Nem sikerült kijelentkeztetni a szerveren:", error);
+        }
+        showFeedbackModal({
+          title: "Kijelentkezés",
+          message: "Sikeresen kijelentkeztél.",
+        });
+      });
+    }
 
     loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -2205,7 +2218,10 @@
           });
           updateUIForLoggedIn(data.username);
           loginModal.style.display = "none";
-          showLoginSuccessModal(data.message || "Sikeres bejelentkezés.");
+          showFeedbackModal({
+            title: "Sikeres bejelentkezés",
+            message: data.message || "Sikeres bejelentkezés.",
+          });
         } else {
           alert(data.message || "Hibás felhasználónév vagy jelszó.");
         }
