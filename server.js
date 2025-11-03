@@ -123,6 +123,27 @@ function isAdmin(req, res, next) {
     next();
 }
 
+function optionalAuthenticate(req, res, next) {
+    const token = getTokenFromRequest(req);
+
+    if (!token) {
+        return next();
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (!err && user) {
+            req.user = {
+                id: user.id,
+                username: user.username,
+                isAdmin: !!user.isAdmin
+            };
+            req.token = token;
+        }
+
+        next();
+    });
+}
+
 function loadUserUploadSettings(req, res, next) {
     const userId = req.user && req.user.id;
 
@@ -438,6 +459,335 @@ app.post('/api/settings', authenticateToken, isAdmin, (req, res) => {
                         });
                 });
             });
+        });
+    });
+});
+
+app.post('/api/polls', authenticateToken, (req, res) => {
+    const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
+    const optionsInput = Array.isArray(req.body?.options) ? req.body.options : [];
+
+    if (!question) {
+        return res.status(400).json({ message: 'A kérdés megadása kötelező.' });
+    }
+
+    const sanitizedOptions = optionsInput
+        .map((option) => (typeof option === 'string' ? option.trim() : ''))
+        .filter((option) => option.length > 0);
+
+    const uniqueOptions = [];
+    const seenOptions = new Set();
+    sanitizedOptions.forEach((option) => {
+        const key = option.toLowerCase();
+        if (!seenOptions.has(key)) {
+            seenOptions.add(key);
+            uniqueOptions.push(option);
+        }
+    });
+
+    if (uniqueOptions.length < 2) {
+        return res.status(400).json({ message: 'Legalább két különböző válaszlehetőség szükséges.' });
+    }
+
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION', (beginErr) => {
+            if (beginErr) {
+                console.error('Hiba a szavazás létrehozásakor (BEGIN):', beginErr);
+                return res.status(500).json({ message: 'Nem sikerült elindítani a szavazás létrehozását.' });
+            }
+
+            db.run('INSERT INTO polls (question, creator_id, is_active) VALUES (?, ?, 1)', [question, req.user.id], function (insertErr) {
+                if (insertErr) {
+                    console.error('Hiba a szavazás mentésekor:', insertErr);
+                    return db.run('ROLLBACK', (rollbackErr) => {
+                        if (rollbackErr) {
+                            console.error('Hiba a szavazás visszagörgetésekor:', rollbackErr);
+                        }
+                        return res.status(500).json({ message: 'Nem sikerült létrehozni a szavazást.' });
+                    });
+                }
+
+                const pollId = this.lastID;
+                const insertOptionStmt = db.prepare('INSERT INTO poll_options (poll_id, option_text, position) VALUES (?, ?, ?)');
+
+                const finalizeWithError = () => {
+                    insertOptionStmt.finalize(() => {
+                        db.run('ROLLBACK', (rollbackErr) => {
+                            if (rollbackErr) {
+                                console.error('Hiba a szavazás visszagörgetésekor:', rollbackErr);
+                            }
+                            return res.status(500).json({ message: 'Nem sikerült létrehozni a szavazást.' });
+                        });
+                    });
+                };
+
+                const insertNextOption = (index) => {
+                    if (index >= uniqueOptions.length) {
+                        return insertOptionStmt.finalize((finalizeErr) => {
+                            if (finalizeErr) {
+                                console.error('Hiba a válaszlehetőségek mentésekor:', finalizeErr);
+                                return db.run('ROLLBACK', (rollbackErr) => {
+                                    if (rollbackErr) {
+                                        console.error('Hiba a szavazás visszagörgetésekor:', rollbackErr);
+                                    }
+                                    return res.status(500).json({ message: 'Nem sikerült létrehozni a szavazást.' });
+                                });
+                            }
+
+                            db.run('COMMIT', (commitErr) => {
+                                if (commitErr) {
+                                    console.error('Hiba a szavazás mentésekor (COMMIT):', commitErr);
+                                    return res.status(500).json({ message: 'Nem sikerült létrehozni a szavazást.' });
+                                }
+
+                                return res.status(201).json({ message: 'Szavazás sikeresen létrehozva.', pollId });
+                            });
+                        });
+                    }
+
+                    insertOptionStmt.run([pollId, uniqueOptions[index], index], (optionErr) => {
+                        if (optionErr) {
+                            console.error('Hiba a válaszlehetőség mentésekor:', optionErr);
+                            return finalizeWithError();
+                        }
+
+                        insertNextOption(index + 1);
+                    });
+                };
+
+                insertNextOption(0);
+            });
+        });
+    });
+});
+
+app.get('/api/polls', optionalAuthenticate, (req, res) => {
+    const pollsQuery = `
+        SELECT p.id, p.question, p.is_active, p.created_at, p.closed_at, p.creator_id, u.username AS creator_username
+        FROM polls p
+        LEFT JOIN users u ON p.creator_id = u.id
+        ORDER BY p.created_at DESC
+    `;
+
+    db.all(pollsQuery, [], (pollErr, pollRows) => {
+        if (pollErr) {
+            console.error('Hiba a szavazások lekérdezésekor:', pollErr);
+            return res.status(500).json({ message: 'Nem sikerült lekérdezni a szavazásokat.' });
+        }
+
+        if (!Array.isArray(pollRows) || pollRows.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        const pollIds = pollRows.map((row) => row.id);
+        const placeholders = pollIds.map(() => '?').join(',');
+
+        const optionsQuery = `
+            SELECT o.id, o.poll_id, o.option_text, o.position, COUNT(v.id) AS vote_count
+            FROM poll_options o
+            LEFT JOIN poll_votes v ON v.option_id = o.id
+            WHERE o.poll_id IN (${placeholders})
+            GROUP BY o.id
+            ORDER BY o.poll_id, o.position
+        `;
+
+        db.all(optionsQuery, pollIds, (optionErr, optionRows) => {
+            if (optionErr) {
+                console.error('Hiba a válaszlehetőségek lekérdezésekor:', optionErr);
+                return res.status(500).json({ message: 'Nem sikerült lekérdezni a szavazásokat.' });
+            }
+
+            const votesQuery = `
+                SELECT v.poll_id, v.option_id, v.user_id, u.username
+                FROM poll_votes v
+                LEFT JOIN users u ON v.user_id = u.id
+                WHERE v.poll_id IN (${placeholders})
+                ORDER BY v.voted_at ASC
+            `;
+
+            db.all(votesQuery, pollIds, (voteErr, voteRows) => {
+                if (voteErr) {
+                    console.error('Hiba a szavazatok lekérdezésekor:', voteErr);
+                    return res.status(500).json({ message: 'Nem sikerült lekérdezni a szavazásokat.' });
+                }
+
+                const pollsMap = new Map();
+                const optionsMap = new Map();
+
+                pollRows.forEach((row) => {
+                    const pollId = Number(row.id);
+                    const creatorId = Number(row.creator_id);
+
+                    pollsMap.set(pollId, {
+                        id: pollId,
+                        question: row.question,
+                        isActive: Number(row.is_active) === 1,
+                        createdAt: row.created_at,
+                        closedAt: row.closed_at,
+                        creator: {
+                            id: Number.isInteger(creatorId) ? creatorId : null,
+                            username: row.creator_username || null
+                        },
+                        options: [],
+                        totalVotes: 0,
+                        userVoteOptionId: null,
+                        canClose: false
+                    });
+                });
+
+                optionRows.forEach((row) => {
+                    const pollId = Number(row.poll_id);
+                    const optionId = Number(row.id);
+                    const poll = pollsMap.get(pollId);
+                    if (!poll) {
+                        return;
+                    }
+
+                    const position = Number(row.position);
+                    const option = {
+                        id: optionId,
+                        text: row.option_text,
+                        voteCount: Number(row.vote_count) || 0,
+                        position: Number.isFinite(position) ? position : poll.options.length,
+                        voters: []
+                    };
+
+                    poll.options.push(option);
+                    optionsMap.set(optionId, option);
+                });
+
+                voteRows.forEach((row) => {
+                    const pollId = Number(row.poll_id);
+                    const optionId = Number(row.option_id);
+                    const userId = Number(row.user_id);
+                    const poll = pollsMap.get(pollId);
+                    const option = optionsMap.get(optionId);
+
+                    if (!poll || !option) {
+                        return;
+                    }
+
+                    option.voters.push({
+                        id: Number.isInteger(userId) ? userId : null,
+                        username: row.username || null
+                    });
+
+                    if (req.user && Number.isInteger(userId) && userId === req.user.id) {
+                        poll.userVoteOptionId = optionId;
+                    }
+                });
+
+                const result = Array.from(pollsMap.values()).map((poll) => {
+                    poll.options.sort((a, b) => a.position - b.position);
+                    poll.totalVotes = poll.options.reduce((sum, option) => sum + option.voteCount, 0);
+                    poll.options = poll.options.map(({ position, ...rest }) => rest);
+                    const creatorId = poll.creator.id;
+                    poll.canClose = poll.isActive && !!req.user
+                        && (req.user.isAdmin || (Number.isInteger(creatorId) && req.user.id === creatorId));
+                    return poll;
+                });
+
+                return res.status(200).json(result);
+            });
+        });
+    });
+});
+
+app.post('/api/polls/:pollId/vote', authenticateToken, (req, res) => {
+    if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ message: 'Érvénytelen kérés.' });
+    }
+
+    const pollId = Number.parseInt(req.params.pollId, 10);
+    const optionId = Number.parseInt(req.body.optionId, 10);
+
+    if (!Number.isInteger(pollId) || pollId <= 0 || !Number.isInteger(optionId) || optionId <= 0) {
+        return res.status(400).json({ message: 'Érvénytelen kérés.' });
+    }
+
+    db.get('SELECT id, is_active FROM polls WHERE id = ?', [pollId], (pollErr, poll) => {
+        if (pollErr) {
+            console.error('Hiba a szavazás lekérdezésekor:', pollErr);
+            return res.status(500).json({ message: 'Nem sikerült feldolgozni a szavazatot.' });
+        }
+
+        if (!poll) {
+            return res.status(404).json({ message: 'A szavazás nem található.' });
+        }
+
+        if (Number(poll.is_active) !== 1) {
+            return res.status(400).json({ message: 'A szavazás már lezárult.' });
+        }
+
+        db.get('SELECT id FROM poll_options WHERE id = ? AND poll_id = ?', [optionId, pollId], (optionErr, option) => {
+            if (optionErr) {
+                console.error('Hiba a válaszlehetőség lekérdezésekor:', optionErr);
+                return res.status(500).json({ message: 'Nem sikerült feldolgozni a szavazatot.' });
+            }
+
+            if (!option) {
+                return res.status(400).json({ message: 'A megadott válaszlehetőség nem található.' });
+            }
+
+            db.get('SELECT id FROM poll_votes WHERE poll_id = ? AND user_id = ?', [pollId, req.user.id], (voteErr, existingVote) => {
+                if (voteErr) {
+                    console.error('Hiba a szavazat ellenőrzésekor:', voteErr);
+                    return res.status(500).json({ message: 'Nem sikerült feldolgozni a szavazatot.' });
+                }
+
+                if (existingVote) {
+                    return res.status(409).json({ message: 'Már szavaztál ebben a szavazásban.' });
+                }
+
+                db.run('INSERT INTO poll_votes (poll_id, option_id, user_id) VALUES (?, ?, ?)', [pollId, optionId, req.user.id], (insertErr) => {
+                    if (insertErr) {
+                        if (insertErr.code === 'SQLITE_CONSTRAINT') {
+                            return res.status(409).json({ message: 'Már szavaztál ebben a szavazásban.' });
+                        }
+
+                        console.error('Hiba a szavazat mentésekor:', insertErr);
+                        return res.status(500).json({ message: 'Nem sikerült rögzíteni a szavazatot.' });
+                    }
+
+                    return res.status(201).json({ message: 'Szavazat rögzítve.' });
+                });
+            });
+        });
+    });
+});
+
+app.post('/api/polls/:pollId/close', authenticateToken, (req, res) => {
+    const pollId = Number.parseInt(req.params.pollId, 10);
+
+    if (!Number.isInteger(pollId) || pollId <= 0) {
+        return res.status(400).json({ message: 'Érvénytelen szavazás azonosító.' });
+    }
+
+    db.get('SELECT id, creator_id, is_active FROM polls WHERE id = ?', [pollId], (pollErr, poll) => {
+        if (pollErr) {
+            console.error('Hiba a szavazás lekérdezésekor:', pollErr);
+            return res.status(500).json({ message: 'Nem sikerült lezárni a szavazást.' });
+        }
+
+        if (!poll) {
+            return res.status(404).json({ message: 'A szavazás nem található.' });
+        }
+
+        if (Number(poll.is_active) !== 1) {
+            return res.status(400).json({ message: 'A szavazás már le van zárva.' });
+        }
+
+        if (poll.creator_id !== req.user.id && !req.user.isAdmin) {
+            return res.status(403).json({ message: 'Nincs jogosultságod lezárni ezt a szavazást.' });
+        }
+
+        db.run('UPDATE polls SET is_active = 0, closed_at = CURRENT_TIMESTAMP WHERE id = ?', [pollId], (updateErr) => {
+            if (updateErr) {
+                console.error('Hiba a szavazás lezárásakor:', updateErr);
+                return res.status(500).json({ message: 'Nem sikerült lezárni a szavazást.' });
+            }
+
+            return res.status(200).json({ message: 'Szavazás sikeresen lezárva.' });
         });
     });
 });

@@ -136,43 +136,257 @@
       }
 
       /* Szavazás stílusok */
-      #pollCreator,
-      #pollDisplay {
+      #szavazas {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .poll-card {
         background: #2c2f33;
         padding: 1rem;
         border: 1px solid #202225;
-        border-radius: 4px;
-        margin-bottom: 1rem;
+        border-radius: 6px;
       }
-      #pollCreator input[type="text"] {
+
+      .poll-card h3 {
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+      }
+
+      .poll-hint {
+        color: #b9bbbe;
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .poll-text-input {
         width: 100%;
         padding: 0.5rem;
-        margin: 0.25rem 0;
+        margin-bottom: 0.75rem;
         color: var(--text-primary);
         background: #1e2124;
         border: 1px solid #202225;
         border-radius: 4px;
       }
-      #pollCreator button,
-      #pollDisplay button,
-      #newPollBtn {
+
+      .poll-options-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .poll-option-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .poll-option-input {
+        flex: 1;
+        padding: 0.5rem;
+        color: var(--text-primary);
+        background: #1e2124;
+        border: 1px solid #202225;
+        border-radius: 4px;
+      }
+
+      .poll-option-remove {
+        background: #202225;
+        border: none;
+        color: #fff;
+        border-radius: 4px;
+        padding: 0.45rem 0.6rem;
+        cursor: pointer;
+      }
+
+      .poll-option-remove:hover:not(:disabled) {
+        background: #f04747;
+      }
+
+      .poll-option-remove:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .poll-creator-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .poll-button {
         background: var(--accent);
         border: none;
         padding: 0.5rem 1rem;
-        margin-top: 0.5rem;
         color: #fff;
         cursor: pointer;
         border-radius: 4px;
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.25rem;
+        font-weight: 600;
       }
-      #pollDisplay button.option {
-        display: block;
-        margin: 0.25rem 0;
+
+      .poll-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .poll-secondary-btn {
+        background: #3a3d42;
+      }
+
+      .poll-secondary-btn:hover:not(:disabled) {
+        background: #484b51;
+      }
+
+      .poll-primary-btn:hover:not(:disabled),
+      .poll-vote-btn:hover:not(:disabled) {
+        filter: brightness(1.05);
+      }
+
+      .poll-close-btn {
+        background: #f04747;
+      }
+
+      .poll-close-btn:hover:not(:disabled) {
+        background: #ff5c5c;
+      }
+
+      .poll-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .poll-card-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .poll-status {
+        background: #1e2124;
+        border-radius: 999px;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #b9bbbe;
+      }
+
+      .poll-status--active {
+        color: #57f287;
+      }
+
+      .poll-status--closed {
+        color: #f04747;
+      }
+
+      .poll-meta {
+        font-size: 0.85rem;
+        color: #b9bbbe;
+      }
+
+      .poll-options-results {
+        margin-top: 0.75rem;
+      }
+
+      .poll-option-result {
+        padding: 0.75rem 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .poll-option-result:first-of-type {
+        border-top: none;
+      }
+
+      .poll-option-result--selected {
+        border-left: 3px solid var(--accent);
+        padding-left: 0.75rem;
+        background: rgba(114, 137, 218, 0.08);
+      }
+
+      .poll-option-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .poll-option-label {
+        flex: 1 1 auto;
+        font-weight: 600;
+      }
+
+      .poll-option-count {
+        font-size: 0.85rem;
+        color: #b9bbbe;
+      }
+
+      .poll-badge {
+        background: rgba(114, 137, 218, 0.2);
+        color: var(--accent);
+        border-radius: 999px;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .poll-result-bar {
         width: 100%;
-        text-align: left;
+        height: 0.75rem;
+        background: #1e2124;
+        border: 1px solid #202225;
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 0.5rem;
       }
-      #newPollBtn {
-        margin-bottom: 1rem;
+
+      .poll-result-bar-fill {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(90deg, var(--accent), #5865f2);
+        transition: width 0.3s ease;
+      }
+
+      .poll-option-result--selected .poll-result-bar-fill {
+        background: linear-gradient(90deg, #57f287, var(--accent));
+      }
+
+      .poll-voters {
+        margin-top: 0.4rem;
+        font-size: 0.8rem;
+        color: #b9bbbe;
+      }
+
+      .poll-total-votes {
+        margin-top: 0.75rem;
+        font-size: 0.85rem;
+        color: #b9bbbe;
+      }
+
+      .poll-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+
+      .poll-empty {
+        background: #2c2f33;
+        padding: 1rem;
+        border: 1px solid #202225;
+        border-radius: 6px;
+        text-align: center;
+        color: #b9bbbe;
       }
 
         footer {
@@ -687,21 +901,30 @@
 
       <!-- Szavazás -->
       <section id="szavazas">
-        <div id="pollCreator">
+        <h2>Szavazások</h2>
+        <div id="pollCreator" class="poll-card">
+          <h3>Új szavazás létrehozása</h3>
+          <p id="pollCreatorNotice" class="poll-hint"></p>
           <form id="createPollForm">
             <input
               id="questionInput"
+              class="poll-text-input"
               type="text"
               placeholder="Kérdés"
               required
             />
-            <div id="optionsContainer"></div>
-            <button type="button" id="addOptionBtn">Új válaszlehetőség</button>
-            <button type="submit">Szavazás létrehozása</button>
+            <div id="optionsContainer" class="poll-options-inputs"></div>
+            <div class="poll-creator-actions">
+              <button type="button" id="addOptionBtn" class="poll-button poll-secondary-btn">
+                Új válaszlehetőség
+              </button>
+              <button type="submit" class="poll-button poll-primary-btn">
+                Szavazás létrehozása
+              </button>
+            </div>
           </form>
         </div>
-        <div id="pollDisplay" style="display: none"></div>
-        <button id="newPollBtn" style="display: none">Új szavazás</button>
+        <div id="pollList" class="poll-list"></div>
       </section>
 
 <!-- Programok -->
@@ -1013,68 +1236,6 @@
       });
     </script>
 
-    <script>
-      function addOptionField() {
-        const input = document.createElement("input");
-        input.type = "text";
-        input.placeholder = "Válaszlehetőség";
-        input.className = "poll-option";
-        document.getElementById("optionsContainer").appendChild(input);
-      }
-
-      document.getElementById("addOptionBtn").addEventListener("click", addOptionField);
-
-      document.getElementById("createPollForm").addEventListener("submit", function (e) {
-        e.preventDefault();
-        const question = document.getElementById("questionInput").value.trim();
-        const optionInputs = document.querySelectorAll(".poll-option");
-        const options = Array.from(optionInputs)
-          .map((i) => i.value.trim())
-          .filter((v) => v);
-        if (!question || options.length < 2) {
-          alert("Adj meg kérdést és legalább 2 választ!");
-          return;
-        }
-        window.pollData = { question, options, votes: Array(options.length).fill(0) };
-        renderPoll();
-      });
-
-      function renderPoll() {
-        document.getElementById("createPollForm").style.display = "none";
-        const disp = document.getElementById("pollDisplay");
-        disp.innerHTML = `<h3>${window.pollData.question}</h3>`;
-        window.pollData.options.forEach((opt, i) => {
-          const btn = document.createElement("button");
-          btn.className = "option";
-          btn.textContent = `${opt} (0)`;
-          btn.addEventListener("click", () => vote(i, btn));
-          disp.appendChild(btn);
-        });
-        disp.style.display = "block";
-        document.getElementById("newPollBtn").style.display = "inline-block";
-      }
-
-      function vote(idx, btn) {
-        window.pollData.votes[idx]++;
-        btn.textContent = `${window.pollData.options[idx]} (${window.pollData.votes[idx]})`;
-      }
-
-      document.getElementById("newPollBtn").addEventListener("click", function () {
-        window.pollData = null;
-        document.getElementById("pollDisplay").innerHTML = "";
-        document.getElementById("pollDisplay").style.display = "none";
-        document.getElementById("createPollForm").style.display = "block";
-        document.getElementById("optionsContainer").innerHTML = "";
-        for (let i = 0; i < 2; i++) addOptionField();
-        document.getElementById("questionInput").value = "";
-        this.style.display = "none";
-      });
-
-    window.addEventListener("load", () => {
-      for (let i = 0; i < 2; i++) addOptionField();
-    });
-  </script>
-
   <script>
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
@@ -1087,12 +1248,20 @@
     const adminNavBtn = document.getElementById("adminNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+    const pollCreator = document.getElementById("pollCreator");
+    const pollCreatorNotice = document.getElementById("pollCreatorNotice");
+    const createPollForm = document.getElementById("createPollForm");
+    const questionInput = document.getElementById("questionInput");
+    const optionsContainer = document.getElementById("optionsContainer");
+    const addOptionBtn = document.getElementById("addOptionBtn");
+    const pollListContainer = document.getElementById("pollList");
 
     const SESSION_KEYS = {
       token: "token",
       username: "username",
       isAdmin: "isAdmin",
     };
+    const POLL_MIN_OPTIONS = 2;
 
     function storeSessionData({ token, username, isAdmin }) {
       if (typeof token === "string" && token.trim()) {
@@ -1110,6 +1279,19 @@
       localStorage.removeItem(SESSION_KEYS.isAdmin);
     }
 
+    function getStoredToken() {
+      return localStorage.getItem(SESSION_KEYS.token) || "";
+    }
+
+    function isUserLoggedIn() {
+      return !!getStoredToken();
+    }
+
+    function buildAuthHeaders() {
+      const token = getStoredToken();
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
     if (savePermissionsBtn) {
       savePermissionsBtn.disabled = true;
     }
@@ -1120,6 +1302,477 @@
       }
       loginModal.style.display = "flex";
     }
+
+    function createOptionRow(value = "") {
+      const row = document.createElement("div");
+      row.className = "poll-option-row";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "poll-option-input";
+      input.placeholder = "Válaszlehetőség";
+      input.required = true;
+      input.value = value;
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "poll-option-remove";
+      removeBtn.setAttribute("aria-label", "Válaszlehetőség törlése");
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", () => {
+        if (!optionsContainer) {
+          return;
+        }
+        row.remove();
+        ensureMinimumOptionRows();
+        updateOptionRemoveButtons();
+      });
+
+      row.appendChild(input);
+      row.appendChild(removeBtn);
+
+      return row;
+    }
+
+    function updateOptionRemoveButtons() {
+      if (!optionsContainer) {
+        return;
+      }
+
+      const rows = optionsContainer.querySelectorAll(".poll-option-row");
+      rows.forEach((row) => {
+        const removeBtn = row.querySelector(".poll-option-remove");
+        if (removeBtn) {
+          removeBtn.disabled = rows.length <= POLL_MIN_OPTIONS;
+        }
+      });
+    }
+
+    function addOptionRow(value = "") {
+      if (!optionsContainer) {
+        return null;
+      }
+
+      const row = createOptionRow(value);
+      optionsContainer.appendChild(row);
+      updateOptionRemoveButtons();
+      return row;
+    }
+
+    function ensureMinimumOptionRows() {
+      if (!optionsContainer) {
+        return;
+      }
+
+      const currentRows = optionsContainer.querySelectorAll(".poll-option-row").length;
+      const missing = POLL_MIN_OPTIONS - currentRows;
+
+      if (missing > 0) {
+        for (let i = 0; i < missing; i += 1) {
+          addOptionRow();
+        }
+      }
+
+      updateOptionRemoveButtons();
+    }
+
+    function resetPollForm() {
+      if (createPollForm) {
+        createPollForm.reset();
+      }
+
+      if (optionsContainer) {
+        optionsContainer.innerHTML = "";
+      }
+
+      ensureMinimumOptionRows();
+    }
+
+    function updatePollCreatorState(forceLoggedInState) {
+      if (!pollCreator || !createPollForm) {
+        return;
+      }
+
+      const loggedIn =
+        typeof forceLoggedInState === "boolean" ? forceLoggedInState : isUserLoggedIn();
+
+      if (loggedIn) {
+        createPollForm.style.display = "block";
+        if (pollCreatorNotice) {
+          pollCreatorNotice.textContent =
+            "Adj meg egy kérdést és legalább két válaszlehetőséget.";
+        }
+        ensureMinimumOptionRows();
+      } else {
+        createPollForm.style.display = "none";
+        if (pollCreatorNotice) {
+          pollCreatorNotice.textContent =
+            "Szavazást létrehozni csak bejelentkezett felhasználók tudnak.";
+        }
+      }
+    }
+
+    function renderPoll(poll) {
+      const card = document.createElement("div");
+      card.className = "poll-card";
+
+      const header = document.createElement("div");
+      header.className = "poll-card-header";
+
+      const title = document.createElement("h3");
+      title.textContent = poll?.question || "Szavazás";
+      header.appendChild(title);
+
+      const status = document.createElement("span");
+      status.className = `poll-status ${poll?.isActive ? "poll-status--active" : "poll-status--closed"}`;
+      status.textContent = poll?.isActive ? "Aktív" : "Lezárt";
+      header.appendChild(status);
+
+      card.appendChild(header);
+
+      const creatorName = poll?.creator?.username || "Ismeretlen";
+      const meta = document.createElement("div");
+      meta.className = "poll-meta";
+      let metaText = `Létrehozta: ${creatorName}`;
+      if (poll?.createdAt) {
+        const createdAt = new Date(poll.createdAt);
+        if (!Number.isNaN(createdAt.valueOf())) {
+          metaText += ` • ${createdAt.toLocaleString("hu-HU")}`;
+        }
+      }
+      meta.textContent = metaText;
+      card.appendChild(meta);
+
+      if (poll?.isActive && !isUserLoggedIn()) {
+        const notice = document.createElement("div");
+        notice.className = "poll-hint";
+        notice.textContent = "Szavazni csak bejelentkezett felhasználók tudnak.";
+        card.appendChild(notice);
+      }
+
+      const optionsWrapper = document.createElement("div");
+      optionsWrapper.className = "poll-options-results";
+
+      const totalVotes = Number(poll?.totalVotes) || 0;
+
+      if (Array.isArray(poll?.options)) {
+        poll.options.forEach((option) => {
+          const optionResult = document.createElement("div");
+          optionResult.className = "poll-option-result";
+          if (poll?.userVoteOptionId === option.id) {
+            optionResult.classList.add("poll-option-result--selected");
+          }
+
+          const headerRow = document.createElement("div");
+          headerRow.className = "poll-option-header";
+
+          const label = document.createElement("div");
+          label.className = "poll-option-label";
+          label.textContent = option?.text || "Válaszlehetőség";
+          headerRow.appendChild(label);
+
+          const count = document.createElement("div");
+          count.className = "poll-option-count";
+          const votes = Number(option?.voteCount) || 0;
+          const percentage = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+          count.textContent = `${votes} szavazat (${percentage}%)`;
+          headerRow.appendChild(count);
+
+          if (poll?.isActive && !poll?.userVoteOptionId && isUserLoggedIn()) {
+            const voteBtn = document.createElement("button");
+            voteBtn.type = "button";
+            voteBtn.className = "poll-button poll-vote-btn";
+            voteBtn.textContent = "Szavazok";
+            voteBtn.addEventListener("click", () => handlePollVote(poll.id, option.id, voteBtn));
+            headerRow.appendChild(voteBtn);
+          } else if (poll?.userVoteOptionId === option.id) {
+            const badge = document.createElement("span");
+            badge.className = "poll-badge";
+            badge.textContent = "Szavazatod";
+            headerRow.appendChild(badge);
+          }
+
+          optionResult.appendChild(headerRow);
+
+          const bar = document.createElement("div");
+          bar.className = "poll-result-bar";
+          const fill = document.createElement("div");
+          fill.className = "poll-result-bar-fill";
+          const fillWidth = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+          fill.style.width = `${fillWidth}%`;
+          bar.appendChild(fill);
+          optionResult.appendChild(bar);
+
+          const votersElement = document.createElement("div");
+          votersElement.className = "poll-voters";
+          if (Array.isArray(option?.voters) && option.voters.length > 0) {
+            const names = option.voters
+              .map((voter) => voter?.username || `#${voter?.id ?? "?"}`)
+              .join(", ");
+            votersElement.textContent = `Szavaztak: ${names}`;
+          } else {
+            votersElement.textContent = "Még nincs szavazat.";
+          }
+          optionResult.appendChild(votersElement);
+
+          optionsWrapper.appendChild(optionResult);
+        });
+      }
+
+      card.appendChild(optionsWrapper);
+
+      const totalVotesInfo = document.createElement("div");
+      totalVotesInfo.className = "poll-total-votes";
+      totalVotesInfo.textContent = `Összes szavazat: ${totalVotes}`;
+      card.appendChild(totalVotesInfo);
+
+      if (poll?.canClose) {
+        const actions = document.createElement("div");
+        actions.className = "poll-actions";
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "poll-button poll-close-btn";
+        closeBtn.textContent = "Szavazás lezárása";
+        closeBtn.addEventListener("click", () => handleClosePoll(poll.id, closeBtn));
+        actions.appendChild(closeBtn);
+        card.appendChild(actions);
+      }
+
+      return card;
+    }
+
+    async function loadPolls() {
+      if (!pollListContainer) {
+        return;
+      }
+
+      pollListContainer.innerHTML = "";
+      const loadingElement = document.createElement("div");
+      loadingElement.className = "poll-empty";
+      loadingElement.textContent = "Szavazások betöltése...";
+      pollListContainer.appendChild(loadingElement);
+
+      try {
+        const response = await fetch("/api/polls", { headers: buildAuthHeaders() });
+
+        if (!response.ok) {
+          throw new Error("Nem sikerült betölteni a szavazásokat.");
+        }
+
+        const polls = await response.json();
+        pollListContainer.innerHTML = "";
+
+        if (!Array.isArray(polls) || polls.length === 0) {
+          const emptyElement = document.createElement("div");
+          emptyElement.className = "poll-empty";
+          emptyElement.textContent = "Jelenleg nincs aktív szavazás.";
+          pollListContainer.appendChild(emptyElement);
+          return;
+        }
+
+        polls.forEach((poll) => {
+          pollListContainer.appendChild(renderPoll(poll));
+        });
+      } catch (error) {
+        console.error("Szavazások betöltési hiba:", error);
+        pollListContainer.innerHTML = "";
+        const errorElement = document.createElement("div");
+        errorElement.className = "poll-empty";
+        errorElement.textContent = "Nem sikerült betölteni a szavazásokat.";
+        pollListContainer.appendChild(errorElement);
+      }
+    }
+
+    async function handlePollVote(pollId, optionId, button) {
+      if (!isUserLoggedIn()) {
+        alert("Szavazáshoz be kell jelentkezned.");
+        if (typeof openLoginModal === "function") {
+          openLoginModal();
+        }
+        return;
+      }
+
+      const originalText = button ? button.textContent : "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Küldés...";
+      }
+
+      try {
+        const response = await fetch(`/api/polls/${pollId}/vote`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...buildAuthHeaders(),
+          },
+          body: JSON.stringify({ optionId }),
+        });
+
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const message =
+            payload && payload.message
+              ? payload.message
+              : "Nem sikerült rögzíteni a szavazatot.";
+          throw new Error(message);
+        }
+
+        await loadPolls();
+      } catch (error) {
+        console.error("Szavazat mentési hiba:", error);
+        alert(error.message || "Nem sikerült rögzíteni a szavazatot.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "Szavazok";
+        }
+      }
+    }
+
+    async function handleClosePoll(pollId, button) {
+      if (!isUserLoggedIn()) {
+        alert("A szavazás lezárásához be kell jelentkezned.");
+        if (typeof openLoginModal === "function") {
+          openLoginModal();
+        }
+        return;
+      }
+
+      if (!confirm("Biztosan lezárod a szavazást?")) {
+        return;
+      }
+
+      const originalText = button ? button.textContent : "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Lezárás...";
+      }
+
+      try {
+        const response = await fetch(`/api/polls/${pollId}/close`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...buildAuthHeaders(),
+          },
+        });
+
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const message =
+            payload && payload.message
+              ? payload.message
+              : "Nem sikerült lezárni a szavazást.";
+          throw new Error(message);
+        }
+
+        await loadPolls();
+      } catch (error) {
+        console.error("Szavazás lezárási hiba:", error);
+        alert(error.message || "Nem sikerült lezárni a szavazást.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "Szavazás lezárása";
+        }
+      }
+    }
+
+    if (addOptionBtn) {
+      addOptionBtn.addEventListener("click", () => {
+        if (!isUserLoggedIn()) {
+          alert("Szavazást létrehozni csak bejelentkezve tudsz.");
+          if (typeof openLoginModal === "function") {
+            openLoginModal();
+          }
+          return;
+        }
+
+        addOptionRow();
+      });
+    }
+
+    if (createPollForm) {
+      createPollForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if (!isUserLoggedIn()) {
+          alert("Szavazást létrehozni csak bejelentkezve tudsz.");
+          if (typeof openLoginModal === "function") {
+            openLoginModal();
+          }
+          return;
+        }
+
+        const question = questionInput ? questionInput.value.trim() : "";
+        const optionInputs = optionsContainer
+          ? Array.from(optionsContainer.querySelectorAll(".poll-option-input"))
+          : [];
+        const optionValues = optionInputs.map((input) => input.value.trim()).filter(Boolean);
+
+        const uniqueOptions = [];
+        const seenOptions = new Set();
+        optionValues.forEach((option) => {
+          const key = option.toLowerCase();
+          if (!seenOptions.has(key)) {
+            seenOptions.add(key);
+            uniqueOptions.push(option);
+          }
+        });
+
+        if (!question || uniqueOptions.length < POLL_MIN_OPTIONS) {
+          alert("Adj meg egy kérdést és legalább két különböző válaszlehetőséget!");
+          return;
+        }
+
+        const submitButton = createPollForm.querySelector('button[type="submit"]');
+        const originalText = submitButton ? submitButton.textContent : "";
+
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = "Létrehozás...";
+        }
+
+        try {
+          const response = await fetch("/api/polls", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...buildAuthHeaders(),
+            },
+            body: JSON.stringify({ question, options: uniqueOptions }),
+          });
+
+          const payload = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            const message =
+              payload && payload.message
+                ? payload.message
+                : "Nem sikerült létrehozni a szavazást.";
+            throw new Error(message);
+          }
+
+          resetPollForm();
+          updatePollCreatorState(true);
+          await loadPolls();
+        } catch (error) {
+          console.error("Szavazás létrehozási hiba:", error);
+          alert(error.message || "Nem sikerült létrehozni a szavazást.");
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = originalText || "Szavazás létrehozása";
+          }
+        }
+      });
+    }
+
+    ensureMinimumOptionRows();
+    updatePollCreatorState();
+    loadPolls();
 
     function updateAdminNavVisibility() {
       if (!adminNavBtn) return;
@@ -1158,6 +1811,8 @@
       }
 
       updateAdminNavVisibility();
+      updatePollCreatorState(true);
+      loadPolls();
     }
 
     function updateUIForLoggedOut() {
@@ -1171,6 +1826,8 @@
         userGreeting.textContent = "";
       }
       updateAdminNavVisibility();
+      updatePollCreatorState(false);
+      loadPolls();
     }
 
     if (loginBtn) {
