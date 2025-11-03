@@ -598,38 +598,79 @@
         min-height: 1.25rem;
       }
 
-      /* Login modal */
-      #loginModal {
+      body.modal-open {
+        overflow: hidden;
+      }
+
+      .fullscreen-modal {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
+        inset: 0;
         display: none;
         justify-content: center;
         align-items: center;
-      }
-
-      #loginModal .modal-content {
-        background: var(--bg-secondary);
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(4px);
+        z-index: 1300;
         padding: 1rem;
-        border-radius: 4px;
-        width: 300px;
       }
 
-      #loginModal input {
+      .fullscreen-modal__content {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        padding: 1.5rem;
+        border-radius: 8px;
+        width: min(90%, 360px);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+        position: relative;
+      }
+
+      .fullscreen-modal__title {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+
+      .fullscreen-modal__close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.75rem;
+        background: none;
+        border: none;
+        color: inherit;
+        font-size: 1.5rem;
+        cursor: pointer;
+      }
+
+      .fullscreen-modal__form input {
         width: 100%;
-        padding: 0.5rem;
-        margin-bottom: 0.5rem;
+        padding: 0.6rem;
+        margin-bottom: 0.75rem;
         border: 1px solid #202225;
         border-radius: 4px;
         background: #1e2124;
         color: var(--text-primary);
       }
 
-      #loginModal button {
+      .fullscreen-modal__form button {
         width: 100%;
+      }
+
+      .fullscreen-modal__helper {
+        margin-top: 0.75rem;
+        text-align: center;
+        font-size: 0.9rem;
+        color: #b9bbbe;
+      }
+
+      .fullscreen-modal__link {
+        background: none;
+        border: none;
+        color: var(--accent);
+        cursor: pointer;
+        text-decoration: underline;
+        font-weight: 600;
+        padding: 0;
+        font: inherit;
       }
 
       .feedback-modal {
@@ -718,7 +759,7 @@
       <div class="auth-buttons">
         <div id="authLoggedOut" class="auth-buttons__group">
           <button id="loginBtn" type="button" class="auth-button">Bejelentkezés</button>
-          <a href="register.html" id="registerBtn" class="auth-button">Regisztráció</a>
+          <button id="registerBtn" type="button" class="auth-button">Regisztráció</button>
         </div>
         <div id="authLoggedIn" class="auth-buttons__group" style="display: none">
           <span id="userGreeting"></span>
@@ -727,15 +768,73 @@
       </div>
     </header>
 
-    <div id="loginModal">
-      <div class="modal-content">
-        <span id="closeLogin" style="float: right; cursor: pointer">&times;</span>
-        <h2>Bejelentkezés</h2>
-        <form id="loginForm">
+    <div
+      id="loginModal"
+      class="fullscreen-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="loginModalTitle"
+    >
+      <div class="fullscreen-modal__content">
+        <button
+          id="closeLogin"
+          class="fullscreen-modal__close"
+          type="button"
+          aria-label="Bezárás"
+        >
+          &times;
+        </button>
+        <h2 id="loginModalTitle" class="fullscreen-modal__title">Bejelentkezés</h2>
+        <form id="loginForm" class="fullscreen-modal__form">
           <input type="text" id="loginUser" placeholder="Felhasználónév" required />
           <input type="password" id="loginPass" placeholder="Jelszó" required />
           <button type="submit">Belépés</button>
         </form>
+        <p class="fullscreen-modal__helper">
+          Nincs még fiókod?
+          <button
+            type="button"
+            id="switchToRegisterFromLogin"
+            class="fullscreen-modal__link"
+          >
+            Regisztrálj
+          </button>
+        </p>
+      </div>
+    </div>
+
+    <div
+      id="registerModal"
+      class="fullscreen-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="registerModalTitle"
+    >
+      <div class="fullscreen-modal__content">
+        <button
+          id="closeRegister"
+          class="fullscreen-modal__close"
+          type="button"
+          aria-label="Bezárás"
+        >
+          &times;
+        </button>
+        <h2 id="registerModalTitle" class="fullscreen-modal__title">Regisztráció</h2>
+        <form id="registerForm" class="fullscreen-modal__form">
+          <input type="text" id="regUser" placeholder="Felhasználónév" required />
+          <input type="password" id="regPass" placeholder="Jelszó" required />
+          <button type="submit">Regisztráció</button>
+        </form>
+        <p class="fullscreen-modal__helper">
+          Van már fiókod?
+          <button
+            type="button"
+            id="switchToLoginFromRegister"
+            class="fullscreen-modal__link"
+          >
+            Jelentkezz be
+          </button>
+        </p>
       </div>
     </div>
 
@@ -1288,6 +1387,16 @@
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
     const loginBtn = document.getElementById("loginBtn");
+    const registerModal = document.getElementById("registerModal");
+    const closeRegister = document.getElementById("closeRegister");
+    const registerForm = document.getElementById("registerForm");
+    const registerBtn = document.getElementById("registerBtn");
+    const switchToRegisterFromLogin = document.getElementById(
+      "switchToRegisterFromLogin"
+    );
+    const switchToLoginFromRegister = document.getElementById(
+      "switchToLoginFromRegister"
+    );
     const logoutBtn = document.getElementById("logoutBtn");
     const authLoggedOut = document.getElementById("authLoggedOut");
     const authLoggedIn = document.getElementById("authLoggedIn");
@@ -1344,12 +1453,58 @@
       savePermissionsBtn.disabled = true;
     }
 
+    function isFullscreenModalVisible(modal) {
+      if (!modal) {
+        return false;
+      }
+      return window.getComputedStyle(modal).display !== "none";
+    }
+
+    function openFullscreenModal(modal) {
+      if (!modal) {
+        return;
+      }
+      modal.style.display = "flex";
+      document.body.classList.add("modal-open");
+    }
+
+    function closeFullscreenModal(modal) {
+      if (!modal) {
+        return;
+      }
+      modal.style.display = "none";
+
+      const anyModalOpen = Array.from(
+        document.querySelectorAll(".fullscreen-modal")
+      ).some((element) => element.style.display === "flex");
+
+      if (!anyModalOpen) {
+        document.body.classList.remove("modal-open");
+      }
+    }
+
     function openLoginModal() {
       if (loginForm) {
         loginForm.reset();
       }
-      loginModal.style.display = "flex";
+      openFullscreenModal(loginModal);
+      const loginUserField = document.getElementById("loginUser");
+      if (loginUserField) {
+        loginUserField.focus();
+      }
     }
+
+    function openRegisterModal() {
+      if (registerForm) {
+        registerForm.reset();
+      }
+      openFullscreenModal(registerModal);
+      const registerUserField = document.getElementById("regUser");
+      if (registerUserField) {
+        registerUserField.focus();
+      }
+    }
+
 
     function createOptionRow(value = "") {
       const row = document.createElement("div");
@@ -1886,6 +2041,24 @@
       loginBtn.addEventListener("click", openLoginModal);
     }
 
+    if (registerBtn) {
+      registerBtn.addEventListener("click", openRegisterModal);
+    }
+
+    if (switchToRegisterFromLogin) {
+      switchToRegisterFromLogin.addEventListener("click", () => {
+        closeFullscreenModal(loginModal);
+        openRegisterModal();
+      });
+    }
+
+    if (switchToLoginFromRegister) {
+      switchToLoginFromRegister.addEventListener("click", () => {
+        closeFullscreenModal(registerModal);
+        openLoginModal();
+      });
+    }
+
     if (logoutBtn) {
       logoutBtn.addEventListener("click", async () => {
         clearStoredSession();
@@ -2119,8 +2292,28 @@
       });
     }
 
-    closeLogin.addEventListener("click", () => {
-      loginModal.style.display = "none";
+    if (closeLogin) {
+      closeLogin.addEventListener("click", () => {
+        closeFullscreenModal(loginModal);
+      });
+    }
+
+    if (closeRegister) {
+      closeRegister.addEventListener("click", () => {
+        closeFullscreenModal(registerModal);
+      });
+    }
+
+    [loginModal, registerModal].forEach((modal) => {
+      if (!modal) {
+        return;
+      }
+
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) {
+          closeFullscreenModal(modal);
+        }
+      });
     });
 
     if (adminNavBtn) {
@@ -2152,42 +2345,93 @@
     });
 
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && loginSuccessModal.style.display === "flex") {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (loginSuccessModal.style.display === "flex") {
         hideLoginSuccessModal();
+        return;
+      }
+
+      if (isFullscreenModalVisible(registerModal)) {
+        closeFullscreenModal(registerModal);
+        return;
+      }
+
+      if (isFullscreenModalVisible(loginModal)) {
+        closeFullscreenModal(loginModal);
       }
     });
 
-    loginForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const username = document.getElementById("loginUser").value;
-      const password = document.getElementById("loginPass").value;
+    if (registerForm) {
+      registerForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const username = document.getElementById("regUser").value;
+        const password = document.getElementById("regPass").value;
 
-      try {
-        const res = await fetch("/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-          storeSessionData({
-            token: data.token,
-            username: data.username,
-            isAdmin: !!data.isAdmin,
+        try {
+          const response = await fetch("/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
           });
-          updateUIForLoggedIn(data.username);
-          loginModal.style.display = "none";
-          showLoginSuccessModal(data.message || "Sikeres bejelentkezés.");
-        } else {
-          alert(data.message || "Hibás felhasználónév vagy jelszó.");
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert("Sikeres regisztráció! Most már bejelentkezhetsz.");
+            registerForm.reset();
+            closeFullscreenModal(registerModal);
+            openLoginModal();
+            const loginUserField = document.getElementById("loginUser");
+            if (loginUserField) {
+              loginUserField.value = username;
+              loginUserField.focus();
+            }
+          } else {
+            alert((data && data.message) || "Hiba a regisztráció során.");
+          }
+        } catch (error) {
+          console.error("Regisztrációs hiba:", error);
+          alert("Hiba történt a regisztráció során. Próbáld meg később.");
         }
-      } catch (error) {
-        console.error("Bejelentkezési hiba:", error);
-        alert("Hiba történt a bejelentkezés során. Próbáld meg később.");
-      }
-    });
+      });
+    }
+
+    if (loginForm) {
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const username = document.getElementById("loginUser").value;
+        const password = document.getElementById("loginPass").value;
+
+        try {
+          const res = await fetch("/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+          });
+
+          const data = await res.json();
+
+          if (res.ok) {
+            storeSessionData({
+              token: data.token,
+              username: data.username,
+              isAdmin: !!data.isAdmin,
+            });
+            updateUIForLoggedIn(data.username);
+            closeFullscreenModal(loginModal);
+            showLoginSuccessModal(data.message || "Sikeres bejelentkezés.");
+          } else {
+            alert(data.message || "Hibás felhasználónév vagy jelszó.");
+          }
+        } catch (error) {
+          console.error("Bejelentkezési hiba:", error);
+          alert("Hiba történt a bejelentkezés során. Próbáld meg később.");
+        }
+      });
+    }
 
     async function ensureSessionOnLoad() {
       const storedToken = localStorage.getItem(SESSION_KEYS.token);
