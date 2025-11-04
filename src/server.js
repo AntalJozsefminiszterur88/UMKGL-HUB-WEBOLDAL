@@ -192,6 +192,27 @@ app.post('/logout', (req, res) => {
     res.status(200).json({ message: 'Sikeres kijelentkezés.' });
 });
 
+app.get('/api/profile', authenticateToken, async (req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, username, is_admin, profile_picture_filename FROM users WHERE id = $1', [req.user.id]);
+        const user = rows[0];
+
+        if (!user) {
+            return res.status(404).json({ message: 'A felhasználó nem található.' });
+        }
+
+        res.status(200).json({
+            id: user.id,
+            username: user.username,
+            isAdmin: user.is_admin === 1,
+            profile_picture_filename: user.profile_picture_filename
+        });
+    } catch (err) {
+        console.error('Hiba a profiladatok lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni a profiladatokat.' });
+    }
+});
+
 app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
     try {
         const query = 'SELECT id, username, can_upload, max_file_size_mb, max_videos, upload_count FROM users';

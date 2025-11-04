@@ -2329,16 +2329,7 @@
     });
 
     window.addEventListener("load", () => {
-      const token = getStoredToken();
-      const username = localStorage.getItem(SESSION_KEYS.username);
-      const isAdmin = localStorage.getItem(SESSION_KEYS.isAdmin) === "true";
-      const profilePictureFilename = localStorage.getItem(SESSION_KEYS.profilePictureFilename);
-
-      if (token && username) {
-        updateUIForLoggedIn(username, profilePictureFilename);
-      } else {
-        updateUIForLoggedOut();
-      }
+        ensureSessionOnLoad();
     });
 
     const userProfileLink = document.getElementById('userProfileLink');
@@ -2347,6 +2338,52 @@
             e.preventDefault();
             showSection('profile');
         });
+    }
+
+    async function ensureSessionOnLoad() {
+        const token = getStoredToken();
+        if (!token) {
+            updateUIForLoggedOut();
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/profile', {
+                method: 'GET',
+                headers: buildAuthHeaders(),
+            });
+
+            if (response.status === 401 || response.status === 403) {
+                // Token is invalid or expired
+                updateUIForLoggedOut();
+                return;
+            }
+
+            if (!response.ok) {
+                // Other server errors, maybe retry later or show a generic error
+                // For now, we'll just log out to be safe
+                updateUIForLoggedOut();
+                return;
+            }
+
+            const data = await response.json();
+
+            // Update localStorage with the latest data from the server
+            localStorage.setItem(SESSION_KEYS.token, token); // The token is still valid
+            localStorage.setItem(SESSION_KEYS.username, data.username);
+            localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
+            if (data.profile_picture_filename) {
+                localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
+            } else {
+                localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
+            }
+
+            updateUIForLoggedIn(data.username, data.profile_picture_filename);
+        } catch (error) {
+            console.error('Hiba a munkamenet ellenőrzésekor:', error);
+            // If there's a network error or the server is down, log out
+            updateUIForLoggedOut();
+        }
     }
 
     const uploadAvatarBtn = document.getElementById('uploadAvatarBtn');
