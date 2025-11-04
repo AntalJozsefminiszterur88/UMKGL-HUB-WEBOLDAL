@@ -56,7 +56,7 @@ app.use(cookieParser());
 // Fájlfeltöltés beállítása a videókhoz
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, 'uploads'));
+        cb(null, path.join(__dirname, '..', 'public', 'uploads'));
     },
     filename: (req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
@@ -178,12 +178,7 @@ async function loadUserUploadSettings(req, res, next) {
 }
 
 // 4. Statikus fájlok kiszolgálása
-app.use(express.static(path.join(__dirname)));
-
-// 5. Alapértelmezett útvonal
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
@@ -572,7 +567,7 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
 // Avatar feltöltés beállítása
 const avatarStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, 'uploads', 'avatars'));
+        cb(null, path.join(__dirname, '..', 'public', 'uploads', 'avatars'));
     },
     filename: (req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
@@ -595,7 +590,7 @@ const uploadAvatar = multer({
 }).single('avatar');
 
 app.post('/api/profile/upload-avatar', authenticateToken, (req, res) => {
-    const avatarDir = path.join(__dirname, 'uploads', 'avatars');
+    const avatarDir = path.join(__dirname, '..', 'public', 'uploads', 'avatars');
 
     fs.readdir(avatarDir, (err, files) => {
         if (err) {
