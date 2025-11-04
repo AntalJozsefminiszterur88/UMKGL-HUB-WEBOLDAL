@@ -23,9 +23,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Fájlfeltöltés beállítása a videókhoz
+const uploadsDirectory = path.join(__dirname, '..', 'public', 'uploads');
+const ensureDirectoryExists = (dirPath) => {
+    try {
+        fs.mkdirSync(dirPath, { recursive: true });
+    } catch (err) {
+        if (err.code !== 'EEXIST') {
+            throw err;
+        }
+    }
+};
+
+ensureDirectoryExists(uploadsDirectory);
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, '..', 'public', 'uploads'));
+        cb(null, uploadsDirectory);
     },
     filename: (req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
@@ -536,9 +549,12 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
 });
 
 // Avatar feltöltés beállítása
+const avatarDirectory = path.join(uploadsDirectory, 'avatars');
+ensureDirectoryExists(avatarDirectory);
+
 const avatarStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, '..', 'public', 'uploads', 'avatars'));
+        cb(null, avatarDirectory);
     },
     filename: (req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
