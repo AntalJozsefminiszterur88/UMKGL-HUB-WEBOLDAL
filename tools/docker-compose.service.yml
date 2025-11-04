@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    # === EZ A HOZZÁADOTT RÉSZ A DBeaverhez ===
+    ports:
+      # A géped 5432-es portját köti össze a konténer 5432-es portjával
+      - "127.0.0.1:5432:5432"
+    # ==========================================
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydb
+    networks:
+      - umgkl_net
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_USER: myuser
+      DB_PASSWORD: mypassword
+      DB_NAME: mydb
+    networks:
+      - umgkl_net
+      - shared_proxy_net
+
+volumes:
+  postgres_data:
+
+networks:
+  umgkl_net:
+  shared_proxy_net:
+    external: true
