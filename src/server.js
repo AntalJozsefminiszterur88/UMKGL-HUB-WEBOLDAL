@@ -18,16 +18,21 @@ const COOKIE_BASE_OPTIONS = {
     sameSite: 'lax'
 };
 
-function setAuthCookie(res, token) {
-    res.cookie(COOKIE_NAME, token, { ...COOKIE_BASE_OPTIONS, maxAge: COOKIE_MAX_AGE });
+function setAuthCookie(res, token, rememberMe) {
+    const options = { ...COOKIE_BASE_OPTIONS };
+    if (rememberMe) {
+        options.maxAge = COOKIE_MAX_AGE;
+    }
+    res.cookie(COOKIE_NAME, token, options);
 }
 
 function clearAuthCookie(res) {
     res.clearCookie(COOKIE_NAME, COOKIE_BASE_OPTIONS);
 }
 
-function generateAuthToken(payload) {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+function generateAuthToken(payload, rememberMe) {
+    const expiresIn = rememberMe ? '7d' : '1h';
+    return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 
 function getTokenFromRequest(req) {
@@ -202,7 +207,7 @@ app.post('/register', async (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, rememberMe } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
@@ -223,9 +228,9 @@ app.post('/login', async (req, res) => {
 
         const isAdmin = user.is_admin === 1;
         const payload = { id: user.id, username: user.username, isAdmin };
-        const token = generateAuthToken(payload);
+        const token = generateAuthToken(payload, rememberMe);
 
-        setAuthCookie(res, token);
+        setAuthCookie(res, token, rememberMe);
 
         res.status(200).json({
             message: 'Sikeres bejelentkezés.',
@@ -248,6 +253,9 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
             return res.status(404).json({ message: 'A felhasználó nem található.' });
         }
 
+        const decodedToken = jwt.decode(req.token);
+        const rememberMe = decodedToken && (decodedToken.exp - decodedToken.iat > 24 * 60 * 60);
+
         const isAdmin = user.is_admin === 1;
         const payload = {
             id: req.user.id,
@@ -256,8 +264,8 @@ app.get('/auth/me', authenticateToken, async (req, res) => {
             profile_picture_filename: user.profile_picture_filename
         };
 
-        const refreshedToken = generateAuthToken(payload);
-        setAuthCookie(res, refreshedToken);
+        const refreshedToken = generateAuthToken(payload, rememberMe);
+        setAuthCookie(res, refreshedToken, rememberMe);
 
         res.status(200).json({
             ...payload,

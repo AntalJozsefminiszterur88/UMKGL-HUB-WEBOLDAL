@@ -750,6 +750,10 @@
         <form id="loginForm">
           <input type="text" id="loginUser" placeholder="Felhasználónév" required />
           <input type="password" id="loginPass" placeholder="Jelszó" required />
+          <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+            <input type="checkbox" id="rememberMe" style="width: auto; margin-right: 0.5rem;">
+            <label for="rememberMe" style="margin-bottom: 0;">Maradjon bejelentkezve</label>
+          </div>
           <button type="submit">Belépés</button>
         </form>
       </div>
@@ -1150,8 +1154,7 @@
 
       if (showUploadModalBtn && uploadModal) {
         showUploadModalBtn.addEventListener("click", () => {
-          const token = localStorage.getItem("token");
-          if (!token) {
+          if (!isUserLoggedIn()) {
             alert("A feltöltéshez be kell jelentkezned.");
             return;
           }
@@ -1209,8 +1212,7 @@
 
       if (uploadBtn) {
         uploadBtn.addEventListener("click", async () => {
-          const token = localStorage.getItem("token");
-          if (!token) {
+          if (!isUserLoggedIn()) {
             alert("A feltöltéshez be kell jelentkezned.");
             return;
           }
@@ -1352,7 +1354,6 @@
     const pollSection = document.getElementById("szavazas");
 
     const SESSION_KEYS = {
-      token: "token",
       username: "username",
       isAdmin: ADMIN_SESSION_KEY,
       profilePictureFilename: "profilePictureFilename",
@@ -1380,16 +1381,18 @@
 
 
     function getStoredToken() {
-      return localStorage.getItem(SESSION_KEYS.token) || "";
+      // This function is kept for now but should be phased out,
+      // as the token is handled by an httpOnly cookie.
+      return "token_in_cookie";
     }
 
     function isUserLoggedIn() {
-      return !!getStoredToken();
+      return !!localStorage.getItem(SESSION_KEYS.username);
     }
 
     function buildAuthHeaders() {
-      const token = getStoredToken();
-      return token ? { Authorization: `Bearer ${token}` } : {};
+      // The token is sent as an httpOnly cookie, so no Authorization header is needed.
+      return {};
     }
 
     if (savePermissionsBtn) {
@@ -1930,6 +1933,9 @@
     }
 
     function updateUIForLoggedOut() {
+      // Clear session data from localStorage
+      Object.values(SESSION_KEYS).forEach(key => localStorage.removeItem(key));
+
       if (authLoggedOut) {
         authLoggedOut.style.display = "flex";
       }
@@ -2035,10 +2041,7 @@
     }
 
     async function loadAdminPanel() {
-      const storedToken = localStorage.getItem("token");
-      const token = typeof storedToken === "string" ? storedToken.trim() : null;
-
-      if (!token) {
+      if (!isUserLoggedIn()) {
         alert("Nincs érvényes hitelesítés.");
         return;
       }
@@ -2046,9 +2049,7 @@
       try {
         const response = await fetch("/api/users", {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: buildAuthHeaders(),
         });
 
         const data = await response.json().catch(() => null);
@@ -2072,8 +2073,7 @@
       const originalButtonText = savePermissionsBtn.textContent;
 
       savePermissionsBtn.addEventListener("click", async () => {
-        const token = localStorage.getItem("token");
-        if (!token) {
+        if (!isUserLoggedIn()) {
           alert("Nincs érvényes hitelesítés.");
           return;
         }
@@ -2144,7 +2144,7 @@
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
+              ...buildAuthHeaders(),
             },
             body: JSON.stringify(permissionsToUpdate),
           });
@@ -2235,17 +2235,26 @@
       e.preventDefault();
       const username = document.getElementById("loginUser").value;
       const password = document.getElementById("loginPass").value;
+      const rememberMe = document.getElementById("rememberMe").checked;
 
       try {
         const res = await fetch("/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password, rememberMe }),
         });
 
         const data = await res.json();
 
         if (res.ok) {
+          localStorage.setItem(SESSION_KEYS.username, data.username);
+          localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
+          if (data.profile_picture_filename) {
+            localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
+          } else {
+            localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
+          }
+
           updateUIForLoggedIn(data.username, data.profile_picture_filename);
           loginModal.style.display = "none";
           showFeedbackModal({
@@ -2277,6 +2286,14 @@
           throw new Error("Hiányos munkamenet adatok");
         }
 
+        localStorage.setItem(SESSION_KEYS.username, session.username);
+        localStorage.setItem(SESSION_KEYS.isAdmin, session.isAdmin);
+        if (session.profile_picture_filename) {
+            localStorage.setItem(SESSION_KEYS.profilePictureFilename, session.profile_picture_filename);
+        } else {
+            localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
+        }
+
         updateUIForLoggedIn(session.username, session.profile_picture_filename);
 
         updateAdminNavVisibility();
@@ -2304,8 +2321,7 @@
 
     if (uploadAvatarBtn) {
         uploadAvatarBtn.addEventListener('click', async () => {
-            const token = getStoredToken();
-            if (!token) {
+            if (!isUserLoggedIn()) {
                 alert("A feltöltéshez be kell jelentkezned.");
                 return;
             }
@@ -2325,9 +2341,7 @@
             try {
                 const response = await fetch('/api/profile/upload-avatar', {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
+                    headers: buildAuthHeaders(),
                     body: formData,
                 });
 
@@ -2353,12 +2367,11 @@
         updateUsernameForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const newUsername = document.getElementById('newUsername').value;
-            const token = getStoredToken();
 
             try {
                 const res = await fetch('/api/profile/update-name', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
                     body: JSON.stringify({ newUsername }),
                 });
 
@@ -2381,12 +2394,11 @@
             e.preventDefault();
             const currentPassword = document.getElementById('currentPassword').value;
             const newPassword = document.getElementById('newPassword').value;
-            const token = getStoredToken();
 
             try {
                 const res = await fetch('/api/profile/update-password', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
                     body: JSON.stringify({ currentPassword, newPassword }),
                 });
 
