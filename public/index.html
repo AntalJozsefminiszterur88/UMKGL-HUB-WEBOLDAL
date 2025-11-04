@@ -245,6 +245,16 @@
         font-weight: 500;
       }
 
+      .video-card--error {
+        border: 1px solid #ff6b6b;
+      }
+
+      .video-card__error {
+        color: #ffb1b1;
+        font-size: 0.9rem;
+        font-weight: 400;
+      }
+
       /* A HOI4 sorsoló szekciónál ne legyen szélességkorlát, hogy a négy doboz egymás mellett
          maradjon */
       #sorsolas {
@@ -1252,7 +1262,46 @@
             const videoElement = document.createElement("video");
             videoElement.src = `/uploads/${video.filename}`;
             videoElement.controls = true;
-            videoElement.preload = "metadata";
+            videoElement.preload = "auto";
+            videoElement.playsInline = true;
+            videoElement.setAttribute("playsinline", "");
+            videoElement.setAttribute("webkit-playsinline", "");
+
+            let hasPlaybackError = false;
+
+            videoElement.addEventListener("click", () => {
+              if (videoElement.paused) {
+                videoElement.play().catch(() => {
+                  // A böngésző megakadályozta a lejátszást automatikusan.
+                });
+              } else {
+                videoElement.pause();
+              }
+            });
+
+            videoElement.addEventListener("error", () => {
+              if (hasPlaybackError) {
+                return;
+              }
+
+              hasPlaybackError = true;
+              card.classList.add("video-card--error");
+
+              const errorMessage = document.createElement("p");
+              errorMessage.className = "video-card__error";
+              errorMessage.textContent =
+                "Nem sikerült betölteni a videót. Frissítsd az oldalt vagy próbáld meg később.";
+              card.appendChild(errorMessage);
+            });
+
+            videoElement.addEventListener("loadeddata", () => {
+              card.classList.remove("video-card--error");
+              hasPlaybackError = false;
+              const existingError = card.querySelector(".video-card__error");
+              if (existingError) {
+                existingError.remove();
+              }
+            });
 
             const uploader = document.createElement("p");
             uploader.textContent = `Feltöltötte: ${video.username || "Ismeretlen"}`;
