@@ -5,47 +5,12 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const cookieParser = require('cookie-parser');
 const db = require('./database');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
-const COOKIE_NAME = 'authToken';
-const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 nap millisekundumban
 
-const COOKIE_BASE_OPTIONS = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax'
-};
-
-function setAuthCookie(res, token, rememberMe) {
-    const options = { ...COOKIE_BASE_OPTIONS };
-    if (rememberMe) {
-        options.maxAge = COOKIE_MAX_AGE;
-    }
-    res.cookie(COOKIE_NAME, token, options);
-}
-
-function clearAuthCookie(res) {
-    res.clearCookie(COOKIE_NAME, COOKIE_BASE_OPTIONS);
-}
-
-function generateAuthToken(payload, rememberMe) {
-    const expiresIn = rememberMe ? '7d' : '1h';
-    return jwt.sign(payload, JWT_SECRET, { expiresIn });
-}
-
-function getTokenFromRequest(req) {
-    const authHeader = req.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        return authHeader.split(' ')[1];
-    }
-
-    if (req.cookies && req.cookies[COOKIE_NAME]) {
-        return req.cookies[COOKIE_NAME];
-    }
-
-    return null;
+function generateAuthToken(payload) {
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
 // 2. Az Express alkalmazás létrehozása
@@ -56,7 +21,6 @@ app.settings = app.settings || {};
 // 3. Middleware-ek (köztes szoftverek) beállítása
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 
 // Fájlfeltöltés beállítása a videókhoz
 const storage = multer.diskStorage({
@@ -94,7 +58,8 @@ async function loadAppSettings() {
 
 // Hitelesítési middleware a védett végpontokhoz
 function authenticateToken(req, res, next) {
-    const token = getTokenFromRequest(req);
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
         return res.status(401).json({ message: 'Hiányzó hitelesítési token.' });
@@ -110,7 +75,6 @@ function authenticateToken(req, res, next) {
             username: user.username,
             isAdmin: !!user.isAdmin
         };
-        req.token = token;
         next();
     });
 }
@@ -120,25 +84,6 @@ function isAdmin(req, res, next) {
         return res.status(403).json({ message: 'Admin access required.' });
     }
     next();
-}
-
-function optionalAuthenticate(req, res, next) {
-    const token = getTokenFromRequest(req);
-    if (!token) {
-        return next();
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (!err && user) {
-            req.user = {
-                id: user.id,
-                username: user.username,
-                isAdmin: !!user.isAdmin
-            };
-            req.token = token;
-        }
-        next();
-    });
 }
 
 async function loadUserUploadSettings(req, res, next) {
@@ -207,14 +152,14 @@ app.post('/register', async (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-    const { username, password, rememberMe } = req.body;
+    const { username, password } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
     }
 
     try {
-        const { rows } = await db.query('SELECT id, username, password, is_admin FROM users WHERE username = $1', [username]);
+        const { rows } = await db.query('SELECT id, username, password, is_admin, profile_picture_filename FROM users WHERE username = $1', [username]);
         const user = rows[0];
 
         if (!user) {
@@ -228,15 +173,14 @@ app.post('/login', async (req, res) => {
 
         const isAdmin = user.is_admin === 1;
         const payload = { id: user.id, username: user.username, isAdmin };
-        const token = generateAuthToken(payload, rememberMe);
-
-        setAuthCookie(res, token, rememberMe);
+        const token = generateAuthToken(payload);
 
         res.status(200).json({
             message: 'Sikeres bejelentkezés.',
             token,
             username: user.username,
-            isAdmin
+            isAdmin,
+            profile_picture_filename: user.profile_picture_filename
         });
     } catch (err) {
         console.error('Hiba a bejelentkezés során:', err);
@@ -244,41 +188,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.get('/auth/me', authenticateToken, async (req, res) => {
-    try {
-        const { rows } = await db.query('SELECT username, is_admin, profile_picture_filename FROM users WHERE id = $1', [req.user.id]);
-        const user = rows[0];
-
-        if (!user) {
-            return res.status(404).json({ message: 'A felhasználó nem található.' });
-        }
-
-        const decodedToken = jwt.decode(req.token);
-        const rememberMe = decodedToken && (decodedToken.exp - decodedToken.iat > 24 * 60 * 60);
-
-        const isAdmin = user.is_admin === 1;
-        const payload = {
-            id: req.user.id,
-            username: user.username,
-            isAdmin,
-            profile_picture_filename: user.profile_picture_filename
-        };
-
-        const refreshedToken = generateAuthToken(payload, rememberMe);
-        setAuthCookie(res, refreshedToken, rememberMe);
-
-        res.status(200).json({
-            ...payload,
-            token: refreshedToken
-        });
-    } catch (err) {
-        console.error('Hiba a felhasználói adatok lekérdezésekor:', err);
-        res.status(500).json({ message: 'Váratlan hiba történt.' });
-    }
-});
-
 app.post('/logout', (req, res) => {
-    clearAuthCookie(res);
     res.status(200).json({ message: 'Sikeres kijelentkezés.' });
 });
 
@@ -414,7 +324,7 @@ app.post('/api/polls', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/polls', optionalAuthenticate, async (req, res) => {
+app.get('/api/polls', async (req, res) => {
     try {
         const pollsQuery = `
             SELECT p.id, p.question, p.is_active, p.created_at, p.closed_at, p.creator_id, u.username AS creator_username

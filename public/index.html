@@ -751,10 +751,6 @@
         <form id="loginForm">
           <input type="text" id="loginUser" placeholder="Felhasználónév" required />
           <input type="password" id="loginPass" placeholder="Jelszó" required />
-          <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-            <input type="checkbox" id="rememberMe" style="width: auto; margin-right: 0.5rem;">
-            <label for="rememberMe" style="margin-bottom: 0;">Maradjon bejelentkezve</label>
-          </div>
           <button type="submit">Belépés</button>
         </form>
       </div>
@@ -1234,9 +1230,7 @@
           try {
             const response = await fetch("/upload", {
               method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
+              headers: buildAuthHeaders(),
               body: formData,
             });
 
@@ -1355,6 +1349,7 @@
     const pollSection = document.getElementById("szavazas");
 
     const SESSION_KEYS = {
+      token: "token",
       username: "username",
       isAdmin: ADMIN_SESSION_KEY,
       profilePictureFilename: "profilePictureFilename",
@@ -1380,20 +1375,22 @@
       refreshPollsIfVisible();
     }
 
-
     function getStoredToken() {
-      // This function is kept for now but should be phased out,
-      // as the token is handled by an httpOnly cookie.
-      return "token_in_cookie";
+      return localStorage.getItem(SESSION_KEYS.token);
     }
 
     function isUserLoggedIn() {
-      return !!localStorage.getItem(SESSION_KEYS.username);
+      return !!getStoredToken();
     }
 
     function buildAuthHeaders() {
-      // The token is sent as an httpOnly cookie, so no Authorization header is needed.
-      return {};
+      const token = getStoredToken();
+      if (!token) {
+        return {};
+      }
+      return {
+        Authorization: `Bearer ${token}`,
+      };
     }
 
     if (savePermissionsBtn) {
@@ -1935,7 +1932,10 @@
 
     function updateUIForLoggedOut() {
       // Clear session data from localStorage
-      Object.values(SESSION_KEYS).forEach(key => localStorage.removeItem(key));
+      localStorage.removeItem(SESSION_KEYS.token);
+      localStorage.removeItem(SESSION_KEYS.username);
+      localStorage.removeItem(SESSION_KEYS.isAdmin);
+      localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
 
       if (authLoggedOut) {
         authLoggedOut.style.display = "flex";
@@ -2218,13 +2218,8 @@
     });
 
     if (logoutBtn) {
-      logoutBtn.addEventListener("click", async () => {
+      logoutBtn.addEventListener("click", () => {
         updateUIForLoggedOut();
-        try {
-          await fetch("/logout", { method: "POST" });
-        } catch (error) {
-          console.warn("Nem sikerült kijelentkeztetni a szerveren:", error);
-        }
         showFeedbackModal({
           title: "Kijelentkezés",
           message: "Sikeresen kijelentkeztél.",
@@ -2236,18 +2231,18 @@
       e.preventDefault();
       const username = document.getElementById("loginUser").value;
       const password = document.getElementById("loginPass").value;
-      const rememberMe = document.getElementById("rememberMe").checked;
 
       try {
         const res = await fetch("/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password, rememberMe }),
+          body: JSON.stringify({ username, password }),
         });
 
         const data = await res.json();
 
         if (res.ok) {
+          localStorage.setItem(SESSION_KEYS.token, data.token);
           localStorage.setItem(SESSION_KEYS.username, data.username);
           localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
           if (data.profile_picture_filename) {
@@ -2271,41 +2266,17 @@
       }
     });
 
-    async function ensureSessionOnLoad() {
-      try {
-        const response = await fetch("/auth/me", {
-          method: "GET"
-        });
+    window.addEventListener("load", () => {
+      const token = getStoredToken();
+      const username = localStorage.getItem(SESSION_KEYS.username);
+      const isAdmin = localStorage.getItem(SESSION_KEYS.isAdmin) === "true";
+      const profilePictureFilename = localStorage.getItem(SESSION_KEYS.profilePictureFilename);
 
-        if (!response.ok) {
-          throw new Error("Érvénytelen munkamenet");
-        }
-
-        const session = await response.json();
-
-        if (!session || !session.username) {
-          throw new Error("Hiányos munkamenet adatok");
-        }
-
-        localStorage.setItem(SESSION_KEYS.username, session.username);
-        localStorage.setItem(SESSION_KEYS.isAdmin, session.isAdmin);
-        if (session.profile_picture_filename) {
-            localStorage.setItem(SESSION_KEYS.profilePictureFilename, session.profile_picture_filename);
-        } else {
-            localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
-        }
-
-        updateUIForLoggedIn(session.username, session.profile_picture_filename);
-
-        updateAdminNavVisibility();
-      } catch (error) {
-        console.warn("Nem sikerült visszaállítani a munkamenetet:", error);
+      if (token && username) {
+        updateUIForLoggedIn(username, profilePictureFilename);
+      } else {
         updateUIForLoggedOut();
       }
-    }
-
-    window.addEventListener("load", () => {
-      ensureSessionOnLoad();
     });
 
     const userProfileLink = document.getElementById('userProfileLink');
