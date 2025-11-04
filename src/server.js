@@ -140,6 +140,69 @@ async function loadUserUploadSettings(req, res, next) {
     }
 }
 
+// Videófájlok kiszolgálása szakaszos (Range) kérések támogatásával a stabil lejátszásért
+const VIDEO_MIME_TYPES = {
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.ogg': 'video/ogg',
+    '.mov': 'video/quicktime',
+    '.mkv': 'video/x-matroska'
+};
+
+function getVideoMimeType(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    return VIDEO_MIME_TYPES[ext] || 'application/octet-stream';
+}
+
+app.get('/uploads/:filename', (req, res) => {
+    const requestedFile = req.params.filename;
+    const safeFilePath = path.normalize(path.join(uploadsDirectory, requestedFile));
+
+    if (!safeFilePath.startsWith(uploadsDirectory)) {
+        return res.status(400).json({ message: 'Érvénytelen fájlnév.' });
+    }
+
+    fs.stat(safeFilePath, (statErr, stats) => {
+        if (statErr || !stats.isFile()) {
+            return res.status(404).json({ message: 'A kért videó nem található.' });
+        }
+
+        const fileSize = stats.size;
+        const range = req.headers.range;
+        const mimeType = getVideoMimeType(safeFilePath);
+
+        if (!range) {
+            res.writeHead(200, {
+                'Content-Length': fileSize,
+                'Content-Type': mimeType,
+                'Accept-Ranges': 'bytes'
+            });
+            return fs.createReadStream(safeFilePath).pipe(res);
+        }
+
+        const rangeMatch = range.replace(/bytes=/, '').split('-');
+        const start = Number.parseInt(rangeMatch[0], 10);
+        const end = rangeMatch[1] ? Math.min(Number.parseInt(rangeMatch[1], 10), fileSize - 1) : fileSize - 1;
+
+        if (Number.isNaN(start) || Number.isNaN(end) || start >= fileSize || end >= fileSize) {
+            res.status(416).set('Content-Range', `bytes */${fileSize}`).end();
+            return;
+        }
+
+        const chunkSize = end - start + 1;
+        const stream = fs.createReadStream(safeFilePath, { start, end });
+
+        res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunkSize,
+            'Content-Type': mimeType
+        });
+
+        stream.pipe(res);
+    });
+});
+
 // 4. Statikus fájlok kiszolgálása
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
