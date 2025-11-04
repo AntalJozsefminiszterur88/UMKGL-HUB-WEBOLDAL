@@ -24,6 +24,25 @@ async function initializeDatabase() {
       )
     `);
 
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_upload INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS upload_count INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS max_file_size_mb INTEGER DEFAULT 50'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS max_videos INTEGER DEFAULT 10'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_filename TEXT'
+    );
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS videos (
         id SERIAL PRIMARY KEY,
