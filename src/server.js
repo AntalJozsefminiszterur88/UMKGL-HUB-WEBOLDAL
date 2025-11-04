@@ -362,16 +362,28 @@ app.get('/api/polls', async (req, res) => {
         const pollsMap = new Map(pollRows.map(p => [p.id, { ...p, options: [], totalVotes: 0, userVoteOptionId: null, canClose: false }]));
         const optionsMap = new Map(optionRows.map(o => [o.id, { ...o, voters: [] }]));
 
-        optionRows.forEach(o => pollsMap.get(o.poll_id)?.options.push(optionsMap.get(o.id)));
+        optionRows.forEach(o => {
+            const poll = pollsMap.get(o.poll_id);
+            if (poll) {
+                poll.options.push(optionsMap.get(o.id));
+            }
+        });
+
         voteRows.forEach(v => {
-            optionsMap.get(v.option_id)?.voters.push({ id: v.user_id, username: v.username });
+            const option = optionsMap.get(v.option_id);
+            if(option) {
+                option.voters.push({ id: v.user_id, username: v.username });
+            }
             if (req.user && v.user_id === req.user.id) {
-                pollsMap.get(v.poll_id).userVoteOptionId = v.option_id;
+                const poll = pollsMap.get(v.poll_id);
+                if (poll) {
+                    poll.userVoteOptionId = v.option_id;
+                }
             }
         });
 
         const result = Array.from(pollsMap.values()).map(p => {
-            p.totalVotes = p.options.reduce((sum, o) => sum + o.vote_count, 0);
+            p.totalVotes = p.options.reduce((sum, o) => sum + (o.vote_count || 0), 0);
             p.canClose = p.is_active && req.user && (req.user.isAdmin || req.user.id === p.creator_id);
             return p;
         });
@@ -428,6 +440,26 @@ app.post('/api/polls/:pollId/close', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('Hiba a szavazás lezárásakor:', err);
         res.status(500).json({ message: 'Nem sikerült lezárni a szavazást.' });
+    }
+});
+
+app.delete('/api/polls/:pollId', authenticateToken, isAdmin, async (req, res) => {
+    const pollId = Number.parseInt(req.params.pollId, 10);
+    if (!pollId) {
+        return res.status(400).json({ message: 'Érvénytelen szavazás azonosító.' });
+    }
+
+    try {
+        const result = await db.query('DELETE FROM polls WHERE id = $1', [pollId]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'A szavazás nem található.' });
+        }
+
+        res.status(200).json({ message: 'Szavazás sikeresen törölve.' });
+    } catch (err) {
+        console.error('Hiba a szavazás törlésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült törölni a szavazást.' });
     }
 });
 

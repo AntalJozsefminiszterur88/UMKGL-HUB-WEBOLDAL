@@ -1514,132 +1514,148 @@
     }
 
     function renderPoll(poll) {
-      const card = document.createElement("div");
-      card.className = "poll-card";
+        const card = document.createElement("div");
+        card.className = "poll-card";
 
-      const header = document.createElement("div");
-      header.className = "poll-card-header";
+        const header = document.createElement("div");
+        header.className = "poll-card-header";
 
-      const title = document.createElement("h3");
-      title.textContent = poll?.question || "Szavazás";
-      header.appendChild(title);
+        const title = document.createElement("h3");
+        title.textContent = poll?.question || "Szavazás";
+        header.appendChild(title);
 
-      const status = document.createElement("span");
-      status.className = `poll-status ${poll?.isActive ? "poll-status--active" : "poll-status--closed"}`;
-      status.textContent = poll?.isActive ? "Aktív" : "Lezárt";
-      header.appendChild(status);
+        const status = document.createElement("span");
+        status.className = `poll-status ${poll?.is_active ? "poll-status--active" : "poll-status--closed"}`;
+        status.textContent = poll?.is_active ? "Aktív" : "Lezárt";
+        header.appendChild(status);
 
-      card.appendChild(header);
+        card.appendChild(header);
 
-      const creatorName = poll?.creator?.username || "Ismeretlen";
-      const meta = document.createElement("div");
-      meta.className = "poll-meta";
-      let metaText = `Létrehozta: ${creatorName}`;
-      if (poll?.createdAt) {
-        const createdAt = new Date(poll.createdAt);
-        if (!Number.isNaN(createdAt.valueOf())) {
-          metaText += ` • ${createdAt.toLocaleString("hu-HU")}`;
+        const creatorName = poll?.creator_username || "Ismeretlen";
+        const meta = document.createElement("div");
+        meta.className = "poll-meta";
+        let metaText = `Létrehozta: ${creatorName}`;
+        if (poll?.created_at) {
+            const createdAt = new Date(poll.created_at);
+            if (!Number.isNaN(createdAt.valueOf())) {
+                metaText += ` • ${createdAt.toLocaleString("hu-HU")}`;
+            }
         }
-      }
-      meta.textContent = metaText;
-      card.appendChild(meta);
+        meta.textContent = metaText;
+        card.appendChild(meta);
 
-      if (poll?.isActive && !isUserLoggedIn()) {
-        const notice = document.createElement("div");
-        notice.className = "poll-hint";
-        notice.textContent = "Szavazni csak bejelentkezett felhasználók tudnak.";
-        card.appendChild(notice);
-      }
+        if (poll?.is_active && !isUserLoggedIn()) {
+            const notice = document.createElement("div");
+            notice.className = "poll-hint";
+            notice.textContent = "Szavazni csak bejelentkezett felhasználók tudnak.";
+            card.appendChild(notice);
+        }
 
-      const optionsWrapper = document.createElement("div");
-      optionsWrapper.className = "poll-options-results";
+        const optionsWrapper = document.createElement("div");
+        optionsWrapper.className = "poll-options-results";
 
-      const totalVotes = Number(poll?.totalVotes) || 0;
+        const totalVotes = Number(poll?.totalVotes) || 0;
 
-      if (Array.isArray(poll?.options)) {
-        poll.options.forEach((option) => {
-          const optionResult = document.createElement("div");
-          optionResult.className = "poll-option-result";
-          if (poll?.userVoteOptionId === option.id) {
-            optionResult.classList.add("poll-option-result--selected");
-          }
+        if (Array.isArray(poll?.options)) {
+            poll.options.forEach((option) => {
+                const optionResult = document.createElement("div");
+                optionResult.className = "poll-option-result";
+                if (poll?.userVoteOptionId === option.id) {
+                    optionResult.classList.add("poll-option-result--selected");
+                }
 
-          const headerRow = document.createElement("div");
-          headerRow.className = "poll-option-header";
+                const headerRow = document.createElement("div");
+                headerRow.className = "poll-option-header";
 
-          const label = document.createElement("div");
-          label.className = "poll-option-label";
-          label.textContent = option?.text || "Válaszlehetőség";
-          headerRow.appendChild(label);
+                const label = document.createElement("div");
+                label.className = "poll-option-label";
+                label.textContent = option?.option_text || "Válaszlehetőség";
+                headerRow.appendChild(label);
 
-          const count = document.createElement("div");
-          count.className = "poll-option-count";
-          const votes = Number(option?.voteCount) || 0;
-          const percentage = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
-          count.textContent = `${votes} szavazat (${percentage}%)`;
-          headerRow.appendChild(count);
+                const count = document.createElement("div");
+                count.className = "poll-option-count";
+                const votes = Number(option?.vote_count) || 0;
+                const percentage = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+                count.textContent = `${votes} szavazat (${percentage}%)`;
+                headerRow.appendChild(count);
 
-          if (poll?.isActive && !poll?.userVoteOptionId && isUserLoggedIn()) {
-            const voteBtn = document.createElement("button");
-            voteBtn.type = "button";
-            voteBtn.className = "poll-button poll-vote-btn";
-            voteBtn.textContent = "Szavazok";
-            voteBtn.addEventListener("click", () => handlePollVote(poll.id, option.id, voteBtn));
-            headerRow.appendChild(voteBtn);
-          } else if (poll?.userVoteOptionId === option.id) {
-            const badge = document.createElement("span");
-            badge.className = "poll-badge";
-            badge.textContent = "Szavazatod";
-            headerRow.appendChild(badge);
-          }
+                if (poll?.is_active && !poll?.userVoteOptionId && isUserLoggedIn()) {
+                    const voteBtn = document.createElement("button");
+                    voteBtn.type = "button";
+                    voteBtn.className = "poll-button poll-vote-btn";
+                    voteBtn.textContent = "Szavazok";
+                    voteBtn.addEventListener("click", () => handlePollVote(poll.id, option.id, voteBtn));
+                    headerRow.appendChild(voteBtn);
+                } else if (poll?.userVoteOptionId === option.id) {
+                    const badge = document.createElement("span");
+                    badge.className = "poll-badge";
+                    badge.textContent = "Szavazatod";
+                    headerRow.appendChild(badge);
+                }
 
-          optionResult.appendChild(headerRow);
+                optionResult.appendChild(headerRow);
 
-          const bar = document.createElement("div");
-          bar.className = "poll-result-bar";
-          const fill = document.createElement("div");
-          fill.className = "poll-result-bar-fill";
-          const fillWidth = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
-          fill.style.width = `${fillWidth}%`;
-          bar.appendChild(fill);
-          optionResult.appendChild(bar);
+                const bar = document.createElement("div");
+                bar.className = "poll-result-bar";
+                const fill = document.createElement("div");
+                fill.className = "poll-result-bar-fill";
+                const fillWidth = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+                fill.style.width = `${fillWidth}%`;
+                bar.appendChild(fill);
+                optionResult.appendChild(bar);
 
-          const votersElement = document.createElement("div");
-          votersElement.className = "poll-voters";
-          if (Array.isArray(option?.voters) && option.voters.length > 0) {
-            const names = option.voters
-              .map((voter) => voter?.username || `#${voter?.id ?? "?"}`)
-              .join(", ");
-            votersElement.textContent = `Szavaztak: ${names}`;
-          } else {
-            votersElement.textContent = "Még nincs szavazat.";
-          }
-          optionResult.appendChild(votersElement);
+                const votersElement = document.createElement("div");
+                votersElement.className = "poll-voters";
+                if (Array.isArray(option?.voters) && option.voters.length > 0) {
+                    const names = option.voters
+                        .map((voter) => voter?.username || `#${voter?.id ?? "?"}`)
+                        .join(", ");
+                    votersElement.textContent = `Szavaztak: ${names}`;
+                } else {
+                    votersElement.textContent = "Még nincs szavazat.";
+                }
+                optionResult.appendChild(votersElement);
 
-          optionsWrapper.appendChild(optionResult);
-        });
-      }
+                optionsWrapper.appendChild(optionResult);
+            });
+        }
 
-      card.appendChild(optionsWrapper);
+        card.appendChild(optionsWrapper);
 
-      const totalVotesInfo = document.createElement("div");
-      totalVotesInfo.className = "poll-total-votes";
-      totalVotesInfo.textContent = `Összes szavazat: ${totalVotes}`;
-      card.appendChild(totalVotesInfo);
+        const totalVotesInfo = document.createElement("div");
+        totalVotesInfo.className = "poll-total-votes";
+        totalVotesInfo.textContent = `Összes szavazat: ${totalVotes}`;
+        card.appendChild(totalVotesInfo);
 
-      if (poll?.canClose) {
         const actions = document.createElement("div");
         actions.className = "poll-actions";
-        const closeBtn = document.createElement("button");
-        closeBtn.type = "button";
-        closeBtn.className = "poll-button poll-close-btn";
-        closeBtn.textContent = "Szavazás lezárása";
-        closeBtn.addEventListener("click", () => handleClosePoll(poll.id, closeBtn));
-        actions.appendChild(closeBtn);
-        card.appendChild(actions);
-      }
+        let hasAction = false;
 
-      return card;
+        if (poll?.canClose) {
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "poll-button poll-secondary-btn";
+            closeBtn.textContent = "Szavazás lezárása";
+            closeBtn.addEventListener("click", () => handleClosePoll(poll.id, closeBtn));
+            actions.appendChild(closeBtn);
+            hasAction = true;
+        }
+
+        if (isAdminUser()) {
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.className = "poll-button poll-close-btn";
+            deleteBtn.textContent = "Törlés (Admin)";
+            deleteBtn.addEventListener("click", () => handleDeletePoll(poll.id, deleteBtn));
+            actions.appendChild(deleteBtn);
+            hasAction = true;
+        }
+
+        if (hasAction) {
+            card.appendChild(actions);
+        }
+
+        return card;
     }
 
     async function loadPolls() {
@@ -1781,6 +1797,52 @@
           button.textContent = originalText || "Szavazás lezárása";
         }
       }
+    }
+    async function handleDeletePoll(pollId, button) {
+        if (!isUserLoggedIn() || !isAdminUser()) {
+            alert("Csak adminisztrátorok törölhetnek szavazásokat.");
+            return;
+        }
+
+        if (!confirm("Biztosan törlöd ezt a szavazást? Ez a művelet nem vonható vissza.")) {
+            return;
+        }
+
+        const originalText = button ? button.textContent : "";
+        if (button) {
+            button.disabled = true;
+            button.textContent = "Törlés...";
+        }
+
+        try {
+            const response = await fetch(`/api/polls/${pollId}`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...buildAuthHeaders(),
+                },
+            });
+
+            const payload = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                const message =
+                    payload && payload.message
+                        ? payload.message
+                        : "Nem sikerült törölni a szavazást.";
+                throw new Error(message);
+            }
+
+            await loadPolls();
+        } catch (error) {
+            console.error("Szavazás törlési hiba:", error);
+            alert(error.message || "Nem sikerült törölni a szavazást.");
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalText || "Törlés (Admin)";
+            }
+        }
     }
 
     if (addOptionBtn) {
