@@ -13,7 +13,53 @@
     />
     <link rel="stylesheet" href="HOI4-Porgonc/style.css" />
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
+      #fajlkuldes {
+        background: rgba(32, 34, 37, 0.95);
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        margin-bottom: 2rem;
+      }
+
+      #fajlkuldes h2 {
+        margin-bottom: 1rem;
+      }
+
+      .receiver-list {
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .receiver-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #2f3136;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        border: 1px solid #202225;
+      }
+
+      .receiver-item button {
+        background: var(--accent);
+        border: none;
+        color: #fff;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      .receiver-item button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
       :root {
         --bg-primary: #36393f; /* Discord dark gray */
         --bg-secondary: #2f3136; /* Slightly darker for header */
@@ -835,6 +881,7 @@
       <h1>UMGKL HUB</h1>
       <nav>
         <a href="#home" data-section="home" class="active">Főoldal</a>
+        <a href="#fajlkuldes" data-section="fajlkuldes">Fájlküldés</a>
         <a href="#klipek" data-section="klipek">Klippek</a>
         <a href="#sorsolas" data-section="sorsolas">Hoi4 Sorsolás</a>
         <a href="#szavazas" data-section="szavazas">Szavazás</a>
@@ -931,6 +978,18 @@
             </article>
           </div>
         </div>
+      </section>
+
+      <section id="fajlkuldes">
+        <h2>P2P Fájlküldés</h2>
+        <label style="display: inline-flex; align-items: center; gap: 0.5rem;">
+          <input type="checkbox" id="receiverToggle" /> Fogadó mód bekapcsolása
+        </label>
+        <p id="receiverStatus" style="margin-top: 0.5rem;">Csatlakozz bejelentkezés után a fogadó módhoz.</p>
+        <ul id="receiverList" class="receiver-list"></ul>
+        <input type="file" id="p2pFileInput" style="display: none;" />
+        <progress id="p2pTransferProgress" value="0" max="100" style="display: none; width: 100%;"></progress>
+        <p id="p2pTransferMessage"></p>
       </section>
 
       <section id="klipek">
@@ -1541,6 +1600,58 @@
         const hash = location.hash.replace("#", "") || "home";
         showSection(hash, false);
       });
+
+      if (receiverToggle) {
+        receiverToggle.addEventListener("change", () => {
+          if (!isUserLoggedIn()) {
+            alert("A fogadó mód használatához jelentkezz be.");
+            receiverToggle.checked = false;
+            return;
+          }
+          initializeRealtimeFeatures();
+          if (receiverToggle.checked) {
+            registerReceiverIfEnabled();
+          } else if (socket) {
+            socket.emit("unregister_receiver");
+            updateReceiverStatus("Fogadó mód kikapcsolva.");
+          }
+        });
+      }
+
+      if (receiverList) {
+        receiverList.addEventListener("click", (event) => {
+          const btn = event.target.closest("button[data-peer-id]");
+          if (!btn) {
+            return;
+          }
+
+          if (!isUserLoggedIn()) {
+            alert("A fájlküldéshez jelentkezz be.");
+            return;
+          }
+
+          initializeRealtimeFeatures();
+          selectedReceiver = {
+            peerId: btn.dataset.peerId,
+            username: btn.dataset.username,
+          };
+          if (p2pFileInput) {
+            p2pFileInput.click();
+          }
+        });
+      }
+
+      if (p2pFileInput) {
+        p2pFileInput.addEventListener("change", (event) => {
+          const file = event.target.files[0];
+          if (!file || !selectedReceiver) {
+            return;
+          }
+          initializeRealtimeFeatures();
+          resetTransferUI();
+          startFileSend(selectedReceiver, file);
+        });
+      }
     </script>
 
   <script>
@@ -1564,6 +1675,12 @@
     const addOptionBtn = document.getElementById("addOptionBtn");
     const pollListContainer = document.getElementById("pollList");
     const pollSection = document.getElementById("szavazas");
+    const receiverToggle = document.getElementById("receiverToggle");
+    const receiverList = document.getElementById("receiverList");
+    const receiverStatus = document.getElementById("receiverStatus");
+    const p2pFileInput = document.getElementById("p2pFileInput");
+    const p2pTransferProgress = document.getElementById("p2pTransferProgress");
+    const p2pTransferMessage = document.getElementById("p2pTransferMessage");
 
     const SESSION_KEYS = {
       token: "token",
@@ -1590,6 +1707,305 @@
     function markPollsForRefresh() {
       pollsShouldRefresh = true;
       refreshPollsIfVisible();
+    }
+
+    let peer = null;
+    let socket = null;
+    let peerId = null;
+    let selectedReceiver = null;
+    let incomingTransfer = null;
+
+    function decodeTokenPayload(token) {
+      try {
+        const payload = token.split(".")[1];
+        return JSON.parse(atob(payload));
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function getCurrentUserId() {
+      const token = getStoredToken();
+      const payload = token ? decodeTokenPayload(token) : null;
+      return payload && payload.id ? Number(payload.id) : null;
+    }
+
+    function updateReceiverStatus(message) {
+      if (receiverStatus) {
+        receiverStatus.textContent = message;
+      }
+    }
+
+    function resetTransferUI() {
+      if (p2pTransferProgress) {
+        p2pTransferProgress.style.display = "none";
+        p2pTransferProgress.value = 0;
+      }
+      if (p2pTransferMessage) {
+        p2pTransferMessage.textContent = "";
+      }
+      if (p2pFileInput) {
+        p2pFileInput.value = "";
+      }
+    }
+
+    function clearReceiverList() {
+      if (receiverList) {
+        receiverList.innerHTML = "";
+      }
+    }
+
+    function handleReceiversUpdate(list) {
+      if (!receiverList) {
+        return;
+      }
+
+      const currentUserId = getCurrentUserId();
+      receiverList.innerHTML = "";
+
+      if (!Array.isArray(list) || list.length === 0) {
+        const empty = document.createElement("li");
+        empty.textContent = "Nincs aktív fogadó.";
+        receiverList.appendChild(empty);
+        return;
+      }
+
+      list
+        .filter((item) => item.userId !== currentUserId)
+        .forEach((item) => {
+          const li = document.createElement("li");
+          li.className = "receiver-item";
+
+          const span = document.createElement("span");
+          span.textContent = item.username;
+          li.appendChild(span);
+
+          const btn = document.createElement("button");
+          btn.textContent = "Fájl küldése";
+          btn.dataset.peerId = item.peerId;
+          btn.dataset.username = item.username;
+          li.appendChild(btn);
+
+          receiverList.appendChild(li);
+        });
+
+      if (!receiverList.children.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "Nincs elérhető másik fogadó.";
+        receiverList.appendChild(empty);
+      }
+    }
+
+    function ensureSocketConnection() {
+      if (socket || !isUserLoggedIn()) {
+        return;
+      }
+
+      socket = io({
+        auth: { token: getStoredToken() },
+      });
+
+      socket.on("connect", () => {
+        updateReceiverStatus("Kapcsolódva a jelző szerverhez.");
+        registerReceiverIfEnabled();
+      });
+
+      socket.on("update_receivers_list", (list) => {
+        handleReceiversUpdate(list);
+      });
+
+      socket.on("receiver_error", (payload) => {
+        const message = payload && payload.message ? payload.message : "Ismeretlen hiba.";
+        updateReceiverStatus(message);
+      });
+
+      socket.on("disconnect", () => {
+        clearReceiverList();
+        updateReceiverStatus("Kapcsolat bontva a jelző szerverrel.");
+      });
+    }
+
+    function ensurePeerConnection() {
+      if (peer || !isUserLoggedIn()) {
+        return;
+      }
+
+      peer = new Peer();
+      peer.on("open", (id) => {
+        peerId = id;
+        registerReceiverIfEnabled();
+      });
+
+      peer.on("connection", handleIncomingConnection);
+
+      peer.on("disconnected", () => {
+        peerId = null;
+      });
+    }
+
+    function initializeRealtimeFeatures() {
+      ensureSocketConnection();
+      ensurePeerConnection();
+    }
+
+    function teardownRealtimeFeatures() {
+      if (socket) {
+        socket.emit("unregister_receiver");
+        socket.disconnect();
+        socket = null;
+      }
+      if (peer) {
+        peer.destroy();
+        peer = null;
+      }
+      peerId = null;
+      incomingTransfer = null;
+      selectedReceiver = null;
+      resetTransferUI();
+      clearReceiverList();
+      if (receiverToggle) {
+        receiverToggle.checked = false;
+      }
+    }
+
+    function registerReceiverIfEnabled() {
+      if (!receiverToggle || !receiverToggle.checked || !socket || !peerId || !isUserLoggedIn()) {
+        return;
+      }
+
+      socket.emit("register_receiver", { token: getStoredToken(), peerId });
+      updateReceiverStatus("Fogadó mód aktiválva.");
+    }
+
+    function handleIncomingConnection(conn) {
+      conn.on("data", async (data) => {
+        if (!data || typeof data !== "object") {
+          return;
+        }
+
+        if (data.type === "meta") {
+          const accept = confirm(
+            `${data.name} (${(data.size / (1024 * 1024)).toFixed(2)} MB) fogadása?`
+          );
+          if (!accept) {
+            conn.send({ type: "reject" });
+            return;
+          }
+
+          incomingTransfer = {
+            conn,
+            name: data.name,
+            size: data.size,
+            received: 0,
+            chunks: [],
+          };
+
+          if (p2pTransferProgress) {
+            p2pTransferProgress.style.display = "block";
+            p2pTransferProgress.value = 0;
+          }
+          if (p2pTransferMessage) {
+            p2pTransferMessage.textContent = "Fogadás megkezdése...";
+          }
+
+          conn.send({ type: "accept" });
+          return;
+        }
+
+        if (data.type === "chunk" && incomingTransfer) {
+          incomingTransfer.chunks.push(data.data);
+          incomingTransfer.received += data.data ? data.data.byteLength || 0 : 0;
+          if (p2pTransferProgress && incomingTransfer.size) {
+            p2pTransferProgress.value = Math.min(
+              100,
+              Math.round((incomingTransfer.received / incomingTransfer.size) * 100)
+            );
+          }
+          return;
+        }
+
+        if (data.type === "complete" && incomingTransfer) {
+          const blob = new Blob(incomingTransfer.chunks);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = incomingTransfer.name || "fajl";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          resetTransferUI();
+          incomingTransfer = null;
+          if (p2pTransferMessage) {
+            p2pTransferMessage.textContent = "Fájl fogadva és letöltve.";
+          }
+        }
+
+        if (data.type === "reject") {
+          resetTransferUI();
+          if (p2pTransferMessage) {
+            p2pTransferMessage.textContent = "A fogadó elutasította a küldést.";
+          }
+        }
+      });
+    }
+
+    async function sendFileChunks(conn, file) {
+      const chunkSize = 64 * 1024;
+      let offset = 0;
+      while (offset < file.size) {
+        const slice = file.slice(offset, offset + chunkSize);
+        const buffer = await slice.arrayBuffer();
+        conn.send({ type: "chunk", data: buffer });
+        offset += buffer.byteLength;
+        if (p2pTransferProgress) {
+          p2pTransferProgress.style.display = "block";
+          p2pTransferProgress.value = Math.min(100, Math.round((offset / file.size) * 100));
+        }
+      }
+      conn.send({ type: "complete" });
+      if (p2pTransferMessage) {
+        p2pTransferMessage.textContent = "Fájl sikeresen elküldve.";
+      }
+    }
+
+    function startFileSend(receiver, file) {
+      if (!peer) {
+        alert("A kapcsolat még nem állt fel. Próbáld újra.");
+        return;
+      }
+
+      const conn = peer.connect(receiver.peerId);
+      if (p2pTransferMessage) {
+        p2pTransferMessage.textContent = `Kapcsolódás ${receiver.username} felé...`;
+      }
+
+      conn.on("open", () => {
+        conn.send({ type: "meta", name: file.name, size: file.size });
+      });
+
+      conn.on("data", async (data) => {
+        if (!data || typeof data !== "object") {
+          return;
+        }
+        if (data.type === "accept") {
+          await sendFileChunks(conn, file);
+        }
+        if (data.type === "reject") {
+          resetTransferUI();
+          if (p2pTransferMessage) {
+            p2pTransferMessage.textContent = "A címzett elutasította a küldést.";
+          }
+        }
+      });
+
+      conn.on("error", (err) => {
+        console.error("P2P hiba:", err);
+        resetTransferUI();
+        if (p2pTransferMessage) {
+          p2pTransferMessage.textContent = "Hiba történt a P2P kapcsolatban.";
+        }
+      });
     }
 
     function getStoredToken() {
@@ -2207,6 +2623,8 @@
       updateAdminNavVisibility();
       updatePollCreatorState(true);
       markPollsForRefresh();
+      initializeRealtimeFeatures();
+      updateReceiverStatus("Kapcsolódj a fogadó módhoz a kapcsolóval.");
     }
 
     function updateUIForLoggedOut() {
@@ -2228,6 +2646,8 @@
       updateAdminNavVisibility();
       updatePollCreatorState(false);
       markPollsForRefresh();
+      teardownRealtimeFeatures();
+      updateReceiverStatus("Csatlakozz bejelentkezés után a fogadó módhoz.");
     }
 
     if (loginBtn) {
@@ -2257,6 +2677,7 @@
         <tr>
           <th>Felhasználónév</th>
           <th>Feltöltési jogosultság</th>
+          <th>P2P Jog</th>
           <th>Max fájlméret (MB)</th>
           <th>Videó limit</th>
           <th>Feltöltött videók</th>
@@ -2279,11 +2700,24 @@
         label.className = "permission-toggle";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
+        checkbox.name = "canUpload";
         checkbox.checked = Number(user.can_upload) === 1;
         label.appendChild(checkbox);
         label.append(" Feltölthet");
         permissionCell.appendChild(label);
         row.appendChild(permissionCell);
+
+        const transferCell = document.createElement("td");
+        const transferLabel = document.createElement("label");
+        transferLabel.className = "permission-toggle";
+        const transferCheckbox = document.createElement("input");
+        transferCheckbox.type = "checkbox";
+        transferCheckbox.name = "canTransfer";
+        transferCheckbox.checked = Number(user.can_transfer) === 1;
+        transferLabel.appendChild(transferCheckbox);
+        transferLabel.append(" P2P");
+        transferCell.appendChild(transferLabel);
+        row.appendChild(transferCell);
 
         const maxFileSizeCell = document.createElement("td");
         const maxFileInput = document.createElement("input");
@@ -2373,12 +2807,13 @@
         const invalidEntries = [];
         const permissionsToUpdate = rows
           .map((row) => {
-            const checkbox = row.querySelector('input[type="checkbox"]');
+            const uploadCheckbox = row.querySelector('input[name="canUpload"]');
+            const transferCheckbox = row.querySelector('input[name="canTransfer"]');
             const maxFileSizeInput = row.querySelector('input[name="maxFileSizeMb"]');
             const maxVideosInput = row.querySelector('input[name="maxVideos"]');
             const userIdAttr = row.dataset.userId;
 
-            if (!checkbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
+            if (!uploadCheckbox || !transferCheckbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
               return null;
             }
 
@@ -2399,7 +2834,8 @@
 
             return {
               userId,
-              canUpload: checkbox.checked,
+              canUpload: uploadCheckbox.checked,
+              canTransfer: transferCheckbox.checked,
               maxFileSizeMb: maxFileSizeValue,
               maxVideos: maxVideosValue,
             };

@@ -1,10 +1,12 @@
 // 1. A szükséges csomagok betöltése
 const express = require('express');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const { Server } = require('socket.io');
 const db = require('./database');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
@@ -16,6 +18,8 @@ function generateAuthToken(payload) {
 // 2. Az Express alkalmazás létrehozása
 const app = express();
 const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
+const server = http.createServer(app);
+const io = new Server(server);
 app.settings = app.settings || {};
 
 // 3. Middleware-ek (köztes szoftverek) beállítása
@@ -206,6 +210,69 @@ app.get('/uploads/:filename', (req, res) => {
 // 4. Statikus fájlok kiszolgálása
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+const activeReceivers = new Map();
+
+function broadcastReceiversList() {
+    const receivers = Array.from(activeReceivers.values()).map(({ userId, username, peerId }) => ({
+        userId,
+        username,
+        peerId,
+    }));
+    io.emit('update_receivers_list', receivers);
+}
+
+function removeReceiverBySocket(socketId) {
+    let changed = false;
+    for (const [userId, receiver] of activeReceivers.entries()) {
+        if (receiver.socketId === socketId) {
+            activeReceivers.delete(userId);
+            changed = true;
+        }
+    }
+    if (changed) {
+        broadcastReceiversList();
+    }
+}
+
+io.on('connection', (socket) => {
+    socket.on('register_receiver', async ({ token, peerId }) => {
+        if (!token || !peerId) {
+            return;
+        }
+
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const userId = decoded.id;
+            const { rows } = await db.query('SELECT username, can_transfer FROM users WHERE id = $1', [userId]);
+            const user = rows[0];
+
+            if (!user || Number(user.can_transfer) !== 1) {
+                socket.emit('receiver_error', { message: 'Nincs jogosultság a fájlküldésre.' });
+                return;
+            }
+
+            activeReceivers.set(userId, {
+                userId,
+                username: user.username,
+                peerId,
+                socketId: socket.id,
+            });
+            broadcastReceiversList();
+        } catch (err) {
+            console.error('Hiba a fogadó regisztrációja során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
+        }
+    });
+
+    socket.on('unregister_receiver', () => {
+        removeReceiverBySocket(socket.id);
+    });
+
+    socket.on('disconnect', () => {
+        removeReceiverBySocket(socket.id);
+    });
+});
+
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
@@ -291,7 +358,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
 
 app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
     try {
-        const query = 'SELECT id, username, can_upload, max_file_size_mb, max_videos, upload_count FROM users';
+        const query = 'SELECT id, username, can_upload, can_transfer, max_file_size_mb, max_videos, upload_count FROM users';
         const { rows } = await db.query(query);
         res.status(200).json(rows);
     } catch (err) {
@@ -311,6 +378,7 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
     const updates = req.body.map(item => ({
         userId: Number.parseInt(item.userId, 10),
         canUpload: item.canUpload ? 1 : 0,
+        canTransfer: item.canTransfer ? 1 : 0,
         maxFileSizeMb: Number(item.maxFileSizeMb),
         maxVideos: Number(item.maxVideos)
     }));
@@ -325,8 +393,8 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
         await client.query('BEGIN');
         for (const update of updates) {
             const result = await client.query(
-                'UPDATE users SET can_upload = $1, max_file_size_mb = $2, max_videos = $3 WHERE id = $4',
-                [update.canUpload, Math.round(update.maxFileSizeMb), Math.round(update.maxVideos), update.userId]
+                'UPDATE users SET can_upload = $1, can_transfer = $2, max_file_size_mb = $3, max_videos = $4 WHERE id = $5',
+                [update.canUpload, update.canTransfer, Math.round(update.maxFileSizeMb), Math.round(update.maxVideos), update.userId]
             );
             if (result.rowCount === 0) {
                 throw new Error(`A ${update.userId} azonosítójú felhasználó nem található.`);
@@ -759,7 +827,7 @@ async function startServer() {
     try {
         await db.initializeDatabase();
         await loadAppSettings();
-        app.listen(PORT, () => {
+        server.listen(PORT, () => {
             console.log(`A szerver sikeresen elindult és fut a http://localhost:${PORT} címen`);
         });
     } catch (err) {
