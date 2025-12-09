@@ -16,6 +16,7 @@ async function initializeDatabase() {
         username TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
         can_upload INTEGER DEFAULT 0,
+        can_transfer INTEGER DEFAULT 0,
         is_admin INTEGER DEFAULT 0,
         upload_count INTEGER DEFAULT 0,
         max_file_size_mb INTEGER DEFAULT 50,
@@ -26,6 +27,9 @@ async function initializeDatabase() {
 
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_upload INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_transfer INTEGER DEFAULT 0'
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0'
