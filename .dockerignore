@@ -1,0 +1,6 @@
+.git
+node_modules
+umgkl_hub.db
+Dockerfile
+docker-compose.yml
+.dockerignore

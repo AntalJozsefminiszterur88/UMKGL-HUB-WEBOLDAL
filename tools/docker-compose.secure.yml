@@ -1,32 +1,36 @@
 services:
-  db:
-    image: postgres:15-alpine
-    restart: unless-stopped
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydb
-    networks:
-      - umgkl_net
-
   web:
     build: .
-    restart: unless-stopped
-    # Ez a sor teszi elérhetővé a konténert a géped 3000-es portján
     ports:
       - "3000:3000"
-    depends_on:
-      - db
     environment:
-      DB_HOST: db
-      DB_USER: myuser
-      DB_PASSWORD: mypassword
-      DB_NAME: mydb
+      - DB_HOST=db
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
+      - DB_NAME=mydb
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - umgkl_net
       - shared_proxy_net
+
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=mydb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - umgkl_net
 
 volumes:
   postgres_data:
