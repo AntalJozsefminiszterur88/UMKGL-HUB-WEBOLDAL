@@ -1454,7 +1454,14 @@
       <h1>UMGKL HUB</h1>
       <nav>
         <a href="#home" data-section="home" class="active">Főoldal</a>
-        <a href="#fajlkuldes" data-section="fajlkuldes">Fájlküldés</a>
+        <a
+          href="#fajlkuldes"
+          data-section="fajlkuldes"
+          id="fileTransferNavBtn"
+          data-requires-transfer="true"
+          style="display: none;"
+          >Fájlküldés</a
+        >
         <a href="#klipek" data-section="klipek">Klippek</a>
         <a href="#sorsolas" data-section="sorsolas">Hoi4 Sorsolás</a>
         <a href="#szavazas" data-section="szavazas">Szavazás</a>
@@ -1912,9 +1919,24 @@
         return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
       }
 
+      function hasFileTransferPermission() {
+        return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canTransfer) === "true";
+      }
+
       function getAccessibleNavLinks() {
         return Array.from(document.querySelectorAll("nav a")).filter((link) => {
-          return !(link.dataset.requiresAdmin === "true" && !isAdminUser());
+          const requiresAdmin = link.dataset.requiresAdmin === "true";
+          const requiresTransfer = link.dataset.requiresTransfer === "true";
+
+          if (requiresAdmin && !isAdminUser()) {
+            return false;
+          }
+
+          if (requiresTransfer && !hasFileTransferPermission()) {
+            return false;
+          }
+
+          return true;
         });
       }
 
@@ -2175,9 +2197,13 @@
 
         document.querySelectorAll("nav a").forEach((link) => {
           const requiresAdmin = link.dataset.requiresAdmin === "true";
+          const requiresTransfer = link.dataset.requiresTransfer === "true";
           const isActive = link.dataset.section === target;
 
-          if (requiresAdmin && !isAdminUser()) {
+          if (
+            (requiresAdmin && !isAdminUser()) ||
+            (requiresTransfer && !hasFileTransferPermission())
+          ) {
             link.classList.remove("active");
             return;
           }
@@ -2211,8 +2237,14 @@
       document.querySelectorAll("nav a").forEach((link) => {
         link.addEventListener("click", (e) => {
           const requiresAdmin = link.dataset.requiresAdmin === "true";
+          const requiresTransfer = link.dataset.requiresTransfer === "true";
 
           if (requiresAdmin && !isAdminUser()) {
+            e.preventDefault();
+            return;
+          }
+
+          if (requiresTransfer && !hasFileTransferPermission()) {
             e.preventDefault();
             return;
           }
@@ -2241,6 +2273,7 @@
     const userGreeting = document.getElementById("userGreeting");
     const adminNavBtn = document.getElementById("adminNavBtn");
     const programNavBtn = document.getElementById("programNavBtn");
+    const fileTransferNavBtn = document.getElementById("fileTransferNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
     const pollCreator = document.getElementById("pollCreator");
@@ -2265,6 +2298,7 @@
       token: "token",
       username: "username",
       isAdmin: ADMIN_SESSION_KEY,
+      canTransfer: "canTransfer",
       profilePictureFilename: "profilePictureFilename",
     };
     const POLL_MIN_OPTIONS = 2;
@@ -3719,6 +3753,21 @@
       }
     }
 
+    function updateFileTransferNavVisibility() {
+      const hasAccess = hasFileTransferPermission();
+
+      if (fileTransferNavBtn) {
+        fileTransferNavBtn.style.display = hasAccess ? "inline-block" : "none";
+      }
+
+      if (!hasAccess) {
+        const activeSection = document.querySelector("main section.active");
+        if (activeSection && activeSection.id === "fajlkuldes") {
+          showSection("home");
+        }
+      }
+    }
+
     function updateUIForLoggedIn(username, profilePictureFilename) {
       if (userGreeting) {
         userGreeting.textContent = username;
@@ -3752,10 +3801,17 @@
       }
 
       updateAdminNavVisibility();
+      updateFileTransferNavVisibility();
       updatePollCreatorState(true);
       markPollsForRefresh();
-      initializeRealtimeFeatures();
-      updateReceiverStatus("Kapcsolódj a fogadó módhoz a kapcsolóval.");
+
+      if (hasFileTransferPermission()) {
+        initializeRealtimeFeatures();
+        updateReceiverStatus("Kapcsolódj a fogadó módhoz a kapcsolóval.");
+      } else {
+        teardownRealtimeFeatures();
+        updateReceiverStatus("Nincs jogosultságod a fájlküldéshez.");
+      }
     }
 
     function updateUIForLoggedOut() {
@@ -3763,6 +3819,7 @@
       localStorage.removeItem(SESSION_KEYS.token);
       localStorage.removeItem(SESSION_KEYS.username);
       localStorage.removeItem(SESSION_KEYS.isAdmin);
+      localStorage.removeItem(SESSION_KEYS.canTransfer);
       localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
 
       if (authLoggedOut) {
@@ -3792,6 +3849,7 @@
         newUsernameInput.value = '';
       }
       updateAdminNavVisibility();
+      updateFileTransferNavVisibility();
       updatePollCreatorState(false);
       markPollsForRefresh();
       teardownRealtimeFeatures();
@@ -4105,9 +4163,11 @@
         const data = await res.json();
 
         if (res.ok) {
+          const canTransfer = data.canTransfer === true || data.canTransfer === 1;
           localStorage.setItem(SESSION_KEYS.token, data.token);
           localStorage.setItem(SESSION_KEYS.username, data.username);
           localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
+          localStorage.setItem(SESSION_KEYS.canTransfer, canTransfer ? "true" : "false");
           if (data.profile_picture_filename) {
             localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
           } else {
@@ -4173,6 +4233,8 @@
             localStorage.setItem(SESSION_KEYS.token, token); // The token is still valid
             localStorage.setItem(SESSION_KEYS.username, data.username);
             localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
+            const canTransfer = data.canTransfer === true || data.canTransfer === 1;
+            localStorage.setItem(SESSION_KEYS.canTransfer, canTransfer ? "true" : "false");
             if (data.profile_picture_filename) {
                 localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
             } else {
