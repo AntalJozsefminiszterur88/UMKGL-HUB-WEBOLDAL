@@ -60,6 +60,76 @@
         opacity: 0.6;
         cursor: not-allowed;
       }
+
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      .modal-overlay--visible {
+        display: flex;
+      }
+
+      .file-modal {
+        background: #2f3136;
+        padding: 1.5rem;
+        border-radius: 12px;
+        width: min(420px, 90%);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--text-primary);
+      }
+
+      .file-modal h3 {
+        margin-bottom: 0.75rem;
+        color: #fff;
+        font-size: 1.35rem;
+      }
+
+      .file-modal__details {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+      }
+
+      .file-modal__details p {
+        margin-bottom: 0.35rem;
+      }
+
+      .file-modal__details p:last-child {
+        margin-bottom: 0;
+      }
+
+      .file-modal__actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+      }
+
+      .file-modal__actions button {
+        border: none;
+        padding: 0.65rem 1.1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .file-modal__reject {
+        background: #3a3d42;
+        color: #fff;
+      }
+
+      .file-modal__accept {
+        background: var(--accent);
+        color: #fff;
+      }
       :root {
         --bg-primary: #36393f; /* Discord dark gray */
         --bg-secondary: #2f3136; /* Slightly darker for header */
@@ -988,6 +1058,20 @@
         <input type="file" id="p2pFileInput" style="display: none;" />
         <progress id="p2pTransferProgress" value="0" max="100" style="display: none; width: 100%;"></progress>
         <p id="p2pTransferMessage"></p>
+        <div id="incomingFileModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="incomingFileTitle">
+          <div class="file-modal">
+            <h3 id="incomingFileTitle">Bejövő fájl</h3>
+            <div class="file-modal__details">
+              <p><strong>Név:</strong> <span id="incomingFileName">-</span></p>
+              <p><strong>Méret:</strong> <span id="incomingFileSize">-</span></p>
+              <p><strong>Típus:</strong> <span id="incomingFileType">-</span></p>
+            </div>
+            <div class="file-modal__actions">
+              <button id="incomingRejectBtn" class="file-modal__reject" type="button">Elutasítom</button>
+              <button id="incomingAcceptBtn" class="file-modal__accept" type="button">Elfogadom</button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="klipek">
@@ -1602,7 +1686,7 @@
       if (receiverToggle) {
         receiverToggle.addEventListener("change", () => {
           if (!isUserLoggedIn()) {
-            alert("A fogadó mód használatához jelentkezz be.");
+            updateReceiverStatus("A fogadó mód használatához jelentkezz be.");
             receiverToggle.checked = false;
             return;
           }
@@ -1616,6 +1700,24 @@
         });
       }
 
+      if (incomingAcceptBtn) {
+        incomingAcceptBtn.addEventListener("click", () => {
+          if (pendingIncomingRequest?.onAccept) {
+            pendingIncomingRequest.onAccept();
+          }
+          closeIncomingFileModal();
+        });
+      }
+
+      if (incomingRejectBtn) {
+        incomingRejectBtn.addEventListener("click", () => {
+          if (pendingIncomingRequest?.onReject) {
+            pendingIncomingRequest.onReject();
+          }
+          closeIncomingFileModal();
+        });
+      }
+
       if (receiverList) {
         receiverList.addEventListener("click", (event) => {
           const btn = event.target.closest("button[data-peer-id]");
@@ -1624,7 +1726,7 @@
           }
 
           if (!isUserLoggedIn()) {
-            alert("A fájlküldéshez jelentkezz be.");
+            updateReceiverStatus("A fájlküldéshez jelentkezz be.");
             return;
           }
 
@@ -1679,6 +1781,12 @@
     const p2pFileInput = document.getElementById("p2pFileInput");
     const p2pTransferProgress = document.getElementById("p2pTransferProgress");
     const p2pTransferMessage = document.getElementById("p2pTransferMessage");
+    const incomingFileModal = document.getElementById("incomingFileModal");
+    const incomingFileName = document.getElementById("incomingFileName");
+    const incomingFileSize = document.getElementById("incomingFileSize");
+    const incomingFileType = document.getElementById("incomingFileType");
+    const incomingAcceptBtn = document.getElementById("incomingAcceptBtn");
+    const incomingRejectBtn = document.getElementById("incomingRejectBtn");
 
     const SESSION_KEYS = {
       token: "token",
@@ -1712,6 +1820,7 @@
     let peerId = null;
     let selectedReceiver = null;
     let incomingTransfer = null;
+    let pendingIncomingRequest = null;
 
     function decodeTokenPayload(token) {
       try {
@@ -1732,6 +1841,37 @@
       if (receiverStatus) {
         receiverStatus.textContent = message;
       }
+    }
+
+    function formatFileSize(size) {
+      if (!Number.isFinite(size)) {
+        return "Ismeretlen";
+      }
+      if (size >= 1024 * 1024) {
+        return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+      }
+      if (size >= 1024) {
+        return `${(size / 1024).toFixed(2)} KB`;
+      }
+      return `${size} B`;
+    }
+
+    function closeIncomingFileModal() {
+      pendingIncomingRequest = null;
+      incomingFileModal?.classList.remove("modal-overlay--visible");
+    }
+
+    function openIncomingFileModal(meta, onAccept, onReject) {
+      if (!incomingFileModal || !incomingFileName || !incomingFileSize || !incomingFileType) {
+        return;
+      }
+
+      incomingFileName.textContent = meta.name || "Ismeretlen";
+      incomingFileSize.textContent = formatFileSize(meta.size);
+      incomingFileType.textContent = meta.mimeType || "Ismeretlen";
+
+      pendingIncomingRequest = { onAccept, onReject };
+      incomingFileModal.classList.add("modal-overlay--visible");
     }
 
     function resetTransferUI() {
@@ -1828,7 +1968,9 @@
         return;
       }
 
-      peer = new Peer();
+      peer = new Peer({
+        config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] },
+      });
       peer.on("open", (id) => {
         peerId = id;
         registerReceiverIfEnabled();
@@ -1882,31 +2024,43 @@
         }
 
         if (data.type === "meta") {
-          const accept = confirm(
-            `${data.name} (${(data.size / (1024 * 1024)).toFixed(2)} MB) fogadása?`
-          );
-          if (!accept) {
-            conn.send({ type: "reject" });
-            return;
-          }
-
-          incomingTransfer = {
-            conn,
+          const meta = {
             name: data.name,
             size: data.size,
-            received: 0,
-            chunks: [],
+            mimeType: data.mimeType,
           };
 
-          if (p2pTransferProgress) {
-            p2pTransferProgress.style.display = "block";
-            p2pTransferProgress.value = 0;
-          }
           if (p2pTransferMessage) {
-            p2pTransferMessage.textContent = "Fogadás megkezdése...";
+            p2pTransferMessage.textContent = "Bejövő fájl, jóváhagyásra vár...";
           }
 
-          conn.send({ type: "accept" });
+          openIncomingFileModal(meta, () => {
+            incomingTransfer = {
+              conn,
+              name: meta.name,
+              size: meta.size,
+              received: 0,
+              chunks: [],
+              mimeType: meta.mimeType,
+            };
+
+            if (p2pTransferProgress) {
+              p2pTransferProgress.style.display = "block";
+              p2pTransferProgress.value = 0;
+            }
+            if (p2pTransferMessage) {
+              p2pTransferMessage.textContent = "Fogadás megkezdése...";
+            }
+
+            conn.send({ type: "accept" });
+          }, () => {
+            conn.send({ type: "reject" });
+            resetTransferUI();
+            if (p2pTransferMessage) {
+              p2pTransferMessage.textContent = "A fájlátvitel elutasítva.";
+            }
+          });
+
           return;
         }
 
@@ -1919,11 +2073,20 @@
               Math.round((incomingTransfer.received / incomingTransfer.size) * 100)
             );
           }
+          if (p2pTransferMessage && incomingTransfer.size) {
+            const percent = Math.min(
+              100,
+              Math.round((incomingTransfer.received / incomingTransfer.size) * 100)
+            );
+            p2pTransferMessage.textContent = `Fogadás: ${percent}%`;
+          }
           return;
         }
 
         if (data.type === "complete" && incomingTransfer) {
-          const blob = new Blob(incomingTransfer.chunks);
+          const blob = new Blob(incomingTransfer.chunks, {
+            type: incomingTransfer.mimeType || "application/octet-stream",
+          });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
@@ -1946,6 +2109,14 @@
           }
         }
       });
+
+      conn.on("close", () => {
+        resetTransferUI();
+        closeIncomingFileModal();
+        if (p2pTransferMessage) {
+          p2pTransferMessage.textContent = "Megszakadt a kapcsolat.";
+        }
+      });
     }
 
     async function sendFileChunks(conn, file) {
@@ -1960,6 +2131,10 @@
           p2pTransferProgress.style.display = "block";
           p2pTransferProgress.value = Math.min(100, Math.round((offset / file.size) * 100));
         }
+        if (p2pTransferMessage) {
+          const percent = Math.min(100, Math.round((offset / file.size) * 100));
+          p2pTransferMessage.textContent = `Küldés: ${percent}%`;
+        }
       }
       conn.send({ type: "complete" });
       if (p2pTransferMessage) {
@@ -1969,7 +2144,9 @@
 
     function startFileSend(receiver, file) {
       if (!peer) {
-        alert("A kapcsolat még nem állt fel. Próbáld újra.");
+        if (p2pTransferMessage) {
+          p2pTransferMessage.textContent = "A kapcsolat még nem állt fel. Próbáld újra.";
+        }
         return;
       }
 
@@ -1978,8 +2155,20 @@
         p2pTransferMessage.textContent = `Kapcsolódás ${receiver.username} felé...`;
       }
 
+      const connectionTimeout = setTimeout(() => {
+        conn.close();
+        resetTransferUI();
+        if (p2pTransferMessage) {
+          p2pTransferMessage.textContent = "Nem sikerült kapcsolódni 15 másodpercen belül.";
+        }
+      }, 15000);
+
       conn.on("open", () => {
-        conn.send({ type: "meta", name: file.name, size: file.size });
+        clearTimeout(connectionTimeout);
+        if (p2pTransferMessage) {
+          p2pTransferMessage.textContent = "Kapcsolat létrejött, metaadat küldése...";
+        }
+        conn.send({ type: "meta", name: file.name, size: file.size, mimeType: file.type });
       });
 
       conn.on("data", async (data) => {
@@ -1987,6 +2176,9 @@
           return;
         }
         if (data.type === "accept") {
+          if (p2pTransferMessage) {
+            p2pTransferMessage.textContent = "Fogadó elfogadta, küldés indul...";
+          }
           await sendFileChunks(conn, file);
         }
         if (data.type === "reject") {
@@ -1997,8 +2189,17 @@
         }
       });
 
+      conn.on("close", () => {
+        clearTimeout(connectionTimeout);
+        resetTransferUI();
+        if (p2pTransferMessage) {
+          p2pTransferMessage.textContent = "Megszakadt a kapcsolat.";
+        }
+      });
+
       conn.on("error", (err) => {
         console.error("P2P hiba:", err);
+        clearTimeout(connectionTimeout);
         resetTransferUI();
         if (p2pTransferMessage) {
           p2pTransferMessage.textContent = "Hiba történt a P2P kapcsolatban.";
