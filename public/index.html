@@ -83,12 +83,28 @@
         box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
         border: 1px solid rgba(255, 255, 255, 0.08);
         color: var(--text-primary);
+        position: relative;
       }
 
       .file-modal h3 {
         margin-bottom: 0.75rem;
         color: #fff;
         font-size: 1.35rem;
+      }
+
+      .file-modal__close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: transparent;
+        border: none;
+        color: #a9abb0;
+        font-size: 1.25rem;
+        cursor: pointer;
+      }
+
+      .file-modal__close:hover {
+        color: #fff;
       }
 
       .file-modal__details {
@@ -1060,6 +1076,7 @@
         <p id="p2pTransferMessage"></p>
         <div id="incomingFileModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="incomingFileTitle">
           <div class="file-modal">
+            <button id="incomingCloseBtn" class="file-modal__close" type="button" aria-label="Bezárás">&times;</button>
             <h3 id="incomingFileTitle">Bejövő fájl</h3>
             <div class="file-modal__details">
               <p><strong>Név:</strong> <span id="incomingFileName">-</span></p>
@@ -1718,6 +1735,12 @@
         });
       }
 
+      if (incomingCloseBtn) {
+        incomingCloseBtn.addEventListener("click", () => {
+          closeIncomingFileModal();
+        });
+      }
+
       if (receiverList) {
         receiverList.addEventListener("click", (event) => {
           const btn = event.target.closest("button[data-peer-id]");
@@ -1787,6 +1810,7 @@
     const incomingFileType = document.getElementById("incomingFileType");
     const incomingAcceptBtn = document.getElementById("incomingAcceptBtn");
     const incomingRejectBtn = document.getElementById("incomingRejectBtn");
+    const incomingCloseBtn = document.getElementById("incomingCloseBtn");
 
     const SESSION_KEYS = {
       token: "token",
