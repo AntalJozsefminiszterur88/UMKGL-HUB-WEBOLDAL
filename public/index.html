@@ -61,6 +61,141 @@
         cursor: not-allowed;
       }
 
+      .header-user {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: linear-gradient(135deg, rgba(114, 137, 218, 0.15), rgba(32, 34, 37, 0.6));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        padding: 0.35rem 0.9rem 0.35rem 0.4rem;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+        transition: border-color 0.2s ease, transform 0.2s ease;
+      }
+
+      .header-user:hover {
+        border-color: rgba(114, 137, 218, 0.6);
+        transform: translateY(-1px);
+      }
+
+      .header-user__avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid rgba(255, 255, 255, 0.08);
+        background: #202225;
+      }
+
+      .header-user__name {
+        font-weight: 700;
+        letter-spacing: 0.3px;
+      }
+
+      #profile {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      .profile-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.2rem;
+        margin-top: 1.5rem;
+      }
+
+      .profile-card {
+        background: linear-gradient(145deg, rgba(32, 34, 37, 0.9), rgba(54, 57, 63, 0.85));
+        border-radius: 14px;
+        padding: 1.25rem 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
+        text-align: left;
+      }
+
+      .profile-card h3 {
+        margin-bottom: 0.75rem;
+        color: #fff;
+        letter-spacing: 0.4px;
+      }
+
+      .profile-card p {
+        color: #aeb2b8;
+        margin-bottom: 0.5rem;
+      }
+
+      .profile-avatar-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .profile-avatar-preview {
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid rgba(114, 137, 218, 0.45);
+        box-shadow: 0 12px 26px rgba(0, 0, 0, 0.35);
+        background: #202225;
+      }
+
+      .profile-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .profile-input {
+        width: 100%;
+        background: #202225;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 0.85rem 0.95rem;
+        margin: 0.35rem 0 0.85rem;
+        outline: none;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .profile-input:focus {
+        border-color: rgba(114, 137, 218, 0.75);
+        box-shadow: 0 0 0 3px rgba(114, 137, 218, 0.12);
+      }
+
+      .ghost-button,
+      .primary-button {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(114, 137, 218, 0.12);
+        color: #e3e5e8;
+        padding: 0.65rem 1.1rem;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 700;
+        transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+      }
+
+      .ghost-button:hover,
+      .primary-button:hover {
+        background: rgba(114, 137, 218, 0.25);
+        border-color: rgba(114, 137, 218, 0.6);
+        transform: translateY(-1px);
+      }
+
+      .primary-button {
+        background: linear-gradient(135deg, #7289da, #5b6eae);
+        color: #fff;
+        border: none;
+      }
+
+      .profile-status {
+        font-size: 0.95rem;
+        color: #9ea3ab;
+        margin-top: 0.5rem;
+      }
+
       .modal-overlay {
         position: fixed;
         inset: 0;
@@ -1005,9 +1140,9 @@
           <a href="register.html" id="registerBtn" class="auth-button">Regisztráció</a>
         </div>
         <div id="authLoggedIn" class="auth-buttons__group" style="display: none">
-          <a href="#profile" id="userProfileLink" data-section="profile" style="display: flex; align-items: center; text-decoration: none; color: inherit;">
-            <img id="userAvatar" src="program_icons/default-avatar.png" alt="User Avatar" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px;">
-            <span id="userGreeting"></span>
+          <a href="#profile" id="userProfileLink" data-section="profile" class="header-user">
+            <img id="userAvatar" class="header-user__avatar" src="program_icons/default-avatar.png" alt="User Avatar">
+            <span id="userGreeting" class="header-user__name"></span>
           </a>
           <button id="logoutBtn" type="button" class="auth-button">Kijelentkezés</button>
         </div>
@@ -1324,27 +1459,39 @@
 
       <section id="profile">
         <h2>Profil Beállítások</h2>
-        <div class="poll-card">
-          <h3>Profilkép Módosítása</h3>
-          <img id="profileAvatarPreview" src="program_icons/default-avatar.png" alt="Profile Avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 1rem;">
-          <input type="file" id="avatarInput" accept="image/*" style="display: block; margin-bottom: 1rem;">
-          <button id="uploadAvatarBtn" class="poll-button">Feltöltés</button>
-          <p id="avatarUploadStatus" class="upload-status"></p>
-        </div>
-        <div class="poll-card" style="margin-top: 1rem;">
-          <h3>Felhasználónév Módosítása</h3>
-          <form id="updateUsernameForm">
-            <input type="text" id="newUsername" class="poll-text-input" placeholder="Új felhasználónév" required>
-            <button type="submit" class="poll-button">Mentés</button>
-          </form>
-        </div>
-        <div class="poll-card" style="margin-top: 1rem;">
-          <h3>Jelszó Módosítása</h3>
-          <form id="updatePasswordForm">
-            <input type="password" id="currentPassword" class="poll-text-input" placeholder="Jelenlegi jelszó" required>
-            <input type="password" id="newPassword" class="poll-text-input" placeholder="Új jelszó" required>
-            <button type="submit" class="poll-button">Mentés</button>
-          </form>
+        <div class="profile-grid">
+          <div class="profile-card">
+            <h3>Profilkép</h3>
+            <p>Tölts fel egy egyedi avatárt, hogy mindenki felismerjen.</p>
+            <div class="profile-avatar-wrapper">
+              <img id="profileAvatarPreview" class="profile-avatar-preview" src="program_icons/default-avatar.png" alt="Profile Avatar">
+              <div class="profile-actions">
+                <label class="ghost-button" for="avatarInput">Fájl kiválasztása</label>
+                <input type="file" id="avatarInput" accept="image/png, image/jpeg, image/jpg, image/gif" style="display: none;">
+                <button id="uploadAvatarBtn" class="primary-button" type="button">Feltöltés</button>
+              </div>
+              <p id="avatarUploadStatus" class="profile-status"></p>
+            </div>
+          </div>
+
+          <div class="profile-card">
+            <h3>Név módosítása</h3>
+            <p>Állítsd be az új megjelenítendő neved.</p>
+            <form id="updateUsernameForm">
+              <input type="text" id="newUsername" class="profile-input" placeholder="Új felhasználónév" required>
+              <button type="submit" class="primary-button">Mentés</button>
+            </form>
+          </div>
+
+          <div class="profile-card">
+            <h3>Biztonság</h3>
+            <p>Frissítsd a jelszavad a biztonság érdekében.</p>
+            <form id="updatePasswordForm">
+              <input type="password" id="currentPassword" class="profile-input" placeholder="Jelenlegi jelszó" required>
+              <input type="password" id="newPassword" class="profile-input" placeholder="Új jelszó" required>
+              <button type="submit" class="primary-button">Jelszó cseréje</button>
+            </form>
+          </div>
         </div>
       </section>
     </main>
@@ -2860,16 +3007,24 @@
 
     function updateUIForLoggedIn(username, profilePictureFilename) {
       if (userGreeting) {
-        userGreeting.textContent = `Szia, ${username}!`;
+        userGreeting.textContent = username;
       }
+
+      const avatarUrl = profilePictureFilename ? `/uploads/avatars/${profilePictureFilename}` : 'program_icons/default-avatar.png';
       const userAvatar = document.getElementById('userAvatar');
       if (userAvatar) {
-          userAvatar.src = profilePictureFilename ? `/uploads/avatars/${profilePictureFilename}` : 'program_icons/default-avatar.png';
+        userAvatar.src = avatarUrl;
       }
       const profileAvatarPreview = document.getElementById('profileAvatarPreview');
-      if (profileAvatarPreview) {
-          profileAvatarPreview.src = profilePictureFilename ? `/uploads/avatars/${profilePictureFilename}` : 'program_icons/default-avatar.png';
+      if (profileAvatarPreview && !profileAvatarPreview.dataset.override) {
+        profileAvatarPreview.src = avatarUrl;
       }
+
+      const newUsernameInput = document.getElementById('newUsername');
+      if (newUsernameInput && document.activeElement !== newUsernameInput) {
+        newUsernameInput.value = username || '';
+      }
+
       if (authLoggedOut) {
         authLoggedOut.style.display = "none";
       }
@@ -2899,6 +3054,19 @@
       }
       if (userGreeting) {
         userGreeting.textContent = "";
+      }
+      const profileAvatarPreview = document.getElementById('profileAvatarPreview');
+      if (profileAvatarPreview) {
+        delete profileAvatarPreview.dataset.override;
+        profileAvatarPreview.src = 'program_icons/default-avatar.png';
+      }
+      const userAvatar = document.getElementById('userAvatar');
+      if (userAvatar) {
+        userAvatar.src = 'program_icons/default-avatar.png';
+      }
+      const newUsernameInput = document.getElementById('newUsername');
+      if (newUsernameInput) {
+        newUsernameInput.value = '';
       }
       updateAdminNavVisibility();
       updatePollCreatorState(false);
@@ -3299,6 +3467,33 @@
     const uploadAvatarBtn = document.getElementById('uploadAvatarBtn');
     const avatarInput = document.getElementById('avatarInput');
     const avatarUploadStatus = document.getElementById('avatarUploadStatus');
+    const profileAvatarPreview = document.getElementById('profileAvatarPreview');
+    let avatarPreviewObjectUrl = null;
+
+    if (avatarInput && profileAvatarPreview) {
+        avatarInput.addEventListener('change', () => {
+            const file = avatarInput.files[0];
+
+            if (avatarPreviewObjectUrl) {
+                URL.revokeObjectURL(avatarPreviewObjectUrl);
+                avatarPreviewObjectUrl = null;
+            }
+
+            if (!file) {
+                delete profileAvatarPreview.dataset.override;
+                const storedAvatar = localStorage.getItem(SESSION_KEYS.profilePictureFilename);
+                profileAvatarPreview.src = storedAvatar ? `/uploads/avatars/${storedAvatar}` : 'program_icons/default-avatar.png';
+                return;
+            }
+
+            avatarPreviewObjectUrl = URL.createObjectURL(file);
+            profileAvatarPreview.src = avatarPreviewObjectUrl;
+            profileAvatarPreview.dataset.override = 'true';
+            if (avatarUploadStatus) {
+              avatarUploadStatus.textContent = '';
+            }
+        });
+    }
 
     if (uploadAvatarBtn) {
         uploadAvatarBtn.addEventListener('click', async () => {
@@ -3333,6 +3528,12 @@
                 }
 
                 avatarUploadStatus.textContent = result.message;
+                avatarInput.value = '';
+                if (avatarPreviewObjectUrl) {
+                    URL.revokeObjectURL(avatarPreviewObjectUrl);
+                    avatarPreviewObjectUrl = null;
+                }
+                delete profileAvatarPreview.dataset.override;
                 await ensureSessionOnLoad(); // Refresh session data to get new avatar filename
             } catch (error) {
                 console.error('Profilkép feltöltési hiba:', error);
