@@ -68,11 +68,16 @@
         display: none;
         align-items: center;
         justify-content: center;
-        z-index: 1000;
+        z-index: 2000;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        pointer-events: none;
       }
 
       .modal-overlay--visible {
         display: flex;
+        opacity: 1;
+        pointer-events: auto;
       }
 
       .file-modal {
@@ -1091,7 +1096,7 @@
             </div>
             <div class="file-modal__actions">
               <button id="incomingRejectBtn" class="file-modal__reject" type="button">Elutasítom</button>
-              <button id="incomingAcceptBtn" class="file-modal__accept" type="button">Elfogadom</button>
+              <button id="incomingAcceptBtn" class="file-modal__accept" type="button">Elfogadom (Letöltés)</button>
             </div>
           </div>
         </div>
@@ -1821,12 +1826,15 @@
         return;
       }
 
+      console.log("Meta adat érkezett", meta);
+
       incomingFileName.textContent = meta.name || "Ismeretlen";
       incomingFileSize.textContent = formatFileSize(meta.size);
       incomingFileType.textContent = meta.mimeType || "Ismeretlen";
 
       pendingIncomingRequest = { onAccept, onReject };
       incomingFileModal.classList.add("modal-overlay--visible");
+      console.log("Modal megnyitása");
     }
 
     function resetTransferUI() {
@@ -1971,6 +1979,7 @@
 
       if (incomingAcceptBtn) {
         incomingAcceptBtn.addEventListener("click", () => {
+          console.log("Felhasználó elfogadta a bejövő fájlt");
           if (pendingIncomingRequest?.onAccept) {
             pendingIncomingRequest.onAccept();
           }
@@ -1980,6 +1989,7 @@
 
       if (incomingRejectBtn) {
         incomingRejectBtn.addEventListener("click", () => {
+          console.log("Felhasználó elutasította a bejövő fájlt");
           if (pendingIncomingRequest?.onReject) {
             pendingIncomingRequest.onReject();
           }
@@ -2066,6 +2076,8 @@
           return;
         }
 
+        console.log("P2P adat érkezett", data.type, data);
+
         if (data.type === "meta") {
           const meta = {
             name: data.name,
@@ -2096,12 +2108,14 @@
             }
 
             conn.send({ type: "accept" });
+            console.log("Accept üzenet elküldve a küldőnek");
           }, () => {
             conn.send({ type: "reject" });
             resetTransferUI();
             if (p2pTransferMessage) {
               p2pTransferMessage.textContent = "A fájlátvitel elutasítva.";
             }
+            console.log("Reject üzenet elküldve a küldőnek");
           });
 
           return;
@@ -2138,6 +2152,7 @@
           a.click();
           a.remove();
           URL.revokeObjectURL(url);
+          console.log("Fájl letöltése elindítva", incomingTransfer.name);
           resetTransferUI();
           incomingTransfer = null;
           if (p2pTransferMessage) {
