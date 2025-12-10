@@ -304,7 +304,7 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        const { rows } = await db.query('SELECT id, username, password, is_admin, profile_picture_filename FROM users WHERE username = $1', [username]);
+        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, profile_picture_filename FROM users WHERE username = $1', [username]);
         const user = rows[0];
 
         if (!user) {
@@ -325,6 +325,7 @@ app.post('/login', async (req, res) => {
             token,
             username: user.username,
             isAdmin,
+            canTransfer: Number(user.can_transfer) === 1,
             profile_picture_filename: user.profile_picture_filename
         });
     } catch (err) {
@@ -339,7 +340,7 @@ app.post('/logout', (req, res) => {
 
 app.get('/api/profile', authenticateToken, async (req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, username, is_admin, profile_picture_filename FROM users WHERE id = $1', [req.user.id]);
+        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, profile_picture_filename FROM users WHERE id = $1', [req.user.id]);
         const user = rows[0];
 
         if (!user) {
@@ -350,6 +351,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
             id: user.id,
             username: user.username,
             isAdmin: user.is_admin === 1,
+            canTransfer: Number(user.can_transfer) === 1,
             profile_picture_filename: user.profile_picture_filename
         });
     } catch (err) {
