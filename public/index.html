@@ -1799,6 +1799,8 @@
         const sections = document.querySelectorAll("main section");
         const availableTargets = new Set(navLinks.map((link) => link.dataset.section));
 
+        availableTargets.add("profile");
+
         if (!availableTargets.has(target)) {
           target = "home";
         }
