@@ -1795,19 +1795,19 @@
             <button class="download-btn" disabled>Letöltés</button>
           </div>
           <div class="box">
-            <img src="program_icons/placeholder.png" alt="Program ikon" class="program-icon" />
+            <img src="program_icons/default-avatar.png" alt="Program ikon" class="program-icon" />
             <h3>Program 2</h3>
             <p>Hamarosan...</p>
             <button class="download-btn" disabled>Letöltés</button>
           </div>
           <div class="box">
-            <img src="program_icons/placeholder.png" alt="Program ikon" class="program-icon" />
+            <img src="program_icons/default-avatar.png" alt="Program ikon" class="program-icon" />
             <h3>Program 3</h3>
             <p>Hamarosan...</p>
             <button class="download-btn" disabled>Letöltés</button>
           </div>
           <div class="box">
-            <img src="program_icons/placeholder.png" alt="Program ikon" class="program-icon" />
+            <img src="program_icons/default-avatar.png" alt="Program ikon" class="program-icon" />
             <h3>Program 4</h3>
             <p>Hamarosan...</p>
             <button class="download-btn" disabled>Letöltés</button>
@@ -2698,7 +2698,21 @@
       }
 
       peer = new Peer({
-        config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] },
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" },
+            { urls: "stun:stun.framasoft.org" },
+            { urls: "stun:stun.voip.blackberry.com:3478" },
+            { urls: "stun:stun.antisip.com" },
+            { urls: "stun:stun.sipgate.net" },
+            { urls: "stun:openrelay.metered.ca:80" },
+          ],
+          iceCandidatePoolSize: 10,
+        },
       });
       peer.on("open", (id) => {
         peerId = id;
@@ -2991,12 +3005,17 @@
       const conn = peer.connect(receiver.peerId);
       const transferId = `outgoing-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+      const safeName = file?.name || "ismeretlen_fajl";
+      const safeSize = typeof file?.size === "number" ? file.size : 0;
+      const safeType =
+        file?.type && file.type.trim() !== "" ? file.type : "application/octet-stream";
+
       const transfer = createTransferCard({
         id: transferId,
         direction: "outgoing",
-        name: file.name,
-        size: file.size,
-        mimeType: file.type,
+        name: safeName,
+        size: safeSize,
+        mimeType: safeType,
         status: `Kapcsolódás ${receiver.username} felé...`,
       });
 
@@ -3025,7 +3044,7 @@
       conn.on("open", () => {
         clearTimeout(connectionTimeout);
         updateTransferStatus(transfer, "Kapcsolat létrejött, metaadat küldése...");
-        conn.send({ type: "meta", name: file.name, size: file.size, mimeType: file.type });
+        conn.send({ type: "meta", name: safeName, size: safeSize, mimeType: safeType });
       });
 
       conn.on("data", async (data) => {
