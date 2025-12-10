@@ -684,10 +684,10 @@ const avatarDirectory = path.join(uploadsDirectory, 'avatars');
 ensureDirectoryExists(avatarDirectory);
 
 const avatarStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
+    destination: (_req, _file, cb) => {
         cb(null, avatarDirectory);
     },
-    filename: (req, file, cb) => {
+    filename: (_req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
         cb(null, uniqueName);
     }
@@ -696,7 +696,7 @@ const avatarStorage = multer.diskStorage({
 const uploadAvatar = multer({
     storage: avatarStorage,
     limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-    fileFilter: (req, file, cb) => {
+    fileFilter: (_req, file, cb) => {
         const allowedTypes = /jpeg|jpg|png|gif/;
         const mimetype = allowedTypes.test(file.mimetype);
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -708,55 +708,44 @@ const uploadAvatar = multer({
 }).single('avatar');
 
 app.post('/api/profile/upload-avatar', authenticateToken, (req, res) => {
-    const avatarDir = path.join(__dirname, '..', 'public', 'uploads', 'avatars');
-
-    fs.readdir(avatarDir, (err, files) => {
-        if (err) {
-            console.error('Hiba az avatár könyvtár olvasásakor:', err);
-            return res.status(500).json({ message: 'Nem sikerült ellenőrizni a feltöltési limitet.' });
+    uploadAvatar(req, res, async (uploadErr) => {
+        if (uploadErr) {
+            if (uploadErr instanceof multer.MulterError) {
+                const message = uploadErr.code === 'LIMIT_FILE_SIZE'
+                    ? 'A képfájl mérete nem haladhatja meg az 5MB-ot.'
+                    : 'Feltöltési hiba.';
+                return res.status(400).json({ message });
+            }
+            return res.status(400).json({ message: uploadErr.message });
         }
 
-        if (files.length >= 20) {
-            return res.status(403).json({ message: 'Elértük a maximális profilkép feltöltési limitet (20).' });
+        if (!req.file) {
+            return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
         }
 
-        uploadAvatar(req, res, async (uploadErr) => {
-            if (uploadErr) {
-                if (uploadErr instanceof multer.MulterError) {
-                    return res.status(400).json({
-                        message: uploadErr.code === 'LIMIT_FILE_SIZE'
-                            ? 'A képfájl mérete nem haladhatja meg az 5MB-ot.'
-                            : 'Feltöltési hiba.'
-                    });
-                }
-                return res.status(400).json({ message: uploadErr.message });
+        const { filename } = req.file;
+        const userId = req.user.id;
+
+        try {
+            const { rows } = await db.query('SELECT profile_picture_filename FROM users WHERE id = $1', [userId]);
+            const oldFilename = rows[0]?.profile_picture_filename;
+
+            await db.query('UPDATE users SET profile_picture_filename = $1 WHERE id = $2', [filename, userId]);
+
+            if (oldFilename) {
+                const oldPath = path.join(avatarDirectory, oldFilename);
+                fs.unlink(oldPath, (unlinkErr) => {
+                    if (unlinkErr && unlinkErr.code !== 'ENOENT') {
+                        console.error('Hiba a régi avatár törlésekor:', unlinkErr);
+                    }
+                });
             }
 
-            if (!req.file) {
-                return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
-            }
-
-            const { filename } = req.file;
-            const userId = req.user.id;
-
-            try {
-                const { rows } = await db.query('SELECT profile_picture_filename FROM users WHERE id = $1', [userId]);
-                const oldFilename = rows[0]?.profile_picture_filename;
-
-                if (oldFilename) {
-                    const oldPath = path.join(avatarDir, oldFilename);
-                    fs.unlink(oldPath, (unlinkErr) => {
-                        if (unlinkErr) console.error('Hiba a régi avatár törlésekor:', unlinkErr);
-                    });
-                }
-
-                await db.query('UPDATE users SET profile_picture_filename = $1 WHERE id = $2', [filename, userId]);
-                res.status(200).json({ message: 'Profilkép sikeresen frissítve.', filename });
-            } catch (dbErr) {
-                console.error('Hiba a profilkép frissítésekor:', dbErr);
-                res.status(500).json({ message: 'Nem sikerült frissíteni a profilképet.' });
-            }
-        });
+            res.status(200).json({ message: 'Profilkép sikeresen frissítve.', filename });
+        } catch (dbErr) {
+            console.error('Hiba a profilkép frissítésekor:', dbErr);
+            res.status(500).json({ message: 'Nem sikerült frissíteni a profilképet.' });
+        }
     });
 });
 
@@ -780,12 +769,18 @@ app.post('/api/profile/update-name', authenticateToken, async (req, res) => {
     }
 
     try {
-        await db.query('UPDATE users SET username = $1 WHERE id = $2', [newUsername.trim(), userId]);
-        res.status(200).json({ message: 'Felhasználónév sikeresen frissítve.', newUsername: newUsername.trim() });
-    } catch (err) {
-        if (err.code === '23505') { // unique_violation
+        const trimmedUsername = newUsername.trim();
+
+        const { rows } = await db.query('SELECT id FROM users WHERE username = $1', [trimmedUsername]);
+        const existingUser = rows[0];
+
+        if (existingUser && existingUser.id !== userId) {
             return res.status(409).json({ message: 'Ez a felhasználónév már foglalt.' });
         }
+
+        await db.query('UPDATE users SET username = $1 WHERE id = $2', [trimmedUsername, userId]);
+        res.status(200).json({ message: 'Felhasználónév sikeresen frissítve.', newUsername: trimmedUsername });
+    } catch (err) {
         console.error('Hiba a felhasználónév frissítésekor:', err);
         res.status(500).json({ message: 'Nem sikerült frissíteni a felhasználónevet.' });
     }
