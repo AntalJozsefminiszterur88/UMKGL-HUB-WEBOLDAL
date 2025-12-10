@@ -2946,8 +2946,20 @@
             transfer.startTime = Date.now();
           }
 
-          transfer.chunks.push(data.data);
-          transfer.received += data.data ? data.data.byteLength || 0 : 0;
+          const chunkBuffer =
+            data.data instanceof ArrayBuffer
+              ? data.data
+              : data.data?.buffer instanceof ArrayBuffer
+                ? data.data.buffer
+                : null;
+
+          if (!chunkBuffer) {
+            console.warn("Érvénytelen chunk érkezett, kihagyva.");
+            return;
+          }
+
+          transfer.chunks.push(chunkBuffer);
+          transfer.received += chunkBuffer.byteLength;
 
           if (transfer.size) {
             const percent = Math.min(100, Math.round((transfer.received / transfer.size) * 100));
@@ -2961,6 +2973,14 @@
         }
 
         if (data.type === "complete") {
+          if (typeof transfer.size === "number" && transfer.received !== transfer.size) {
+            console.error(
+              "Átvitel sikertelen: a beérkezett méret nem egyezik a metaadatban lévő mérettel.",
+            );
+            finalizeTransfer(transfer, "Hiba: a fájl mérete nem stimmel, letöltés megszakítva.");
+            return;
+          }
+
           const blob = new Blob(transfer.chunks, {
             type: transfer.mimeType || "application/octet-stream",
           });
@@ -3012,7 +3032,9 @@
       }
 
       const { conn, file } = transfer;
-      const chunkSize = 64 * 1024;
+      const chunkSize = 65536;
+      const bufferedThreshold = 10 * 1024 * 1024;
+      let chunksSent = 0;
       let offset = 0;
       transfer.startTime = transfer.startTime || Date.now();
 
@@ -3021,14 +3043,25 @@
           finalizeTransfer(transfer, "Küldés megszakítva.");
           return;
         }
+
+        while ((conn.dataChannel?.bufferedAmount ?? 0) > bufferedThreshold) {
+          await new Promise((resolve) => setTimeout(resolve, 15));
+          if (transfer.isCancelled) {
+            finalizeTransfer(transfer, "Küldés megszakítva.");
+            return;
+          }
+        }
         const slice = file.slice(offset, offset + chunkSize);
         const buffer = await slice.arrayBuffer();
         conn.send({ type: "chunk", data: buffer });
         offset += buffer.byteLength;
+        chunksSent += 1;
 
-        const percent = Math.min(100, Math.round((offset / file.size) * 100));
-        updateTransferStatus(transfer, `Küldés: ${percent}%`);
-        updateTransferProgress(transfer, offset, file.size);
+        if (chunksSent % 50 === 0 || offset >= file.size) {
+          const percent = Math.min(100, Math.round((offset / file.size) * 100));
+          updateTransferStatus(transfer, `Küldés: ${percent}%`);
+          updateTransferProgress(transfer, offset, file.size);
+        }
       }
 
       if (transfer.isCancelled) {
