@@ -285,6 +285,7 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
+        transform-origin: center center;
         will-change: transform;
       }
 
@@ -2299,7 +2300,15 @@
       startX: 0,
       startY: 0,
       isDragging: false,
+      scale: 1,
+      minScale: 0.6,
+      maxScale: 2.5,
+      zoomStep: 0.12,
     };
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
 
     function updateSelfLabelText(name) {
       if (!selfLabel) {
@@ -2315,7 +2324,7 @@
         return;
       }
 
-      radarWorld.style.transform = `translate(-50%, -50%) translate(${radarPanState.offsetX}px, ${radarPanState.offsetY}px)`;
+      radarWorld.style.transform = `translate(-50%, -50%) translate(${radarPanState.offsetX}px, ${radarPanState.offsetY}px) scale(${radarPanState.scale})`;
     }
 
     function setupRadarPanning() {
@@ -2355,6 +2364,40 @@
       window.addEventListener("mouseup", endPan);
 
       applyRadarPan();
+    }
+
+    function setupRadarZoom() {
+      if (!radarViewport || !radarWorld) {
+        return;
+      }
+
+      const handleWheel = (event) => {
+        event.preventDefault();
+
+        const direction = event.deltaY < 0 ? 1 : -1;
+        const scaleChange = direction * radarPanState.zoomStep;
+        const newScale = clamp(
+          radarPanState.scale + scaleChange,
+          radarPanState.minScale,
+          radarPanState.maxScale,
+        );
+
+        if (newScale === radarPanState.scale) {
+          return;
+        }
+
+        const rect = radarViewport.getBoundingClientRect();
+        const offsetFromCenterX = event.clientX - rect.left - rect.width / 2;
+        const offsetFromCenterY = event.clientY - rect.top - rect.height / 2;
+
+        radarPanState.offsetX -= offsetFromCenterX * (newScale - radarPanState.scale);
+        radarPanState.offsetY -= offsetFromCenterY * (newScale - radarPanState.scale);
+
+        radarPanState.scale = newScale;
+        applyRadarPan();
+      };
+
+      radarViewport.addEventListener("wheel", handleWheel, { passive: false });
     }
 
     function decodeTokenPayload(token) {
@@ -2733,6 +2776,7 @@
 
     function setupFileTransferUI() {
       setupRadarPanning();
+      setupRadarZoom();
       updateSelfLabelText();
 
       if (receiverToggle) {
