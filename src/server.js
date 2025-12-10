@@ -213,10 +213,11 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 const activeReceivers = new Map();
 
 function broadcastReceiversList() {
-    const receivers = Array.from(activeReceivers.values()).map(({ userId, username, peerId }) => ({
+    const receivers = Array.from(activeReceivers.values()).map(({ userId, username, peerId, profilePictureFilename }) => ({
         userId,
         username,
         peerId,
+        profile_picture_filename: profilePictureFilename,
     }));
     io.emit('update_receivers_list', receivers);
 }
@@ -243,7 +244,7 @@ io.on('connection', (socket) => {
         try {
             const decoded = jwt.verify(token, JWT_SECRET);
             const userId = decoded.id;
-            const { rows } = await db.query('SELECT username, can_transfer FROM users WHERE id = $1', [userId]);
+            const { rows } = await db.query('SELECT username, can_transfer, profile_picture_filename FROM users WHERE id = $1', [userId]);
             const user = rows[0];
 
             if (!user || Number(user.can_transfer) !== 1) {
@@ -255,6 +256,7 @@ io.on('connection', (socket) => {
                 userId,
                 username: user.username,
                 peerId,
+                profilePictureFilename: user.profile_picture_filename,
                 socketId: socket.id,
             });
             broadcastReceiversList();
