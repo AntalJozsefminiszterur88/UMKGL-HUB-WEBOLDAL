@@ -94,13 +94,19 @@
 
       .file-modal__close {
         position: absolute;
-        top: 12px;
-        right: 12px;
+        top: 10px;
+        right: 10px;
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         background: transparent;
         border: none;
         color: #a9abb0;
         font-size: 1.25rem;
         cursor: pointer;
+        line-height: 1;
       }
 
       .file-modal__close:hover {
@@ -1700,81 +1706,6 @@
         showSection(hash, false);
       });
 
-      if (receiverToggle) {
-        receiverToggle.addEventListener("change", () => {
-          if (!isUserLoggedIn()) {
-            updateReceiverStatus("A fogadó mód használatához jelentkezz be.");
-            receiverToggle.checked = false;
-            return;
-          }
-          initializeRealtimeFeatures();
-          if (receiverToggle.checked) {
-            registerReceiverIfEnabled();
-          } else if (socket) {
-            socket.emit("unregister_receiver");
-            updateReceiverStatus("Fogadó mód kikapcsolva.");
-          }
-        });
-      }
-
-      if (incomingAcceptBtn) {
-        incomingAcceptBtn.addEventListener("click", () => {
-          if (pendingIncomingRequest?.onAccept) {
-            pendingIncomingRequest.onAccept();
-          }
-          closeIncomingFileModal();
-        });
-      }
-
-      if (incomingRejectBtn) {
-        incomingRejectBtn.addEventListener("click", () => {
-          if (pendingIncomingRequest?.onReject) {
-            pendingIncomingRequest.onReject();
-          }
-          closeIncomingFileModal();
-        });
-      }
-
-      if (incomingCloseBtn) {
-        incomingCloseBtn.addEventListener("click", () => {
-          closeIncomingFileModal();
-        });
-      }
-
-      if (receiverList) {
-        receiverList.addEventListener("click", (event) => {
-          const btn = event.target.closest("button[data-peer-id]");
-          if (!btn) {
-            return;
-          }
-
-          if (!isUserLoggedIn()) {
-            updateReceiverStatus("A fájlküldéshez jelentkezz be.");
-            return;
-          }
-
-          initializeRealtimeFeatures();
-          selectedReceiver = {
-            peerId: btn.dataset.peerId,
-            username: btn.dataset.username,
-          };
-          if (p2pFileInput) {
-            p2pFileInput.click();
-          }
-        });
-      }
-
-      if (p2pFileInput) {
-        p2pFileInput.addEventListener("change", (event) => {
-          const file = event.target.files[0];
-          if (!file || !selectedReceiver) {
-            return;
-          }
-          initializeRealtimeFeatures();
-          resetTransferUI();
-          startFileSend(selectedReceiver, file);
-        });
-      }
     </script>
 
   <script>
@@ -2011,6 +1942,87 @@
       ensureSocketConnection();
       ensurePeerConnection();
     }
+
+    function setupFileTransferUI() {
+      if (receiverToggle) {
+        receiverToggle.addEventListener("change", () => {
+          if (!isUserLoggedIn()) {
+            updateReceiverStatus("A fogadó mód használatához jelentkezz be.");
+            receiverToggle.checked = false;
+            return;
+          }
+
+          initializeRealtimeFeatures();
+          if (receiverToggle.checked) {
+            registerReceiverIfEnabled();
+          } else if (socket) {
+            socket.emit("unregister_receiver");
+            updateReceiverStatus("Fogadó mód kikapcsolva.");
+          }
+        });
+      }
+
+      if (incomingAcceptBtn) {
+        incomingAcceptBtn.addEventListener("click", () => {
+          if (pendingIncomingRequest?.onAccept) {
+            pendingIncomingRequest.onAccept();
+          }
+          closeIncomingFileModal();
+        });
+      }
+
+      if (incomingRejectBtn) {
+        incomingRejectBtn.addEventListener("click", () => {
+          if (pendingIncomingRequest?.onReject) {
+            pendingIncomingRequest.onReject();
+          }
+          closeIncomingFileModal();
+        });
+      }
+
+      if (incomingCloseBtn) {
+        incomingCloseBtn.addEventListener("click", () => {
+          closeIncomingFileModal();
+        });
+      }
+
+      if (receiverList) {
+        receiverList.addEventListener("click", (event) => {
+          const btn = event.target.closest("button[data-peer-id]");
+          if (!btn) {
+            return;
+          }
+
+          if (!isUserLoggedIn()) {
+            updateReceiverStatus("A fájlküldéshez jelentkezz be.");
+            return;
+          }
+
+          initializeRealtimeFeatures();
+          selectedReceiver = {
+            peerId: btn.dataset.peerId,
+            username: btn.dataset.username,
+          };
+          if (p2pFileInput) {
+            p2pFileInput.click();
+          }
+        });
+      }
+
+      if (p2pFileInput) {
+        p2pFileInput.addEventListener("change", (event) => {
+          const file = event.target.files[0];
+          if (!file || !selectedReceiver) {
+            return;
+          }
+          initializeRealtimeFeatures();
+          resetTransferUI();
+          startFileSend(selectedReceiver, file);
+        });
+      }
+    }
+
+    setupFileTransferUI();
 
     function teardownRealtimeFeatures() {
       if (socket) {
