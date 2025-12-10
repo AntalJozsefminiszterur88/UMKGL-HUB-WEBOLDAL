@@ -1896,11 +1896,18 @@
 
       socket = io({
         auth: { token: getStoredToken() },
+        transports: ["websocket"],
+        upgrade: false,
       });
 
       socket.on("connect", () => {
         updateReceiverStatus("Kapcsolódva a jelző szerverhez.");
         registerReceiverIfEnabled();
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("Socket csatlakozási hiba:", err);
+        updateReceiverStatus("Nem sikerült kapcsolódni a szerverhez (Socket hiba).");
       });
 
       socket.on("update_receivers_list", (list) => {
