@@ -2559,7 +2559,8 @@
 
       function openUploadModal() {
         if (uploadModal) {
-          uploadModal.style.display = "flex";
+          uploadModal.style.display = "";
+          uploadModal.classList.add("modal-overlay--visible");
         }
         fetchTags();
         resetUploadModal();
@@ -2567,7 +2568,8 @@
 
       function closeUploadModal() {
         if (uploadModal) {
-          uploadModal.style.display = "none";
+          uploadModal.classList.remove("modal-overlay--visible");
+          uploadModal.style.display = "";
         }
         resetUploadModal();
       }
