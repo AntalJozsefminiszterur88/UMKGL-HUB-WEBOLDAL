@@ -632,16 +632,114 @@ app.delete('/api/polls/:pollId', authenticateToken, isAdmin, async (req, res) =>
     }
 });
 
+app.get('/api/tags', async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, name, created_at FROM tags ORDER BY name ASC');
+        res.status(200).json(rows || []);
+    } catch (err) {
+        console.error('Hiba a címkék lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni a címkéket.' });
+    }
+});
+
+app.post('/api/tags', authenticateToken, isAdmin, async (req, res) => {
+    const { name } = req.body;
+    const trimmedName = (name || '').trim();
+
+    if (!trimmedName) {
+        return res.status(400).json({ message: 'A címke neve nem lehet üres.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'INSERT INTO tags (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING id, name, created_at',
+            [trimmedName]
+        );
+
+        if (!rows[0]) {
+            return res.status(409).json({ message: 'A címke már létezik.' });
+        }
+
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error('Hiba a címke létrehozása során:', err);
+        res.status(500).json({ message: 'Nem sikerült létrehozni a címkét.' });
+    }
+});
+
 app.get('/api/videos', async (req, res) => {
     try {
-        const query = `
-            SELECT videos.filename, users.username
-            FROM videos
-            LEFT JOIN users ON videos.uploader_id = users.id
-            ORDER BY videos.uploaded_at DESC
+        const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+        const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 9, 1), 50);
+        const search = (req.query.search || '').trim();
+        const tagId = Number.parseInt(req.query.tag, 10);
+        const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom) : null;
+        const dateTo = req.query.dateTo ? new Date(req.query.dateTo) : null;
+
+        const filters = [];
+        const params = [];
+
+        if (search) {
+            const idx = params.push(`%${search}%`);
+            filters.push(`(videos.original_name ILIKE $${idx} OR videos.filename ILIKE $${idx})`);
+        }
+
+        if (Number.isInteger(tagId)) {
+            const idx = params.push(tagId);
+            filters.push(`EXISTS (SELECT 1 FROM video_tags vt WHERE vt.video_id = videos.id AND vt.tag_id = $${idx})`);
+        }
+
+        if (dateFrom && !Number.isNaN(dateFrom.getTime())) {
+            const idx = params.push(dateFrom);
+            filters.push(`videos.uploaded_at >= $${idx}`);
+        }
+
+        if (dateTo && !Number.isNaN(dateTo.getTime())) {
+            const idx = params.push(dateTo);
+            filters.push(`videos.uploaded_at <= $${idx}`);
+        }
+
+        const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+        const countQuery = `SELECT COUNT(*) FROM videos ${whereClause}`;
+        const { rows: countRows } = await db.query(countQuery, params);
+        const totalItems = Number(countRows[0]?.count || 0);
+        const totalPages = totalItems > 0 ? Math.ceil(totalItems / limit) : 0;
+        const currentPage = totalPages > 0 ? Math.min(page, totalPages) : 1;
+        const offset = (currentPage - 1) * limit;
+
+        const dataParams = params.slice();
+        dataParams.push(limit, offset);
+
+        const dataQuery = `
+            WITH filtered_videos AS (
+                SELECT videos.*, users.username
+                FROM videos
+                LEFT JOIN users ON videos.uploader_id = users.id
+                ${whereClause}
+                ORDER BY videos.uploaded_at DESC
+                LIMIT $${dataParams.length - 1}
+                OFFSET $${dataParams.length}
+            )
+            SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username,
+                   COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name)) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
+            FROM filtered_videos fv
+            LEFT JOIN video_tags vt ON vt.video_id = fv.id
+            LEFT JOIN tags t ON vt.tag_id = t.id
+            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username
+            ORDER BY fv.uploaded_at DESC;
         `;
-        const { rows } = await db.query(query);
-        res.status(200).json(rows || []);
+
+        const { rows } = await db.query(dataQuery, dataParams);
+
+        res.status(200).json({
+            data: rows || [],
+            pagination: {
+                totalItems,
+                totalPages,
+                currentPage,
+            },
+        });
     } catch (err) {
         console.error('Hiba a videók lekérdezésekor:', err);
         res.status(500).json({ message: 'Nem sikerült lekérdezni a videókat.' });
@@ -653,33 +751,96 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
     if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
         limits.fileSize = req.uploadSettings.maxFileSizeBytes;
     }
-    const perUserUpload = multer({ storage, limits }).single('video');
+    const perUserUpload = multer({ storage, limits }).array('videos');
     perUserUpload(req, res, (err) => {
         if (err) return next(err);
         next();
     });
 }, async (req, res) => {
-    if (!req.file) {
+    if (!req.files || !req.files.length) {
         return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
     }
 
     const uploaderId = req.user.id;
-    const { filename, originalname } = req.file;
+    const projectedUploadCount = req.uploadSettings
+        ? req.uploadSettings.uploadCount + req.files.length
+        : null;
+
+    if (req.uploadSettings && req.uploadSettings.maxVideos > 0 && projectedUploadCount > req.uploadSettings.maxVideos) {
+        return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
+    }
+
+    const tagIds = (() => {
+        try {
+            const parsed = JSON.parse(req.body.tags || '[]');
+            return Array.isArray(parsed)
+                ? Array.from(new Set(parsed.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)))
+                : [];
+        } catch (err) {
+            return [];
+        }
+    })();
 
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
-        const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id) VALUES ($1, $2, $3)`;
-        await client.query(insertVideoQuery, [filename, originalname, uploaderId]);
-        await client.query('UPDATE users SET upload_count = upload_count + 1 WHERE id = $1', [uploaderId]);
+        for (const file of req.files) {
+            const { filename, originalname } = file;
+            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id) VALUES ($1, $2, $3) RETURNING id`;
+            const { rows } = await client.query(insertVideoQuery, [filename, originalname, uploaderId]);
+            const videoId = rows[0]?.id;
+
+            if (videoId && tagIds.length) {
+                for (const tagId of tagIds) {
+                    await client.query(
+                        'INSERT INTO video_tags (video_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                        [videoId, tagId]
+                    );
+                }
+            }
+        }
+
+        await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [req.files.length, uploaderId]);
         await client.query('COMMIT');
-        res.status(201).json({ message: 'Videó sikeresen feltöltve.' });
+        res.status(201).json({ message: 'Videók sikeresen feltöltve.' });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Hiba a videó feltöltésekor:', err);
         res.status(500).json({ message: 'Nem sikerült menteni a videó adatait.' });
     } finally {
         client.release();
+    }
+});
+
+app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+    }
+
+    try {
+        const { rows } = await db.query('SELECT filename FROM videos WHERE id = $1', [videoId]);
+        const video = rows[0];
+
+        if (!video) {
+            return res.status(404).json({ message: 'A videó nem található.' });
+        }
+
+        const filePath = path.join(uploadsDirectory, video.filename);
+        try {
+            await fs.promises.unlink(filePath);
+        } catch (err) {
+            if (err.code !== 'ENOENT') {
+                console.error('Hiba a videófájl törlésekor:', err);
+                return res.status(500).json({ message: 'Nem sikerült törölni a videófájlt.' });
+            }
+        }
+
+        await db.query('DELETE FROM videos WHERE id = $1', [videoId]);
+        res.status(200).json({ message: 'Videó sikeresen törölve.' });
+    } catch (err) {
+        console.error('Hiba a videó törlésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült törölni a videót.' });
     }
 });
 

@@ -59,6 +59,22 @@ async function initializeDatabase() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS video_tags (
+        video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (video_id, tag_id)
+      )
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS polls (
           id SERIAL PRIMARY KEY,
           question TEXT NOT NULL,
