@@ -1796,7 +1796,7 @@
             <h2>Klipek</h2>
             <p>Fedezd fel a legújabb videókat, szűrj címkék és dátum szerint.</p>
           </div>
-          <button id="showUploadModalBtn" class="primary-btn">Feltöltés</button>
+          <button id="showUploadModalBtn" class="primary-button">Feltöltés</button>
         </div>
 
         <div class="clip-filters">
@@ -2094,696 +2094,6 @@
     <footer>
       <p>© 2025 UMGKL HUB Minden jog fenntartva</p>
     </footer>
-
-    <script>
-      const summaryToggleBtn = document.getElementById("summaryToggleBtn");
-      const summaryCard = document.getElementById("summaryCard");
-      const summaryCloseBtn = document.getElementById("summaryCloseBtn");
-      const videoGridContainer = document.getElementById("video-grid-container");
-      const videoPagination = document.getElementById("video-pagination");
-      const showUploadModalBtn = document.getElementById("showUploadModalBtn");
-      const uploadModal = document.getElementById("uploadModal");
-      const closeUploadModalBtn = document.getElementById("closeUploadModal");
-      const dropZone = document.getElementById("drop-zone");
-      const fileInput = document.getElementById("fileInput");
-      const uploadBtn = document.getElementById("uploadBtn");
-      const uploadStatus = document.getElementById("uploadStatus");
-      const selectedFileName = document.getElementById("selectedFileName");
-      const selectedFilesList = document.getElementById("selectedFilesList");
-      const videoSearchInput = document.getElementById("videoSearchInput");
-      const tagFilterSelect = document.getElementById("tagFilterSelect");
-      const dateFromInput = document.getElementById("dateFromInput");
-      const dateToInput = document.getElementById("dateToInput");
-      const filterResetBtn = document.getElementById("filterResetBtn");
-      const tagChecklist = document.getElementById("tagChecklist");
-      const createTagWrapper = document.getElementById("createTagWrapper");
-      const newTagNameInput = document.getElementById("newTagName");
-      const createTagButton = document.getElementById("createTagButton");
-      const createTagStatus = document.getElementById("createTagStatus");
-      const ADMIN_SESSION_KEY = "isAdmin";
-      const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
-      let selectedVideoFiles = [];
-      let availableTags = [];
-      const videoFilters = {
-        page: 1,
-        limit: 9,
-        search: "",
-        tag: "",
-        dateFrom: "",
-        dateTo: "",
-      };
-
-      if (summaryToggleBtn && summaryCard) {
-        summaryToggleBtn.addEventListener("click", () => {
-          summaryCard.classList.add("summary-card--visible");
-          summaryCard.setAttribute("aria-hidden", "false");
-          summaryToggleBtn.setAttribute("aria-expanded", "true");
-          summaryToggleBtn.classList.add("is-hidden");
-
-          if (summaryCloseBtn) {
-            summaryCloseBtn.focus();
-          }
-        });
-      }
-
-      if (summaryCloseBtn && summaryCard && summaryToggleBtn) {
-        summaryCloseBtn.addEventListener("click", () => {
-          summaryCard.classList.remove("summary-card--visible");
-          summaryCard.setAttribute("aria-hidden", "true");
-          summaryToggleBtn.setAttribute("aria-expanded", "false");
-          summaryToggleBtn.classList.remove("is-hidden");
-          summaryToggleBtn.focus();
-        });
-      }
-
-      function isAdminUser() {
-        return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
-      }
-
-      function hasFileTransferPermission() {
-        return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canTransfer) === "true";
-      }
-
-      function getAccessibleNavLinks() {
-        return Array.from(document.querySelectorAll("nav a")).filter((link) => {
-          const requiresAdmin = link.dataset.requiresAdmin === "true";
-          const requiresTransfer = link.dataset.requiresTransfer === "true";
-
-          if (requiresAdmin && !isAdminUser()) {
-            return false;
-          }
-
-          if (requiresTransfer && !hasFileTransferPermission()) {
-            return false;
-          }
-
-          return true;
-        });
-      }
-
-      function formatDate(dateString) {
-        if (!dateString) return "Ismeretlen";
-        const date = new Date(dateString);
-        return date.toLocaleDateString("hu-HU", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-      }
-
-      function renderTagChecklist() {
-        if (!tagChecklist) return;
-        tagChecklist.innerHTML = "";
-        if (!availableTags.length) {
-          tagChecklist.innerHTML = "<p>Nincsenek címkék.</p>";
-          return;
-        }
-        availableTags.forEach((tag) => {
-          const label = document.createElement("label");
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.value = String(tag.id);
-          label.appendChild(checkbox);
-          label.append(tag.name);
-          tagChecklist.appendChild(label);
-        });
-      }
-
-      function populateTagSelect() {
-        if (!tagFilterSelect) return;
-        const currentValue = tagFilterSelect.value;
-        tagFilterSelect.innerHTML = '<option value="">Összes címke</option>';
-        availableTags.forEach((tag) => {
-          const option = document.createElement("option");
-          option.value = String(tag.id);
-          option.textContent = tag.name;
-          tagFilterSelect.appendChild(option);
-        });
-        if (currentValue) {
-          tagFilterSelect.value = currentValue;
-        }
-      }
-
-      async function fetchTags() {
-        try {
-          const response = await fetch("/api/tags");
-          if (!response.ok) throw new Error("Nem sikerült lekérni a címkéket.");
-          availableTags = await response.json();
-          populateTagSelect();
-          renderTagChecklist();
-          if (createTagWrapper) {
-            createTagWrapper.style.display = isAdminUser() ? "block" : "none";
-          }
-        } catch (error) {
-          console.error(error);
-        }
-      }
-
-      function getSelectedTagIds() {
-        if (!tagChecklist) return [];
-        return Array.from(tagChecklist.querySelectorAll("input[type='checkbox']"))
-          .filter((input) => input.checked)
-          .map((input) => Number(input.value))
-          .filter((val) => Number.isFinite(val));
-      }
-
-      function updateSelectedFilesDisplay() {
-        if (!selectedFilesList || !selectedFileName) return;
-        if (!selectedVideoFiles.length) {
-          selectedFilesList.innerHTML = "";
-          selectedFileName.textContent = "Nincs kiválasztott fájl.";
-          return;
-        }
-        selectedFileName.textContent = `${selectedVideoFiles.length} fájl kiválasztva.`;
-        selectedFilesList.innerHTML = "";
-        selectedVideoFiles.forEach((file) => {
-          const li = document.createElement("li");
-          li.textContent = file.name;
-          selectedFilesList.appendChild(li);
-        });
-      }
-
-      async function loadVideos() {
-        if (!videoGridContainer) {
-          return;
-        }
-
-        videoGridContainer.innerHTML = "";
-        if (videoPagination) videoPagination.innerHTML = "";
-
-        const params = new URLSearchParams();
-        Object.entries(videoFilters).forEach(([key, value]) => {
-          if (value) params.append(key, value);
-        });
-
-        try {
-          const response = await fetch(`/api/videos?${params.toString()}`);
-
-          if (!response.ok) {
-            throw new Error("Nem sikerült betölteni a videókat.");
-          }
-
-          const { data, pagination } = await response.json();
-          videoFilters.page = pagination?.currentPage || videoFilters.page;
-
-          if (!Array.isArray(data) || data.length === 0) {
-            videoGridContainer.innerHTML = "<p>Még senki nem töltött fel videót.</p>";
-            return;
-          }
-
-          renderVideoGrid(data);
-          renderPagination(pagination);
-        } catch (error) {
-          console.error("Videók betöltési hibája:", error);
-          videoGridContainer.innerHTML = "<p>Nem sikerült betölteni a videókat.</p>";
-        }
-      }
-
-      function renderVideoGrid(videos) {
-        videoGridContainer.innerHTML = "";
-        videos.forEach((video) => {
-          const card = document.createElement("div");
-          card.className = "video-card";
-
-          const title = document.createElement("p");
-          title.className = "video-card__title";
-          title.textContent = video.original_name || video.filename;
-
-          const videoElement = document.createElement("video");
-          videoElement.src = `/uploads/${video.filename}`;
-          videoElement.controls = true;
-          videoElement.preload = "auto";
-          videoElement.playsInline = true;
-          videoElement.setAttribute("playsinline", "");
-          videoElement.setAttribute("webkit-playsinline", "");
-
-          let hasPlaybackError = false;
-
-          videoElement.addEventListener("click", () => {
-            if (videoElement.paused) {
-              videoElement.play().catch(() => {});
-            } else {
-              videoElement.pause();
-            }
-          });
-
-          videoElement.addEventListener("error", () => {
-            if (hasPlaybackError) {
-              return;
-            }
-
-            hasPlaybackError = true;
-            card.classList.add("video-card--error");
-
-            const errorMessage = document.createElement("p");
-            errorMessage.className = "video-card__error";
-            errorMessage.textContent =
-              "Nem sikerült betölteni a videót. Frissítsd az oldalt vagy próbáld meg később.";
-            card.appendChild(errorMessage);
-          });
-
-          videoElement.addEventListener("loadeddata", () => {
-            card.classList.remove("video-card--error");
-            hasPlaybackError = false;
-            const existingError = card.querySelector(".video-card__error");
-            if (existingError) {
-              existingError.remove();
-            }
-          });
-
-          const meta = document.createElement("div");
-          meta.className = "video-card__meta";
-          const uploader = document.createElement("span");
-          uploader.textContent = `Feltöltötte: ${video.username || "Ismeretlen"}`;
-          const uploadedAt = document.createElement("span");
-          uploadedAt.textContent = formatDate(video.uploaded_at);
-          meta.append(uploader, uploadedAt);
-
-          const tagList = document.createElement("div");
-          tagList.className = "tag-list";
-          (video.tags || []).forEach((tag) => {
-            const chip = document.createElement("span");
-            chip.className = "tag-chip";
-            chip.textContent = tag.name;
-            tagList.appendChild(chip);
-          });
-
-          card.appendChild(title);
-          card.appendChild(videoElement);
-          card.appendChild(meta);
-          if (tagList.childElementCount) {
-            card.appendChild(tagList);
-          }
-
-          if (isAdminUser()) {
-            const actions = document.createElement("div");
-            actions.className = "video-card__actions";
-            const deleteBtn = document.createElement("button");
-            deleteBtn.className = "delete-btn";
-            deleteBtn.textContent = "Törlés";
-            deleteBtn.addEventListener("click", async () => {
-              if (!confirm("Biztosan törlöd a videót?")) return;
-              try {
-                const response = await fetch(`/api/videos/${video.id}`, {
-                  method: "DELETE",
-                  headers: buildAuthHeaders(),
-                });
-                const result = await response.json().catch(() => null);
-                if (!response.ok) {
-                  throw new Error((result && result.message) || "Nem sikerült törölni a videót.");
-                }
-                await loadVideos();
-              } catch (error) {
-                alert(error.message);
-              }
-            });
-            actions.appendChild(deleteBtn);
-            card.appendChild(actions);
-          }
-
-          videoGridContainer.appendChild(card);
-        });
-      }
-
-      function renderPagination(pagination) {
-        if (!videoPagination || !pagination || pagination.totalPages <= 1) {
-          return;
-        }
-
-        videoPagination.innerHTML = "";
-        const { currentPage, totalPages } = pagination;
-
-        const createButton = (pageNumber, text = null) => {
-          const btn = document.createElement("button");
-          btn.textContent = text || pageNumber;
-          btn.classList.toggle("active", pageNumber === currentPage);
-          btn.addEventListener("click", () => {
-            if (pageNumber === currentPage) return;
-            videoFilters.page = pageNumber;
-            loadVideos();
-          });
-          return btn;
-        };
-
-        const windowSize = 2;
-        const start = Math.max(1, currentPage - windowSize);
-        const end = Math.min(totalPages, currentPage + windowSize);
-
-        if (start > 1) {
-          videoPagination.appendChild(createButton(1));
-          if (start > 2) {
-            const ellipsis = document.createElement("span");
-            ellipsis.textContent = "...";
-            videoPagination.appendChild(ellipsis);
-          }
-        }
-
-        for (let page = start; page <= end; page += 1) {
-          videoPagination.appendChild(createButton(page));
-        }
-
-        if (end < totalPages) {
-          if (end < totalPages - 1) {
-            const ellipsis = document.createElement("span");
-            ellipsis.textContent = "...";
-            videoPagination.appendChild(ellipsis);
-          }
-          videoPagination.appendChild(createButton(totalPages));
-        }
-      }
-
-      if (videoSearchInput) {
-        videoSearchInput.addEventListener("input", () => {
-          videoFilters.search = videoSearchInput.value.trim();
-          videoFilters.page = 1;
-          loadVideos();
-        });
-      }
-
-      if (tagFilterSelect) {
-        tagFilterSelect.addEventListener("change", () => {
-          videoFilters.tag = tagFilterSelect.value;
-          videoFilters.page = 1;
-          loadVideos();
-        });
-      }
-
-      if (dateFromInput) {
-        dateFromInput.addEventListener("change", () => {
-          videoFilters.dateFrom = dateFromInput.value;
-          videoFilters.page = 1;
-          loadVideos();
-        });
-      }
-
-      if (dateToInput) {
-        dateToInput.addEventListener("change", () => {
-          videoFilters.dateTo = dateToInput.value;
-          videoFilters.page = 1;
-          loadVideos();
-        });
-      }
-
-      if (filterResetBtn) {
-        filterResetBtn.addEventListener("click", () => {
-          videoFilters.page = 1;
-          videoFilters.search = "";
-          videoFilters.tag = "";
-          videoFilters.dateFrom = "";
-          videoFilters.dateTo = "";
-          if (videoSearchInput) videoSearchInput.value = "";
-          if (tagFilterSelect) tagFilterSelect.value = "";
-          if (dateFromInput) dateFromInput.value = "";
-          if (dateToInput) dateToInput.value = "";
-          loadVideos();
-        });
-      }
-
-      async function handleCreateTag() {
-        if (!newTagNameInput || !createTagStatus) return;
-        const name = newTagNameInput.value.trim();
-        if (!name) {
-          createTagStatus.textContent = "Add meg a címke nevét.";
-          return;
-        }
-        createTagStatus.textContent = "Mentés...";
-        try {
-          const response = await fetch("/api/tags", {
-            method: "POST",
-            headers: {
-              ...buildAuthHeaders(),
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ name }),
-          });
-          const result = await response.json().catch(() => null);
-          if (!response.ok) {
-            throw new Error((result && result.message) || "Nem sikerült létrehozni a címkét.");
-          }
-          newTagNameInput.value = "";
-          createTagStatus.textContent = "Címke létrehozva.";
-          await fetchTags();
-        } catch (error) {
-          createTagStatus.textContent = error.message;
-        }
-      }
-
-      if (createTagButton) {
-        createTagButton.addEventListener("click", handleCreateTag);
-      }
-
-      function resetUploadModal() {
-        selectedVideoFiles = [];
-        updateSelectedFilesDisplay();
-        if (uploadBtn) {
-          uploadBtn.disabled = true;
-        }
-        if (uploadStatus) {
-          uploadStatus.textContent = "";
-        }
-        if (fileInput) {
-          fileInput.value = "";
-        }
-        if (dropZone) {
-          dropZone.classList.remove("drag-over");
-        }
-        if (tagChecklist) {
-          tagChecklist.querySelectorAll("input[type='checkbox']").forEach((input) => {
-            input.checked = false;
-          });
-        }
-        if (createTagStatus) {
-          createTagStatus.textContent = "";
-        }
-      }
-
-      function openUploadModal() {
-        if (uploadModal) {
-          uploadModal.style.display = "";
-          uploadModal.classList.add("modal-overlay--visible");
-        }
-        fetchTags();
-        resetUploadModal();
-      }
-
-      function closeUploadModal() {
-        if (uploadModal) {
-          uploadModal.classList.remove("modal-overlay--visible");
-          uploadModal.style.display = "";
-        }
-        resetUploadModal();
-      }
-
-      function handleFileSelection(files) {
-        const normalized = Array.isArray(files)
-          ? files.filter(Boolean)
-          : Array.from(files || []).filter(Boolean);
-
-        if (!normalized.length) {
-          return;
-        }
-
-        selectedVideoFiles = normalized;
-        updateSelectedFilesDisplay();
-        if (uploadBtn) {
-          uploadBtn.disabled = false;
-        }
-        if (uploadStatus) {
-          uploadStatus.textContent = "";
-        }
-      }
-
-      if (showUploadModalBtn && uploadModal) {
-        showUploadModalBtn.addEventListener("click", () => {
-          if (!isUserLoggedIn()) {
-            alert("A feltöltéshez be kell jelentkezned.");
-            return;
-          }
-          openUploadModal();
-        });
-      }
-
-      if (closeUploadModalBtn) {
-        closeUploadModalBtn.addEventListener("click", closeUploadModal);
-      }
-
-      if (uploadModal) {
-        uploadModal.addEventListener("click", (event) => {
-          if (event.target === uploadModal) {
-            closeUploadModal();
-          }
-        });
-      }
-
-      if (dropZone && fileInput) {
-        dropZone.addEventListener("click", () => fileInput.click());
-
-        dropZone.addEventListener("dragover", (event) => {
-          event.preventDefault();
-          dropZone.classList.add("drag-over");
-        });
-
-        ["dragleave", "dragend"].forEach((eventName) => {
-          dropZone.addEventListener(eventName, (event) => {
-            event.preventDefault();
-            dropZone.classList.remove("drag-over");
-          });
-        });
-
-        dropZone.addEventListener("drop", (event) => {
-          event.preventDefault();
-          dropZone.classList.remove("drag-over");
-          const files = event.dataTransfer?.files;
-          if (files && files.length > 0) {
-            handleFileSelection(files);
-          }
-        });
-      }
-
-      if (fileInput) {
-        fileInput.addEventListener("change", (event) => {
-          const files = event.target.files;
-          if (files && files.length > 0) {
-            handleFileSelection(files);
-          } else {
-            resetUploadModal();
-          }
-        });
-      }
-
-      if (uploadBtn) {
-        uploadBtn.addEventListener("click", async () => {
-          if (!isUserLoggedIn()) {
-            alert("A feltöltéshez be kell jelentkezned.");
-            return;
-          }
-
-          if (!selectedVideoFiles.length) {
-            alert("Válassz ki legalább egy videófájlt a feltöltéshez.");
-            return;
-          }
-
-          const formData = new FormData();
-          selectedVideoFiles.forEach((file) => formData.append("videos", file));
-          formData.append("tags", JSON.stringify(getSelectedTagIds()));
-
-          uploadBtn.disabled = true;
-          if (uploadStatus) {
-            uploadStatus.textContent = "Feltöltés folyamatban...";
-          }
-
-          try {
-            const response = await fetch("/upload", {
-              method: "POST",
-              headers: buildAuthHeaders(),
-              body: formData,
-            });
-
-            const result = await response.json().catch(() => null);
-
-            if (!response.ok) {
-              const message = (result && result.message) || "Nem sikerült feltölteni a videót.";
-              throw new Error(message);
-            }
-
-            if (uploadStatus) {
-              uploadStatus.textContent = (result && result.message) || "Videók sikeresen feltöltve.";
-            }
-            await loadVideos();
-            setTimeout(() => {
-              closeUploadModal();
-            }, 800);
-          } catch (error) {
-            console.error("Videó feltöltési hiba:", error);
-            if (uploadStatus) {
-              uploadStatus.textContent = error.message || "Nem sikerült feltölteni a videót.";
-            }
-          } finally {
-            if (uploadBtn) {
-              uploadBtn.disabled = false;
-            }
-          }
-        });
-      }
-
-      function showSection(target, shouldPushState = true) {
-        const navLinks = getAccessibleNavLinks();
-        const sections = document.querySelectorAll("main section");
-        const availableTargets = new Set(navLinks.map((link) => link.dataset.section));
-
-        availableTargets.add("profile");
-
-        if (!availableTargets.has(target)) {
-          target = "home";
-        }
-
-        document.querySelectorAll("nav a").forEach((link) => {
-          const requiresAdmin = link.dataset.requiresAdmin === "true";
-          const requiresTransfer = link.dataset.requiresTransfer === "true";
-          const isActive = link.dataset.section === target;
-
-          if (
-            (requiresAdmin && !isAdminUser()) ||
-            (requiresTransfer && !hasFileTransferPermission())
-          ) {
-            link.classList.remove("active");
-            return;
-          }
-
-          link.classList.toggle("active", isActive);
-        });
-
-        sections.forEach((sec) => {
-          const requiresAdmin = ADMIN_ONLY_SECTIONS.has(sec.id);
-
-          if (sec.id === target && (!requiresAdmin || isAdminUser())) {
-            sec.classList.add("active");
-          } else {
-            sec.classList.remove("active");
-          }
-        });
-
-        if (target === "klipek") {
-          fetchTags();
-          loadVideos();
-        }
-
-        if (target === "szavazas") {
-          refreshPollsIfVisible();
-        }
-
-        if (shouldPushState) {
-          history.pushState(null, "", `#${target}`);
-        }
-      }
-
-      document.querySelectorAll("nav a").forEach((link) => {
-        link.addEventListener("click", (e) => {
-          const requiresAdmin = link.dataset.requiresAdmin === "true";
-          const requiresTransfer = link.dataset.requiresTransfer === "true";
-
-          if (requiresAdmin && !isAdminUser()) {
-            e.preventDefault();
-            return;
-          }
-
-          if (requiresTransfer && !hasFileTransferPermission()) {
-            e.preventDefault();
-            return;
-          }
-
-          e.preventDefault();
-          showSection(link.dataset.section);
-        });
-      });
-
-      // Oldal betöltésekor a hash alapján nyitjuk meg a megfelelő szekciót
-      window.addEventListener("load", () => {
-        const hash = location.hash.replace("#", "") || "home";
-        showSection(hash, false);
-      });
-
-    </script>
 
   <script>
     const loginModal = document.getElementById("loginModal");
@@ -4938,6 +4248,696 @@
         });
     }
   </script>
+
+    <script>
+      const summaryToggleBtn = document.getElementById("summaryToggleBtn");
+      const summaryCard = document.getElementById("summaryCard");
+      const summaryCloseBtn = document.getElementById("summaryCloseBtn");
+      const videoGridContainer = document.getElementById("video-grid-container");
+      const videoPagination = document.getElementById("video-pagination");
+      const showUploadModalBtn = document.getElementById("showUploadModalBtn");
+      const uploadModal = document.getElementById("uploadModal");
+      const closeUploadModalBtn = document.getElementById("closeUploadModal");
+      const dropZone = document.getElementById("drop-zone");
+      const fileInput = document.getElementById("fileInput");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const uploadStatus = document.getElementById("uploadStatus");
+      const selectedFileName = document.getElementById("selectedFileName");
+      const selectedFilesList = document.getElementById("selectedFilesList");
+      const videoSearchInput = document.getElementById("videoSearchInput");
+      const tagFilterSelect = document.getElementById("tagFilterSelect");
+      const dateFromInput = document.getElementById("dateFromInput");
+      const dateToInput = document.getElementById("dateToInput");
+      const filterResetBtn = document.getElementById("filterResetBtn");
+      const tagChecklist = document.getElementById("tagChecklist");
+      const createTagWrapper = document.getElementById("createTagWrapper");
+      const newTagNameInput = document.getElementById("newTagName");
+      const createTagButton = document.getElementById("createTagButton");
+      const createTagStatus = document.getElementById("createTagStatus");
+      const ADMIN_SESSION_KEY = "isAdmin";
+      const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
+      let selectedVideoFiles = [];
+      let availableTags = [];
+      const videoFilters = {
+        page: 1,
+        limit: 9,
+        search: "",
+        tag: "",
+        dateFrom: "",
+        dateTo: "",
+      };
+
+      if (summaryToggleBtn && summaryCard) {
+        summaryToggleBtn.addEventListener("click", () => {
+          summaryCard.classList.add("summary-card--visible");
+          summaryCard.setAttribute("aria-hidden", "false");
+          summaryToggleBtn.setAttribute("aria-expanded", "true");
+          summaryToggleBtn.classList.add("is-hidden");
+
+          if (summaryCloseBtn) {
+            summaryCloseBtn.focus();
+          }
+        });
+      }
+
+      if (summaryCloseBtn && summaryCard && summaryToggleBtn) {
+        summaryCloseBtn.addEventListener("click", () => {
+          summaryCard.classList.remove("summary-card--visible");
+          summaryCard.setAttribute("aria-hidden", "true");
+          summaryToggleBtn.setAttribute("aria-expanded", "false");
+          summaryToggleBtn.classList.remove("is-hidden");
+          summaryToggleBtn.focus();
+        });
+      }
+
+      function isAdminUser() {
+        return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
+      }
+
+      function hasFileTransferPermission() {
+        return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canTransfer) === "true";
+      }
+
+      function getAccessibleNavLinks() {
+        return Array.from(document.querySelectorAll("nav a")).filter((link) => {
+          const requiresAdmin = link.dataset.requiresAdmin === "true";
+          const requiresTransfer = link.dataset.requiresTransfer === "true";
+
+          if (requiresAdmin && !isAdminUser()) {
+            return false;
+          }
+
+          if (requiresTransfer && !hasFileTransferPermission()) {
+            return false;
+          }
+
+          return true;
+        });
+      }
+
+      function formatDate(dateString) {
+        if (!dateString) return "Ismeretlen";
+        const date = new Date(dateString);
+        return date.toLocaleDateString("hu-HU", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      }
+
+      function renderTagChecklist() {
+        if (!tagChecklist) return;
+        tagChecklist.innerHTML = "";
+        if (!availableTags.length) {
+          tagChecklist.innerHTML = "<p>Nincsenek címkék.</p>";
+          return;
+        }
+        availableTags.forEach((tag) => {
+          const label = document.createElement("label");
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = String(tag.id);
+          label.appendChild(checkbox);
+          label.append(tag.name);
+          tagChecklist.appendChild(label);
+        });
+      }
+
+      function populateTagSelect() {
+        if (!tagFilterSelect) return;
+        const currentValue = tagFilterSelect.value;
+        tagFilterSelect.innerHTML = '<option value="">Összes címke</option>';
+        availableTags.forEach((tag) => {
+          const option = document.createElement("option");
+          option.value = String(tag.id);
+          option.textContent = tag.name;
+          tagFilterSelect.appendChild(option);
+        });
+        if (currentValue) {
+          tagFilterSelect.value = currentValue;
+        }
+      }
+
+      async function fetchTags() {
+        try {
+          const response = await fetch("/api/tags");
+          if (!response.ok) throw new Error("Nem sikerült lekérni a címkéket.");
+          availableTags = await response.json();
+          populateTagSelect();
+          renderTagChecklist();
+          if (createTagWrapper) {
+            createTagWrapper.style.display = isAdminUser() ? "block" : "none";
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      function getSelectedTagIds() {
+        if (!tagChecklist) return [];
+        return Array.from(tagChecklist.querySelectorAll("input[type='checkbox']"))
+          .filter((input) => input.checked)
+          .map((input) => Number(input.value))
+          .filter((val) => Number.isFinite(val));
+      }
+
+      function updateSelectedFilesDisplay() {
+        if (!selectedFilesList || !selectedFileName) return;
+        if (!selectedVideoFiles.length) {
+          selectedFilesList.innerHTML = "";
+          selectedFileName.textContent = "Nincs kiválasztott fájl.";
+          return;
+        }
+        selectedFileName.textContent = `${selectedVideoFiles.length} fájl kiválasztva.`;
+        selectedFilesList.innerHTML = "";
+        selectedVideoFiles.forEach((file) => {
+          const li = document.createElement("li");
+          li.textContent = file.name;
+          selectedFilesList.appendChild(li);
+        });
+      }
+
+      async function loadVideos() {
+        if (!videoGridContainer) {
+          return;
+        }
+
+        videoGridContainer.innerHTML = "";
+        if (videoPagination) videoPagination.innerHTML = "";
+
+        const params = new URLSearchParams();
+        Object.entries(videoFilters).forEach(([key, value]) => {
+          if (value) params.append(key, value);
+        });
+
+        try {
+          const response = await fetch(`/api/videos?${params.toString()}`);
+
+          if (!response.ok) {
+            throw new Error("Nem sikerült betölteni a videókat.");
+          }
+
+          const { data, pagination } = await response.json();
+          videoFilters.page = pagination?.currentPage || videoFilters.page;
+
+          if (!Array.isArray(data) || data.length === 0) {
+            videoGridContainer.innerHTML = "<p>Még senki nem töltött fel videót.</p>";
+            return;
+          }
+
+          renderVideoGrid(data);
+          renderPagination(pagination);
+        } catch (error) {
+          console.error("Videók betöltési hibája:", error);
+          videoGridContainer.innerHTML = "<p>Nem sikerült betölteni a videókat.</p>";
+        }
+      }
+
+      function renderVideoGrid(videos) {
+        videoGridContainer.innerHTML = "";
+        videos.forEach((video) => {
+          const card = document.createElement("div");
+          card.className = "video-card";
+
+          const title = document.createElement("p");
+          title.className = "video-card__title";
+          title.textContent = video.original_name || video.filename;
+
+          const videoElement = document.createElement("video");
+          videoElement.src = `/uploads/${video.filename}`;
+          videoElement.controls = true;
+          videoElement.preload = "auto";
+          videoElement.playsInline = true;
+          videoElement.setAttribute("playsinline", "");
+          videoElement.setAttribute("webkit-playsinline", "");
+
+          let hasPlaybackError = false;
+
+          videoElement.addEventListener("click", () => {
+            if (videoElement.paused) {
+              videoElement.play().catch(() => {});
+            } else {
+              videoElement.pause();
+            }
+          });
+
+          videoElement.addEventListener("error", () => {
+            if (hasPlaybackError) {
+              return;
+            }
+
+            hasPlaybackError = true;
+            card.classList.add("video-card--error");
+
+            const errorMessage = document.createElement("p");
+            errorMessage.className = "video-card__error";
+            errorMessage.textContent =
+              "Nem sikerült betölteni a videót. Frissítsd az oldalt vagy próbáld meg később.";
+            card.appendChild(errorMessage);
+          });
+
+          videoElement.addEventListener("loadeddata", () => {
+            card.classList.remove("video-card--error");
+            hasPlaybackError = false;
+            const existingError = card.querySelector(".video-card__error");
+            if (existingError) {
+              existingError.remove();
+            }
+          });
+
+          const meta = document.createElement("div");
+          meta.className = "video-card__meta";
+          const uploader = document.createElement("span");
+          uploader.textContent = `Feltöltötte: ${video.username || "Ismeretlen"}`;
+          const uploadedAt = document.createElement("span");
+          uploadedAt.textContent = formatDate(video.uploaded_at);
+          meta.append(uploader, uploadedAt);
+
+          const tagList = document.createElement("div");
+          tagList.className = "tag-list";
+          (video.tags || []).forEach((tag) => {
+            const chip = document.createElement("span");
+            chip.className = "tag-chip";
+            chip.textContent = tag.name;
+            tagList.appendChild(chip);
+          });
+
+          card.appendChild(title);
+          card.appendChild(videoElement);
+          card.appendChild(meta);
+          if (tagList.childElementCount) {
+            card.appendChild(tagList);
+          }
+
+          if (isAdminUser()) {
+            const actions = document.createElement("div");
+            actions.className = "video-card__actions";
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "delete-btn";
+            deleteBtn.textContent = "Törlés";
+            deleteBtn.addEventListener("click", async () => {
+              if (!confirm("Biztosan törlöd a videót?")) return;
+              try {
+                const response = await fetch(`/api/videos/${video.id}`, {
+                  method: "DELETE",
+                  headers: buildAuthHeaders(),
+                });
+                const result = await response.json().catch(() => null);
+                if (!response.ok) {
+                  throw new Error((result && result.message) || "Nem sikerült törölni a videót.");
+                }
+                await loadVideos();
+              } catch (error) {
+                alert(error.message);
+              }
+            });
+            actions.appendChild(deleteBtn);
+            card.appendChild(actions);
+          }
+
+          videoGridContainer.appendChild(card);
+        });
+      }
+
+      function renderPagination(pagination) {
+        if (!videoPagination || !pagination || pagination.totalPages <= 1) {
+          return;
+        }
+
+        videoPagination.innerHTML = "";
+        const { currentPage, totalPages } = pagination;
+
+        const createButton = (pageNumber, text = null) => {
+          const btn = document.createElement("button");
+          btn.textContent = text || pageNumber;
+          btn.classList.toggle("active", pageNumber === currentPage);
+          btn.addEventListener("click", () => {
+            if (pageNumber === currentPage) return;
+            videoFilters.page = pageNumber;
+            loadVideos();
+          });
+          return btn;
+        };
+
+        const windowSize = 2;
+        const start = Math.max(1, currentPage - windowSize);
+        const end = Math.min(totalPages, currentPage + windowSize);
+
+        if (start > 1) {
+          videoPagination.appendChild(createButton(1));
+          if (start > 2) {
+            const ellipsis = document.createElement("span");
+            ellipsis.textContent = "...";
+            videoPagination.appendChild(ellipsis);
+          }
+        }
+
+        for (let page = start; page <= end; page += 1) {
+          videoPagination.appendChild(createButton(page));
+        }
+
+        if (end < totalPages) {
+          if (end < totalPages - 1) {
+            const ellipsis = document.createElement("span");
+            ellipsis.textContent = "...";
+            videoPagination.appendChild(ellipsis);
+          }
+          videoPagination.appendChild(createButton(totalPages));
+        }
+      }
+
+      if (videoSearchInput) {
+        videoSearchInput.addEventListener("input", () => {
+          videoFilters.search = videoSearchInput.value.trim();
+          videoFilters.page = 1;
+          loadVideos();
+        });
+      }
+
+      if (tagFilterSelect) {
+        tagFilterSelect.addEventListener("change", () => {
+          videoFilters.tag = tagFilterSelect.value;
+          videoFilters.page = 1;
+          loadVideos();
+        });
+      }
+
+      if (dateFromInput) {
+        dateFromInput.addEventListener("change", () => {
+          videoFilters.dateFrom = dateFromInput.value;
+          videoFilters.page = 1;
+          loadVideos();
+        });
+      }
+
+      if (dateToInput) {
+        dateToInput.addEventListener("change", () => {
+          videoFilters.dateTo = dateToInput.value;
+          videoFilters.page = 1;
+          loadVideos();
+        });
+      }
+
+      if (filterResetBtn) {
+        filterResetBtn.addEventListener("click", () => {
+          videoFilters.page = 1;
+          videoFilters.search = "";
+          videoFilters.tag = "";
+          videoFilters.dateFrom = "";
+          videoFilters.dateTo = "";
+          if (videoSearchInput) videoSearchInput.value = "";
+          if (tagFilterSelect) tagFilterSelect.value = "";
+          if (dateFromInput) dateFromInput.value = "";
+          if (dateToInput) dateToInput.value = "";
+          loadVideos();
+        });
+      }
+
+      async function handleCreateTag() {
+        if (!newTagNameInput || !createTagStatus) return;
+        const name = newTagNameInput.value.trim();
+        if (!name) {
+          createTagStatus.textContent = "Add meg a címke nevét.";
+          return;
+        }
+        createTagStatus.textContent = "Mentés...";
+        try {
+          const response = await fetch("/api/tags", {
+            method: "POST",
+            headers: {
+              ...buildAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ name }),
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error((result && result.message) || "Nem sikerült létrehozni a címkét.");
+          }
+          newTagNameInput.value = "";
+          createTagStatus.textContent = "Címke létrehozva.";
+          await fetchTags();
+        } catch (error) {
+          createTagStatus.textContent = error.message;
+        }
+      }
+
+      if (createTagButton) {
+        createTagButton.addEventListener("click", handleCreateTag);
+      }
+
+      function resetUploadModal() {
+        selectedVideoFiles = [];
+        updateSelectedFilesDisplay();
+        if (uploadBtn) {
+          uploadBtn.disabled = true;
+        }
+        if (uploadStatus) {
+          uploadStatus.textContent = "";
+        }
+        if (fileInput) {
+          fileInput.value = "";
+        }
+        if (dropZone) {
+          dropZone.classList.remove("drag-over");
+        }
+        if (tagChecklist) {
+          tagChecklist.querySelectorAll("input[type='checkbox']").forEach((input) => {
+            input.checked = false;
+          });
+        }
+        if (createTagStatus) {
+          createTagStatus.textContent = "";
+        }
+      }
+
+      function openUploadModal() {
+        if (uploadModal) {
+          uploadModal.style.display = "flex";
+          uploadModal.classList.add("modal-overlay--visible");
+        }
+        fetchTags();
+        resetUploadModal();
+      }
+
+      function closeUploadModal() {
+        if (uploadModal) {
+          uploadModal.classList.remove("modal-overlay--visible");
+          uploadModal.style.display = "none";
+        }
+        resetUploadModal();
+      }
+
+      function handleFileSelection(files) {
+        const normalized = Array.isArray(files)
+          ? files.filter(Boolean)
+          : Array.from(files || []).filter(Boolean);
+
+        if (!normalized.length) {
+          return;
+        }
+
+        selectedVideoFiles = normalized;
+        updateSelectedFilesDisplay();
+        if (uploadBtn) {
+          uploadBtn.disabled = false;
+        }
+        if (uploadStatus) {
+          uploadStatus.textContent = "";
+        }
+      }
+
+      if (showUploadModalBtn && uploadModal) {
+        showUploadModalBtn.addEventListener("click", () => {
+          if (!isUserLoggedIn()) {
+            alert("A feltöltéshez be kell jelentkezned.");
+            return;
+          }
+          openUploadModal();
+        });
+      }
+
+      if (closeUploadModalBtn) {
+        closeUploadModalBtn.addEventListener("click", closeUploadModal);
+      }
+
+      if (uploadModal) {
+        uploadModal.addEventListener("click", (event) => {
+          if (event.target === uploadModal) {
+            closeUploadModal();
+          }
+        });
+      }
+
+      if (dropZone && fileInput) {
+        dropZone.addEventListener("click", () => fileInput.click());
+
+        dropZone.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          dropZone.classList.add("drag-over");
+        });
+
+        ["dragleave", "dragend"].forEach((eventName) => {
+          dropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            dropZone.classList.remove("drag-over");
+          });
+        });
+
+        dropZone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          dropZone.classList.remove("drag-over");
+          const files = event.dataTransfer?.files;
+          if (files && files.length > 0) {
+            handleFileSelection(files);
+          }
+        });
+      }
+
+      if (fileInput) {
+        fileInput.addEventListener("change", (event) => {
+          const files = event.target.files;
+          if (files && files.length > 0) {
+            handleFileSelection(files);
+          } else {
+            resetUploadModal();
+          }
+        });
+      }
+
+      if (uploadBtn) {
+        uploadBtn.addEventListener("click", async () => {
+          if (!isUserLoggedIn()) {
+            alert("A feltöltéshez be kell jelentkezned.");
+            return;
+          }
+
+          if (!selectedVideoFiles.length) {
+            alert("Válassz ki legalább egy videófájlt a feltöltéshez.");
+            return;
+          }
+
+          const formData = new FormData();
+          selectedVideoFiles.forEach((file) => formData.append("videos", file));
+          formData.append("tags", JSON.stringify(getSelectedTagIds()));
+
+          uploadBtn.disabled = true;
+          if (uploadStatus) {
+            uploadStatus.textContent = "Feltöltés folyamatban...";
+          }
+
+          try {
+            const response = await fetch("/upload", {
+              method: "POST",
+              headers: buildAuthHeaders(),
+              body: formData,
+            });
+
+            const result = await response.json().catch(() => null);
+
+            if (!response.ok) {
+              const message = (result && result.message) || "Nem sikerült feltölteni a videót.";
+              throw new Error(message);
+            }
+
+            if (uploadStatus) {
+              uploadStatus.textContent = (result && result.message) || "Videók sikeresen feltöltve.";
+            }
+            await loadVideos();
+            setTimeout(() => {
+              closeUploadModal();
+            }, 800);
+          } catch (error) {
+            console.error("Videó feltöltési hiba:", error);
+            if (uploadStatus) {
+              uploadStatus.textContent = error.message || "Nem sikerült feltölteni a videót.";
+            }
+          } finally {
+            if (uploadBtn) {
+              uploadBtn.disabled = false;
+            }
+          }
+        });
+      }
+
+      function showSection(target, shouldPushState = true) {
+        const navLinks = getAccessibleNavLinks();
+        const sections = document.querySelectorAll("main section");
+        const availableTargets = new Set(navLinks.map((link) => link.dataset.section));
+
+        availableTargets.add("profile");
+
+        if (!availableTargets.has(target)) {
+          target = "home";
+        }
+
+        document.querySelectorAll("nav a").forEach((link) => {
+          const requiresAdmin = link.dataset.requiresAdmin === "true";
+          const requiresTransfer = link.dataset.requiresTransfer === "true";
+          const isActive = link.dataset.section === target;
+
+          if (
+            (requiresAdmin && !isAdminUser()) ||
+            (requiresTransfer && !hasFileTransferPermission())
+          ) {
+            link.classList.remove("active");
+            return;
+          }
+
+          link.classList.toggle("active", isActive);
+        });
+
+        sections.forEach((sec) => {
+          const requiresAdmin = ADMIN_ONLY_SECTIONS.has(sec.id);
+
+          if (sec.id === target && (!requiresAdmin || isAdminUser())) {
+            sec.classList.add("active");
+          } else {
+            sec.classList.remove("active");
+          }
+        });
+
+        if (target === "klipek") {
+          fetchTags();
+          loadVideos();
+        }
+
+        if (target === "szavazas") {
+          refreshPollsIfVisible();
+        }
+
+        if (shouldPushState) {
+          history.pushState(null, "", `#${target}`);
+        }
+      }
+
+      document.querySelectorAll("nav a").forEach((link) => {
+        link.addEventListener("click", (e) => {
+          const requiresAdmin = link.dataset.requiresAdmin === "true";
+          const requiresTransfer = link.dataset.requiresTransfer === "true";
+
+          if (requiresAdmin && !isAdminUser()) {
+            e.preventDefault();
+            return;
+          }
+
+          if (requiresTransfer && !hasFileTransferPermission()) {
+            e.preventDefault();
+            return;
+          }
+
+          e.preventDefault();
+          showSection(link.dataset.section);
+        });
+      });
+
+      // Oldal betöltésekor a hash alapján nyitjuk meg a megfelelő szekciót
+      window.addEventListener("load", () => {
+        const hash = location.hash.replace("#", "") || "home";
+        showSection(hash, false);
+      });
+
+    </script>
 
   <script src="HOI4-Porgonc/script.js"></script>
   </body>
