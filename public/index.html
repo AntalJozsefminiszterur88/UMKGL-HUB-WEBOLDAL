@@ -1465,24 +1465,88 @@
 
       .upload-modal-content {
         background: var(--bg-secondary);
-        padding: 1.5rem;
-        border-radius: 8px;
+        padding: 1.25rem 1.5rem 1rem;
+        border-radius: 12px;
         width: 100%;
-        max-width: 500px;
+        max-width: 860px;
         position: relative;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 14px 45px rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
       }
 
-      .upload-modal-content h3 {
-        margin-bottom: 1rem;
+      .upload-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .upload-modal-title {
+        margin: 0;
+        font-size: 1.25rem;
+        letter-spacing: 0.5px;
       }
 
       .close-btn {
-        position: absolute;
-        top: 0.75rem;
-        right: 1rem;
-        font-size: 1.5rem;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        font-size: 1.3rem;
         cursor: pointer;
+        color: #fff;
+        transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+      }
+
+      .close-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.16);
+      }
+
+      .upload-modal-toolbar {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .upload-modal-toolbar label {
+        color: rgba(255, 255, 255, 0.75);
+        font-weight: 600;
+        margin-right: 0.5rem;
+      }
+
+      .toolbar-tags {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+        min-width: 220px;
+      }
+
+      #globalTagSelect,
+      .queue-tag-select {
+        background: #2f3238;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        color: #fff;
+        padding: 0.45rem 0.65rem;
+        min-width: 200px;
+      }
+
+      #globalTagSelect option,
+      .queue-tag-select option {
+        background: #1f2126;
       }
 
       #drop-zone {
@@ -1503,6 +1567,188 @@
 
       #drop-zone p {
         margin-bottom: 0.5rem;
+      }
+
+      .upload-queue-container {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px dashed rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 0.75rem;
+        min-height: 140px;
+        max-height: 400px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .upload-queue-container::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .upload-queue-container::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 999px;
+      }
+
+      .upload-queue-container::-webkit-scrollbar-thumb {
+        background: #505461;
+        border-radius: 999px;
+      }
+
+      .upload-queue-item {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        background: rgba(54, 57, 63, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        padding: 0.75rem 0.9rem;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+      }
+
+      .queue-thumbnail {
+        width: 80px;
+        height: 45px;
+        border-radius: 8px;
+        background: #202226;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+
+      .queue-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .queue-details {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+      }
+
+      .queue-details input[type="text"] {
+        width: 100%;
+        padding: 0.55rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #2c2f36;
+        color: #fff;
+      }
+
+      .queue-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+
+      .queue-remove {
+        background: rgba(231, 76, 60, 0.15);
+        border: 1px solid rgba(231, 76, 60, 0.4);
+        color: #ffada3;
+        border-radius: 8px;
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        font-size: 1.15rem;
+        cursor: pointer;
+        transition: transform 0.1s ease, background 0.2s ease;
+      }
+
+      .queue-remove:hover {
+        background: rgba(231, 76, 60, 0.25);
+        transform: scale(1.03);
+      }
+
+      .upload-modal-footer {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 0.25rem;
+        flex-wrap: wrap;
+      }
+
+      .upload-summary {
+        color: rgba(255, 255, 255, 0.72);
+        font-weight: 600;
+        flex: 1;
+        min-width: 200px;
+      }
+
+      .primary-btn {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: 0.75rem 1.35rem;
+        cursor: pointer;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        transition: background 0.2s ease, transform 0.1s ease;
+      }
+
+      .primary-btn.large {
+        padding: 0.95rem 1.75rem;
+        font-size: 1.05rem;
+      }
+
+      .primary-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .primary-btn:hover:not(:disabled) {
+        background: #5b6dad;
+      }
+
+      .upload-toast {
+        background: rgba(231, 76, 60, 0.14);
+        border: 1px solid rgba(231, 76, 60, 0.35);
+        color: #ffcbc2;
+        padding: 0.5rem 0.75rem;
+        border-radius: 10px;
+        font-weight: 600;
+        opacity: 0;
+        transform: translateY(-6px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+
+      .upload-toast.upload-toast--visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .upload-status {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .upload-modal-content.shake {
+        animation: uploadShake 0.35s ease;
+      }
+
+      @keyframes uploadShake {
+        0% {
+          transform: translateX(0);
+        }
+        25% {
+          transform: translateX(-4px);
+        }
+        50% {
+          transform: translateX(4px);
+        }
+        75% {
+          transform: translateX(-3px);
+        }
+        100% {
+          transform: translateX(0);
+        }
       }
 
       #uploadBtn {
@@ -1829,31 +2075,44 @@
 
         <div id="uploadModal" class="modal-overlay" style="display: none;">
           <div class="upload-modal-content">
-            <span class="close-btn" id="closeUploadModal">&times;</span>
-            <h3>Videó feltöltése</h3>
-            <div class="modal-grid">
-              <div>
-                <div id="drop-zone" class="drop-zone">
-                  <p>Húzd ide a videóidat vagy kattints a tallózáshoz</p>
-                  <p id="selectedFileName">Nincs kiválasztott fájl.</p>
-                </div>
-                <input type="file" id="fileInput" accept="video/*" style="display: none;" multiple />
-                <ul id="selectedFilesList"></ul>
+            <div class="upload-modal-header">
+              <h3 class="upload-modal-title">Videó feltöltése</h3>
+              <button class="close-btn" id="closeUploadModal" aria-label="Bezárás">&times;</button>
+            </div>
+
+            <div class="upload-modal-toolbar">
+              <button class="primary-btn" id="addFilesBtn">Fájlok hozzáadása</button>
+              <div class="toolbar-tags">
+                <label for="globalTagSelect">Címkék mindhez</label>
+                <select id="globalTagSelect" multiple></select>
               </div>
-              <div>
-                <h4>Címkék</h4>
-                <div id="tagChecklist" class="tag-checklist"></div>
-                <div id="createTagWrapper" style="display: none;">
-                  <div class="create-tag-row">
-                    <input type="text" id="newTagName" placeholder="Új címke neve" />
-                    <button id="createTagButton" type="button">Hozzáadás</button>
-                  </div>
-                  <small id="createTagStatus"></small>
+              <div id="createTagWrapper" style="display: none;">
+                <div class="create-tag-row">
+                  <input type="text" id="newTagName" placeholder="Új címke neve" />
+                  <button id="createTagButton" type="button">Hozzáadás</button>
                 </div>
+                <small id="createTagStatus"></small>
               </div>
             </div>
-            <button id="uploadBtn" disabled>Feltöltés</button>
-            <p id="uploadStatus" class="upload-status"></p>
+
+            <input type="file" id="fileInput" accept="video/*" style="display: none;" multiple />
+
+            <div id="uploadQueueContainer" class="upload-queue-container">
+              <div id="drop-zone" class="drop-zone">
+                <p>Húzd ide a videóidat vagy kattints a tallózáshoz</p>
+                <p id="selectedFileName">Nincs kiválasztott fájl.</p>
+              </div>
+            </div>
+
+            <div id="uploadToast" class="upload-toast" aria-live="polite"></div>
+
+            <div class="upload-modal-footer">
+              <div>
+                <div id="uploadSummary" class="upload-summary">Nincs kiválasztott fájl.</div>
+                <p id="uploadStatus" class="upload-status"></p>
+              </div>
+              <button id="uploadBtn" class="primary-btn large" disabled>FELTÖLTÉS</button>
+            </div>
           </div>
         </div>
       </section>
@@ -4261,22 +4520,26 @@
       const uploadModal = document.getElementById("uploadModal");
       const closeUploadModalBtn = document.getElementById("closeUploadModal");
       const dropZone = document.getElementById("drop-zone");
+      const uploadQueueContainer = document.getElementById("uploadQueueContainer");
       const fileInput = document.getElementById("fileInput");
+      const addFilesBtn = document.getElementById("addFilesBtn");
       const uploadBtn = document.getElementById("uploadBtn");
       const uploadStatus = document.getElementById("uploadStatus");
       const selectedFileName = document.getElementById("selectedFileName");
-      const selectedFilesList = document.getElementById("selectedFilesList");
+      const uploadSummary = document.getElementById("uploadSummary");
+      const uploadToast = document.getElementById("uploadToast");
+      const globalTagSelect = document.getElementById("globalTagSelect");
       const videoSearchInput = document.getElementById("videoSearchInput");
       const tagFilterSelect = document.getElementById("tagFilterSelect");
       const dateFromInput = document.getElementById("dateFromInput");
       const dateToInput = document.getElementById("dateToInput");
       const filterResetBtn = document.getElementById("filterResetBtn");
-      const tagChecklist = document.getElementById("tagChecklist");
       const createTagWrapper = document.getElementById("createTagWrapper");
       const newTagNameInput = document.getElementById("newTagName");
       const createTagButton = document.getElementById("createTagButton");
       const createTagStatus = document.getElementById("createTagStatus");
-      let selectedVideoFiles = [];
+      let uploadQueue = [];
+      const fileSignatures = new Set();
       let availableTags = [];
       const videoFilters = {
         page: 1,
@@ -4345,22 +4608,40 @@
         });
       }
 
-      function renderTagChecklist() {
-        if (!tagChecklist) return;
-        tagChecklist.innerHTML = "";
-        if (!availableTags.length) {
-          tagChecklist.innerHTML = "<p>Nincsenek címkék.</p>";
-          return;
-        }
+      function getSelectValues(selectElement) {
+        if (!selectElement) return [];
+        return Array.from(selectElement.selectedOptions || [])
+          .map((option) => Number(option.value))
+          .filter((val) => Number.isFinite(val));
+      }
+
+      function renderGlobalTagSelect() {
+        if (!globalTagSelect) return;
+        const currentSelection = getSelectValues(globalTagSelect);
+        globalTagSelect.innerHTML = "";
         availableTags.forEach((tag) => {
-          const label = document.createElement("label");
-          const checkbox = document.createElement("input");
-          checkbox.type = "checkbox";
-          checkbox.value = String(tag.id);
-          label.appendChild(checkbox);
-          label.append(tag.name);
-          tagChecklist.appendChild(label);
+          const option = document.createElement("option");
+          option.value = String(tag.id);
+          option.textContent = tag.name;
+          option.selected = currentSelection.includes(tag.id);
+          globalTagSelect.appendChild(option);
         });
+      }
+
+      function createQueueTagSelect(selectedValues = []) {
+        const select = document.createElement("select");
+        select.className = "queue-tag-select";
+        select.multiple = true;
+
+        availableTags.forEach((tag) => {
+          const option = document.createElement("option");
+          option.value = String(tag.id);
+          option.textContent = tag.name;
+          option.selected = selectedValues.includes(tag.id);
+          select.appendChild(option);
+        });
+
+        return select;
       }
 
       function populateTagSelect() {
@@ -4384,7 +4665,8 @@
           if (!response.ok) throw new Error("Nem sikerült lekérni a címkéket.");
           availableTags = await response.json();
           populateTagSelect();
-          renderTagChecklist();
+          renderGlobalTagSelect();
+          renderUploadQueue();
           if (createTagWrapper) {
             createTagWrapper.style.display = isAdminUser() ? "block" : "none";
           }
@@ -4393,27 +4675,145 @@
         }
       }
 
-      function getSelectedTagIds() {
-        if (!tagChecklist) return [];
-        return Array.from(tagChecklist.querySelectorAll("input[type='checkbox']"))
-          .filter((input) => input.checked)
-          .map((input) => Number(input.value))
-          .filter((val) => Number.isFinite(val));
-      }
-
-      function updateSelectedFilesDisplay() {
-        if (!selectedFilesList || !selectedFileName) return;
-        if (!selectedVideoFiles.length) {
-          selectedFilesList.innerHTML = "";
+      function updateUploadSummary() {
+        if (!uploadSummary || !selectedFileName) return;
+        const count = uploadQueue.length;
+        if (!count) {
+          uploadSummary.textContent = "Nincs kiválasztott fájl.";
           selectedFileName.textContent = "Nincs kiválasztott fájl.";
           return;
         }
-        selectedFileName.textContent = `${selectedVideoFiles.length} fájl kiválasztva.`;
-        selectedFilesList.innerHTML = "";
-        selectedVideoFiles.forEach((file) => {
-          const li = document.createElement("li");
-          li.textContent = file.name;
-          selectedFilesList.appendChild(li);
+        uploadSummary.textContent = `${count} fájl kiválasztva.`;
+        selectedFileName.textContent = uploadSummary.textContent;
+      }
+
+      function removeFromQueue(signature) {
+        uploadQueue = uploadQueue.filter((item) => item.signature !== signature);
+        fileSignatures.delete(signature);
+        renderUploadQueue();
+        updateUploadSummary();
+        if (uploadBtn) {
+          uploadBtn.disabled = uploadQueue.length === 0;
+        }
+      }
+
+      function showUploadToast(message) {
+        if (!uploadToast) return;
+        uploadToast.textContent = message;
+        uploadToast.classList.add("upload-toast--visible");
+        const modalContent = uploadModal?.querySelector(".upload-modal-content");
+        if (modalContent) {
+          modalContent.classList.remove("shake");
+          modalContent.offsetWidth;
+          modalContent.classList.add("shake");
+        }
+        setTimeout(() => uploadToast.classList.remove("upload-toast--visible"), 1800);
+      }
+
+      function renderUploadQueue() {
+        if (!uploadQueueContainer) return;
+        uploadQueueContainer.innerHTML = "";
+        if (dropZone) {
+          uploadQueueContainer.appendChild(dropZone);
+        }
+
+        uploadQueue.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "upload-queue-item";
+
+          const thumbnail = document.createElement("div");
+          thumbnail.className = "queue-thumbnail";
+          if (item.thumbnail) {
+            const img = document.createElement("img");
+            img.src = item.thumbnail;
+            img.alt = item.displayName || item.file.name;
+            thumbnail.appendChild(img);
+          } else {
+            thumbnail.textContent = "📹";
+          }
+
+          const details = document.createElement("div");
+          details.className = "queue-details";
+
+          const nameInput = document.createElement("input");
+          nameInput.type = "text";
+          nameInput.value = item.displayName || item.file.name;
+          nameInput.placeholder = "Videó neve";
+          nameInput.addEventListener("input", (event) => {
+            item.displayName = event.target.value || item.file.name;
+            updateUploadSummary();
+          });
+          details.appendChild(nameInput);
+
+          const tagSelect = createQueueTagSelect(item.tags || []);
+          tagSelect.addEventListener("change", () => {
+            item.tags = getSelectValues(tagSelect);
+          });
+          details.appendChild(tagSelect);
+
+          const actions = document.createElement("div");
+          actions.className = "queue-actions";
+
+          const removeBtn = document.createElement("button");
+          removeBtn.className = "queue-remove";
+          removeBtn.type = "button";
+          removeBtn.innerHTML = "&times;";
+          removeBtn.addEventListener("click", () => removeFromQueue(item.signature));
+          actions.appendChild(removeBtn);
+
+          row.appendChild(thumbnail);
+          row.appendChild(details);
+          row.appendChild(actions);
+
+          uploadQueueContainer.appendChild(row);
+        });
+      }
+
+      function getFileSignature(file) {
+        return `${file.name}-${file.size}-${file.lastModified}`;
+      }
+
+      function generateVideoThumbnail(file) {
+        return new Promise((resolve, reject) => {
+          const video = document.createElement("video");
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          const url = URL.createObjectURL(file);
+          video.src = url;
+          video.preload = "metadata";
+          video.muted = true;
+          video.playsInline = true;
+
+          const cleanup = () => URL.revokeObjectURL(url);
+
+          video.addEventListener("loadeddata", () => {
+            try {
+              const captureTime = Math.min(1, Math.max(0, video.duration || 1));
+              video.currentTime = captureTime;
+            } catch (error) {
+              cleanup();
+              reject(error);
+            }
+          });
+
+          video.addEventListener("seeked", () => {
+            try {
+              canvas.width = 160;
+              canvas.height = 90;
+              context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL("image/png");
+              cleanup();
+              resolve(dataUrl);
+            } catch (error) {
+              cleanup();
+              reject(error);
+            }
+          });
+
+          video.addEventListener("error", (error) => {
+            cleanup();
+            reject(error);
+          });
         });
       }
 
@@ -4687,13 +5087,19 @@
       }
 
       function resetUploadModal() {
-        selectedVideoFiles = [];
-        updateSelectedFilesDisplay();
+        uploadQueue = [];
+        fileSignatures.clear();
+        renderUploadQueue();
+        updateUploadSummary();
         if (uploadBtn) {
           uploadBtn.disabled = true;
         }
         if (uploadStatus) {
           uploadStatus.textContent = "";
+        }
+        if (uploadToast) {
+          uploadToast.classList.remove("upload-toast--visible");
+          uploadToast.textContent = "";
         }
         if (fileInput) {
           fileInput.value = "";
@@ -4701,10 +5107,8 @@
         if (dropZone) {
           dropZone.classList.remove("drag-over");
         }
-        if (tagChecklist) {
-          tagChecklist.querySelectorAll("input[type='checkbox']").forEach((input) => {
-            input.checked = false;
-          });
+        if (globalTagSelect) {
+          globalTagSelect.selectedIndex = -1;
         }
         if (createTagStatus) {
           createTagStatus.textContent = "";
@@ -4728,7 +5132,7 @@
         resetUploadModal();
       }
 
-      function handleFileSelection(files) {
+      async function handleFileSelection(files) {
         const normalized = Array.isArray(files)
           ? files.filter(Boolean)
           : Array.from(files || []).filter(Boolean);
@@ -4737,10 +5141,35 @@
           return;
         }
 
-        selectedVideoFiles = normalized;
-        updateSelectedFilesDisplay();
+        const globalTags = getSelectValues(globalTagSelect);
+        for (const file of normalized) {
+          const signature = getFileSignature(file);
+          if (fileSignatures.has(signature)) {
+            showUploadToast("Ez a videó már a listán van!");
+            continue;
+          }
+
+          fileSignatures.add(signature);
+          let thumbnail = null;
+          try {
+            thumbnail = await generateVideoThumbnail(file);
+          } catch (error) {
+            console.warn("Nem sikerült indexképet generálni:", error);
+          }
+
+          uploadQueue.push({
+            file,
+            signature,
+            displayName: file.name,
+            tags: [...globalTags],
+            thumbnail,
+          });
+        }
+
+        renderUploadQueue();
+        updateUploadSummary();
         if (uploadBtn) {
-          uploadBtn.disabled = false;
+          uploadBtn.disabled = uploadQueue.length === 0;
         }
         if (uploadStatus) {
           uploadStatus.textContent = "";
@@ -4794,6 +5223,18 @@
         });
       }
 
+      if (addFilesBtn && fileInput) {
+        addFilesBtn.addEventListener("click", () => fileInput.click());
+      }
+
+      if (globalTagSelect) {
+        globalTagSelect.addEventListener("change", () => {
+          const selected = getSelectValues(globalTagSelect);
+          uploadQueue = uploadQueue.map((item) => ({ ...item, tags: [...selected] }));
+          renderUploadQueue();
+        });
+      }
+
       if (fileInput) {
         fileInput.addEventListener("change", (event) => {
           const files = event.target.files;
@@ -4812,14 +5253,20 @@
             return;
           }
 
-          if (!selectedVideoFiles.length) {
+          if (!uploadQueue.length) {
             alert("Válassz ki legalább egy videófájlt a feltöltéshez.");
             return;
           }
 
           const formData = new FormData();
-          selectedVideoFiles.forEach((file) => formData.append("videos", file));
-          formData.append("tags", JSON.stringify(getSelectedTagIds()));
+          const metadata = uploadQueue.map((item) => ({
+            name: item.displayName || item.file.name,
+            tags: item.tags || [],
+            signature: item.signature,
+          }));
+
+          uploadQueue.forEach((item) => formData.append("videos", item.file));
+          formData.append("metadata", JSON.stringify(metadata));
 
           uploadBtn.disabled = true;
           if (uploadStatus) {
