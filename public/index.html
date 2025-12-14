@@ -2096,6 +2096,8 @@
     </footer>
 
   <script>
+    const ADMIN_SESSION_KEY = "isAdmin";
+    const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
@@ -4274,8 +4276,6 @@
       const newTagNameInput = document.getElementById("newTagName");
       const createTagButton = document.getElementById("createTagButton");
       const createTagStatus = document.getElementById("createTagStatus");
-      const ADMIN_SESSION_KEY = "isAdmin";
-      const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
       let selectedVideoFiles = [];
       let availableTags = [];
       const videoFilters = {
