@@ -1008,7 +1008,7 @@ app.get('/api/programs/:id/download', async (req, res) => {
         } catch (err) {
             await client.query('ROLLBACK');
             console.error('Hiba a letöltés naplózása közben:', err);
-            return res.status(500).json({ message: 'Nem sikerült naplózni a letöltést.' });
+            // A letöltés attól még történjen meg, ha a naplózás meghiúsul.
         } finally {
             client.release();
         }
