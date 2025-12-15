@@ -40,11 +40,45 @@ const ensureDirectoryExists = (dirPath) => {
 
 ensureDirectoryExists(uploadsDirectory);
 
+const programImagesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'images');
+const programFilesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'files');
+
+ensureDirectoryExists(programImagesDirectory);
+ensureDirectoryExists(programFilesDirectory);
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, uploadsDirectory);
     },
     filename: (req, file, cb) => {
+        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
+        cb(null, uniqueName);
+    }
+});
+
+const uploadProgramFiles = multer({ storage: programStorage });
+
+async function safeUnlink(filePath) {
+    try {
+        await fs.promises.unlink(filePath);
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            throw err;
+        }
+    }
+}
+
+const programStorage = multer.diskStorage({
+    destination: (_req, file, cb) => {
+        if (file.fieldname === 'image') {
+            return cb(null, programImagesDirectory);
+        }
+        if (file.fieldname === 'file') {
+            return cb(null, programFilesDirectory);
+        }
+        cb(new Error('Ismeretlen fájl mező.'));
+    },
+    filename: (_req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
         cb(null, uniqueName);
     }
@@ -841,6 +875,159 @@ app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
     } catch (err) {
         console.error('Hiba a videó törlésekor:', err);
         res.status(500).json({ message: 'Nem sikerült törölni a videót.' });
+    }
+});
+
+app.get('/api/programs', async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, name, description, image_filename, file_filename, original_filename, download_count, created_at FROM programs ORDER BY created_at DESC');
+        res.status(200).json(rows || []);
+    } catch (err) {
+        console.error('Hiba a programok lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni a programokat.' });
+    }
+});
+
+app.post('/api/programs', authenticateToken, isAdmin, (req, res, next) => {
+    const uploadHandler = uploadProgramFiles.fields([
+        { name: 'image', maxCount: 1 },
+        { name: 'file', maxCount: 1 }
+    ]);
+
+    uploadHandler(req, res, (err) => {
+        if (err) return next(err);
+        next();
+    });
+}, async (req, res) => {
+    const { name, description } = req.body || {};
+    const imageFile = req.files && req.files.image ? req.files.image[0] : null;
+    const programFile = req.files && req.files.file ? req.files.file[0] : null;
+
+    if (!name || !description || !imageFile || !programFile) {
+        if (imageFile) {
+            await safeUnlink(path.join(programImagesDirectory, imageFile.filename));
+        }
+        if (programFile) {
+            await safeUnlink(path.join(programFilesDirectory, programFile.filename));
+        }
+        return res.status(400).json({ message: 'A név, leírás, kép és fájl megadása kötelező.' });
+    }
+
+    try {
+        await db.query(
+            'INSERT INTO programs (name, description, image_filename, file_filename, original_filename) VALUES ($1, $2, $3, $4, $5)',
+            [name, description, imageFile.filename, programFile.filename, programFile.originalname]
+        );
+
+        res.status(201).json({ message: 'Program sikeresen feltöltve.' });
+    } catch (err) {
+        console.error('Hiba a program mentésekor:', err);
+        await safeUnlink(path.join(programImagesDirectory, imageFile.filename));
+        await safeUnlink(path.join(programFilesDirectory, programFile.filename));
+        res.status(500).json({ message: 'Nem sikerült menteni a programot.' });
+    }
+});
+
+app.delete('/api/programs/:id', authenticateToken, isAdmin, async (req, res) => {
+    const programId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(programId)) {
+        return res.status(400).json({ message: 'Érvénytelen program azonosító.' });
+    }
+
+    try {
+        const { rows } = await db.query('SELECT image_filename, file_filename FROM programs WHERE id = $1', [programId]);
+        const program = rows[0];
+
+        if (!program) {
+            return res.status(404).json({ message: 'A program nem található.' });
+        }
+
+        if (program.image_filename) {
+            await safeUnlink(path.join(programImagesDirectory, program.image_filename));
+        }
+
+        if (program.file_filename) {
+            await safeUnlink(path.join(programFilesDirectory, program.file_filename));
+        }
+
+        await db.query('DELETE FROM programs WHERE id = $1', [programId]);
+        res.status(200).json({ message: 'Program sikeresen törölve.' });
+    } catch (err) {
+        console.error('Hiba a program törlésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült törölni a programot.' });
+    }
+});
+
+app.get('/api/programs/:id/download', async (req, res) => {
+    const programId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(programId)) {
+        return res.status(400).json({ message: 'Érvénytelen program azonosító.' });
+    }
+
+    try {
+        const { rows } = await db.query('SELECT file_filename, original_filename FROM programs WHERE id = $1', [programId]);
+        const program = rows[0];
+
+        if (!program) {
+            return res.status(404).json({ message: 'A program nem található.' });
+        }
+
+        const normalizedPath = path.normalize(path.join(programFilesDirectory, program.file_filename));
+        if (!normalizedPath.startsWith(programFilesDirectory)) {
+            return res.status(400).json({ message: 'Érvénytelen fájl elérési út.' });
+        }
+
+        try {
+            await fs.promises.stat(normalizedPath);
+        } catch (statErr) {
+            return res.status(404).json({ message: 'A program fájlja nem található.' });
+        }
+
+        const ipAddress = req.ip;
+
+        const { rows: hourRows } = await db.query(
+            "SELECT COUNT(*) FROM downloads_log WHERE program_id = $1 AND ip_address = $2 AND downloaded_at >= NOW() - INTERVAL '1 hour'",
+            [programId, ipAddress]
+        );
+        const hourDownloads = Number(hourRows[0]?.count || 0);
+
+        if (hourDownloads >= 3) {
+            return res.status(429).json({ message: 'Túllépted a letöltési keretet (Max 3/óra, 10/nap).' });
+        }
+
+        const { rows: dayRows } = await db.query(
+            "SELECT COUNT(*) FROM downloads_log WHERE program_id = $1 AND ip_address = $2 AND downloaded_at >= NOW() - INTERVAL '24 hours'",
+            [programId, ipAddress]
+        );
+        const dayDownloads = Number(dayRows[0]?.count || 0);
+
+        if (dayDownloads >= 10) {
+            return res.status(429).json({ message: 'Túllépted a letöltési keretet (Max 3/óra, 10/nap).' });
+        }
+
+        const client = await db.pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('INSERT INTO downloads_log (program_id, ip_address) VALUES ($1, $2)', [programId, ipAddress]);
+            await client.query('UPDATE programs SET download_count = download_count + 1 WHERE id = $1', [programId]);
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            console.error('Hiba a letöltés naplózása közben:', err);
+            return res.status(500).json({ message: 'Nem sikerült naplózni a letöltést.' });
+        } finally {
+            client.release();
+        }
+
+        res.download(normalizedPath, program.original_filename, (err) => {
+            if (err && !res.headersSent) {
+                console.error('Hiba a fájl letöltésekor:', err);
+                res.status(500).json({ message: 'Nem sikerült elküldeni a fájlt.' });
+            }
+        });
+    } catch (err) {
+        console.error('Hiba a letöltési kérés feldolgozásakor:', err);
+        res.status(500).json({ message: 'Nem sikerült feldolgozni a letöltési kérést.' });
     }
 });
 
