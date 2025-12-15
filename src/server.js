@@ -10,6 +10,7 @@ const { Server } = require('socket.io');
 const db = require('./database');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
+const DEFAULT_TAG_COLOR = '#5865F2';
 
 function generateAuthToken(payload) {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
@@ -46,6 +47,24 @@ const programFilesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'p
 
 ensureDirectoryExists(programImagesDirectory);
 ensureDirectoryExists(programFilesDirectory);
+
+function normalizeHexColor(value) {
+    if (!value || typeof value !== 'string') {
+        return DEFAULT_TAG_COLOR;
+    }
+    const trimmed = value.trim();
+    return /^#([0-9a-fA-F]{6})$/.test(trimmed) ? trimmed.toUpperCase() : DEFAULT_TAG_COLOR;
+}
+
+async function ensureTagColorColumn() {
+    try {
+        await db.query('ALTER TABLE tags ADD COLUMN IF NOT EXISTS color TEXT');
+    } catch (err) {
+        console.error('Nem sikerült biztosítani a color oszlopot a tags táblában:', err);
+    }
+}
+
+ensureTagColorColumn();
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -669,7 +688,10 @@ app.delete('/api/polls/:pollId', authenticateToken, isAdmin, async (req, res) =>
 
 app.get('/api/tags', async (_req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, name, created_at FROM tags ORDER BY name ASC');
+        const { rows } = await db.query(
+            'SELECT id, name, COALESCE(color, $1) AS color, created_at FROM tags ORDER BY name ASC',
+            [DEFAULT_TAG_COLOR]
+        );
         res.status(200).json(rows || []);
     } catch (err) {
         console.error('Hiba a címkék lekérdezésekor:', err);
@@ -678,8 +700,9 @@ app.get('/api/tags', async (_req, res) => {
 });
 
 app.post('/api/tags', authenticateToken, isAdmin, async (req, res) => {
-    const { name } = req.body;
+    const { name, color } = req.body;
     const trimmedName = (name || '').trim();
+    const normalizedColor = normalizeHexColor(color);
 
     if (!trimmedName) {
         return res.status(400).json({ message: 'A címke neve nem lehet üres.' });
@@ -687,8 +710,8 @@ app.post('/api/tags', authenticateToken, isAdmin, async (req, res) => {
 
     try {
         const { rows } = await db.query(
-            'INSERT INTO tags (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING id, name, created_at',
-            [trimmedName]
+            'INSERT INTO tags (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING RETURNING id, name, color, created_at',
+            [trimmedName, normalizedColor]
         );
 
         if (!rows[0]) {
@@ -748,7 +771,7 @@ app.get('/api/videos', async (req, res) => {
                 OFFSET $${dataParams.length}
             )
             SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username,
-                   COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name)) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
+                   COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id

@@ -1205,6 +1205,7 @@
         display: flex;
         gap: 0.5rem;
         margin-top: 0.5rem;
+        align-items: center;
       }
 
       .create-tag-row input {
@@ -1223,6 +1224,41 @@
         padding: 0.5rem 0.75rem;
         border-radius: 8px;
         cursor: pointer;
+      }
+
+      .tag-color-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        color: #fff;
+        font-weight: 600;
+        padding: 0.5rem 0.9rem;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+
+      .tag-color-button:hover {
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .tag-color-button .tag-color-swatch {
+        width: 18px;
+        height: 18px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+        background: var(--tag-color, #5865f2);
+      }
+
+      .tag-color-input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
       }
 
       /* A HOI4 sorsoló szekciónál ne legyen szélességkorlát, hogy a négy doboz egymás mellett
@@ -1889,16 +1925,69 @@
       #globalTagSelect,
       .queue-tag-select {
         background: #2f3238;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 10px;
         color: #fff;
-        padding: 0.45rem 0.65rem;
-        min-width: 200px;
+        padding: 0.45rem 0.75rem;
+        min-width: 260px;
+        min-height: 54px;
       }
 
       #globalTagSelect option,
       .queue-tag-select option {
         background: #1f2126;
+        padding: 0.35rem 0.6rem;
+      }
+
+      #globalTagSelect option:checked,
+      .queue-tag-select option:checked {
+        background: linear-gradient(90deg, rgba(114, 137, 218, 0.3), rgba(114, 137, 218, 0.1));
+        color: #fff;
+        font-weight: 700;
+        border-left: 4px solid var(--accent);
+      }
+
+      .tag-pill-list {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 0.45rem;
+      }
+
+      .tag-pill {
+        --tag-color: #5865f2;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.04));
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+        padding: 0.4rem 0.7rem;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: transform 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .tag-pill__dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--tag-color);
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
+      }
+
+      .tag-pill--selected {
+        border-color: var(--tag-color);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
+        background: linear-gradient(135deg, rgba(88, 101, 242, 0.18), rgba(88, 101, 242, 0.08));
+      }
+
+      .tag-pill:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 255, 255, 0.25);
       }
 
       #drop-zone {
@@ -2531,11 +2620,16 @@
               <button class="primary-btn" id="addFilesBtn">Fájlok hozzáadása</button>
               <div class="toolbar-tags">
                 <label for="globalTagSelect">Címkék mindhez</label>
-                <select id="globalTagSelect" multiple></select>
+                <select id="globalTagSelect" multiple size="5"></select>
               </div>
               <div id="createTagWrapper" style="display: none;">
                 <div class="create-tag-row">
                   <input type="text" id="newTagName" placeholder="Új címke neve" />
+                  <button id="tagColorButton" type="button" class="tag-color-button">
+                    <span class="tag-color-swatch"></span>
+                    Szín
+                  </button>
+                  <input type="color" id="newTagColor" class="tag-color-input" value="#5865f2" />
                   <button id="createTagButton" type="button">Hozzáadás</button>
                 </div>
                 <small id="createTagStatus"></small>
@@ -5354,8 +5448,11 @@
       const filterResetBtn = document.getElementById("filterResetBtn");
       const createTagWrapper = document.getElementById("createTagWrapper");
       const newTagNameInput = document.getElementById("newTagName");
+      const newTagColorInput = document.getElementById("newTagColor");
+      const tagColorButton = document.getElementById("tagColorButton");
       const createTagButton = document.getElementById("createTagButton");
       const createTagStatus = document.getElementById("createTagStatus");
+      const DEFAULT_TAG_COLOR = "#5865f2";
       let uploadQueue = [];
       const fileSignatures = new Set();
       let availableTags = [];
@@ -5711,6 +5808,18 @@
           .filter((val) => Number.isFinite(val));
       }
 
+      function normalizeColor(color) {
+        if (!color || typeof color !== "string") return DEFAULT_TAG_COLOR;
+        const trimmed = color.trim();
+        return /^#([0-9a-fA-F]{6})$/.test(trimmed) ? trimmed.toUpperCase() : DEFAULT_TAG_COLOR;
+      }
+
+      function styleTagOption(option, color) {
+        const safeColor = normalizeColor(color);
+        option.style.background = `linear-gradient(90deg, ${safeColor} 0 10px, rgba(255, 255, 255, 0.04) 10px 100%)`;
+        option.style.borderLeft = `6px solid ${safeColor}`;
+      }
+
       function renderGlobalTagSelect() {
         if (!globalTagSelect) return;
         const currentSelection = getSelectValues(globalTagSelect);
@@ -5720,24 +5829,61 @@
           option.value = String(tag.id);
           option.textContent = tag.name;
           option.selected = currentSelection.includes(tag.id);
+          styleTagOption(option, tag.color);
           globalTagSelect.appendChild(option);
         });
       }
 
-      function createQueueTagSelect(selectedValues = []) {
-        const select = document.createElement("select");
-        select.className = "queue-tag-select";
-        select.multiple = true;
+      function createQueueTagSelect(selectedValues = [], onChange) {
+        const normalized = Array.isArray(selectedValues) ? [...selectedValues] : [];
+        const container = document.createElement("div");
+        container.className = "tag-pill-list";
+
+        const syncSelection = () => {
+          container.querySelectorAll(".tag-pill").forEach((pill) => {
+            const tagId = Number(pill.dataset.tagId);
+            pill.classList.toggle("tag-pill--selected", normalized.includes(tagId));
+          });
+        };
+
+        const toggleTag = (tagId) => {
+          const idx = normalized.indexOf(tagId);
+          if (idx >= 0) {
+            normalized.splice(idx, 1);
+          } else {
+            normalized.push(tagId);
+          }
+          syncSelection();
+          if (typeof onChange === "function") {
+            onChange([...normalized]);
+          }
+        };
 
         availableTags.forEach((tag) => {
-          const option = document.createElement("option");
-          option.value = String(tag.id);
-          option.textContent = tag.name;
-          option.selected = selectedValues.includes(tag.id);
-          select.appendChild(option);
+          const pill = document.createElement("button");
+          pill.type = "button";
+          pill.className = "tag-pill";
+          pill.dataset.tagId = String(tag.id);
+          pill.style.setProperty("--tag-color", normalizeColor(tag.color));
+          pill.innerHTML = `<span class="tag-pill__dot"></span><span class="tag-pill__label">${tag.name}</span>`;
+          pill.addEventListener("click", () => {
+            toggleTag(tag.id);
+            pill.blur();
+            pill.dispatchEvent(new CustomEvent("tagchange", { bubbles: true }));
+          });
+          container.appendChild(pill);
         });
 
-        return select;
+        container.getSelectedValues = () => [...normalized];
+        container.setSelectedValues = (values) => {
+          if (Array.isArray(values)) {
+            normalized.splice(0, normalized.length, ...values);
+            syncSelection();
+          }
+        };
+
+        syncSelection();
+        return container;
       }
 
       function populateTagSelect() {
@@ -5759,7 +5905,10 @@
         try {
           const response = await fetch("/api/tags");
           if (!response.ok) throw new Error("Nem sikerült lekérni a címkéket.");
-          availableTags = await response.json();
+          const payload = await response.json();
+          availableTags = Array.isArray(payload)
+            ? payload.map((tag) => ({ ...tag, color: normalizeColor(tag.color) }))
+            : [];
           populateTagSelect();
           renderGlobalTagSelect();
           renderUploadQueue();
@@ -5907,11 +6056,11 @@
           });
           details.appendChild(nameInput);
 
-          const tagSelect = createQueueTagSelect(item.tags || []);
-          tagSelect.addEventListener("change", () => {
-            item.tags = getSelectValues(tagSelect);
+          const tagSelector = createQueueTagSelect(item.tags || [], (values) => {
+            item.tags = values;
           });
-          details.appendChild(tagSelect);
+          tagSelector.setAttribute("aria-label", "Címke kiválasztása");
+          details.appendChild(tagSelector);
 
           const actions = document.createElement("div");
           actions.className = "queue-actions";
@@ -6256,6 +6405,10 @@
           createTagStatus.textContent = "Add meg a címke nevét.";
           return;
         }
+        const color = normalizeColor(newTagColorInput?.value || DEFAULT_TAG_COLOR);
+        if (tagColorButton) {
+          tagColorButton.style.setProperty("--tag-color", color);
+        }
         createTagStatus.textContent = "Mentés...";
         try {
           const response = await fetch("/api/tags", {
@@ -6264,18 +6417,35 @@
               ...buildAuthHeaders(),
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ name }),
+            body: JSON.stringify({ name, color }),
           });
           const result = await response.json().catch(() => null);
           if (!response.ok) {
             throw new Error((result && result.message) || "Nem sikerült létrehozni a címkét.");
           }
           newTagNameInput.value = "";
+          if (newTagColorInput) {
+            newTagColorInput.value = DEFAULT_TAG_COLOR;
+          }
+          if (tagColorButton) {
+            tagColorButton.style.setProperty("--tag-color", DEFAULT_TAG_COLOR);
+          }
           createTagStatus.textContent = "Címke létrehozva.";
           await fetchTags();
         } catch (error) {
           createTagStatus.textContent = error.message;
         }
+      }
+
+      if (newTagColorInput && tagColorButton) {
+        const updateTagColorPreview = () => {
+          const color = normalizeColor(newTagColorInput.value || DEFAULT_TAG_COLOR);
+          tagColorButton.style.setProperty("--tag-color", color);
+        };
+
+        tagColorButton.addEventListener("click", () => newTagColorInput.click());
+        newTagColorInput.addEventListener("input", updateTagColorPreview);
+        updateTagColorPreview();
       }
 
       if (createTagButton) {
@@ -6309,6 +6479,12 @@
         }
         if (createTagStatus) {
           createTagStatus.textContent = "";
+        }
+        if (newTagColorInput) {
+          newTagColorInput.value = DEFAULT_TAG_COLOR;
+        }
+        if (tagColorButton) {
+          tagColorButton.style.setProperty("--tag-color", DEFAULT_TAG_COLOR);
         }
       }
 
