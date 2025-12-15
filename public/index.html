@@ -6092,7 +6092,8 @@
           const uploader = document.createElement("span");
           uploader.textContent = `Feltöltötte: ${video.username || "Ismeretlen"}`;
           const uploadedAt = document.createElement("span");
-          uploadedAt.textContent = formatDate(video.uploaded_at);
+          const displayDate = video.content_created_at || video.uploaded_at;
+          uploadedAt.textContent = formatDate(displayDate);
           meta.append(uploader, uploadedAt);
 
           const tagList = document.createElement("div");

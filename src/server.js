@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Server } = require('socket.io');
 const db = require('./database');
+const ffmpeg = require('fluent-ffmpeg');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
 
@@ -66,6 +67,29 @@ async function safeUnlink(filePath) {
             throw err;
         }
     }
+}
+
+function getVideoCreationDate(filePath) {
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, (err, metadata) => {
+            if (err || !metadata) {
+                return resolve(new Date());
+            }
+
+            const creationTime =
+                metadata.format?.tags?.creation_time ||
+                metadata.streams?.find((stream) => stream?.tags?.creation_time)?.tags?.creation_time;
+
+            if (creationTime) {
+                const parsedDate = new Date(creationTime);
+                if (!Number.isNaN(parsedDate.getTime())) {
+                    return resolve(parsedDate);
+                }
+            }
+
+            return resolve(new Date());
+        });
+    });
 }
 
 const programStorage = multer.diskStorage({
@@ -744,17 +768,17 @@ app.get('/api/videos', async (req, res) => {
                 FROM videos
                 LEFT JOIN users ON videos.uploader_id = users.id
                 ${whereClause}
-                ORDER BY videos.uploaded_at ${sortOrder}
+                ORDER BY videos.content_created_at ${sortOrder}
                 LIMIT $${dataParams.length - 1}
                 OFFSET $${dataParams.length}
             )
-            SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username,
+            SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.content_created_at, fv.username,
                    COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name)) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id
-            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username
-            ORDER BY fv.uploaded_at ${sortOrder};
+            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.content_created_at, fv.username
+            ORDER BY fv.content_created_at ${sortOrder};
         `;
 
         const { rows } = await db.query(dataQuery, dataParams);
@@ -875,8 +899,10 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         await client.query('BEGIN');
         for (const { file, sanitizedOriginalName } of newFiles) {
             const { filename } = file;
-            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id) VALUES ($1, $2, $3) RETURNING id`;
-            const { rows } = await client.query(insertVideoQuery, [filename, sanitizedOriginalName, uploaderId]);
+            const filePath = file.path || path.join(uploadsDirectory, filename);
+            const contentCreatedAt = await getVideoCreationDate(filePath);
+            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at) VALUES ($1, $2, $3, $4) RETURNING id`;
+            const { rows } = await client.query(insertVideoQuery, [filename, sanitizedOriginalName, uploaderId, contentCreatedAt]);
             const videoId = rows[0]?.id;
 
             if (videoId && tagIds.length) {
