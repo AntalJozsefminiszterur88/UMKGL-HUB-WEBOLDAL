@@ -875,23 +875,49 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
 
     const uploaderId = req.user.id;
 
-    const tagIds = (() => {
+    const normalizeTagIds = (value) => {
+        if (!value) {
+            return [];
+        }
+
+        if (Array.isArray(value)) {
+            return Array.from(new Set(value.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)));
+        }
+
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    return Array.from(new Set(parsed.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)));
+                }
+            } catch (err) {
+                return [];
+            }
+        }
+
+        return [];
+    };
+
+    const fallbackTagIds = normalizeTagIds(req.body.tags);
+
+    const metadataList = (() => {
         try {
-            const parsed = JSON.parse(req.body.tags || '[]');
-            return Array.isArray(parsed)
-                ? Array.from(new Set(parsed.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)))
-                : [];
+            const parsed = JSON.parse(req.body.metadata || '[]');
+            return Array.isArray(parsed) ? parsed : [];
         } catch (err) {
             return [];
         }
     })();
 
-    const filesWithNames = req.files.map((file) => {
+    const filesWithNames = req.files.map((file, index) => {
         const { originalname } = file;
         const normalizedOriginalName = normalizeFilename(originalname);
-        const parsedName = path.parse(normalizedOriginalName).name.trim();
+        const metadata = metadataList[index] || {};
+        const customName = typeof metadata.name === 'string' ? normalizeFilename(metadata.name) : '';
+        const parsedName = path.parse(customName || normalizedOriginalName).name.trim();
         const sanitizedOriginalName = parsedName || normalizedOriginalName;
-        return { file, sanitizedOriginalName };
+        const tagsForFile = normalizeTagIds(metadata.tags);
+        return { file, sanitizedOriginalName, tags: tagsForFile.length ? tagsForFile : fallbackTagIds };
     });
 
     const originalNames = filesWithNames.map(({ sanitizedOriginalName }) => sanitizedOriginalName);
@@ -937,7 +963,7 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
-        for (const { file, sanitizedOriginalName } of newFiles) {
+        for (const { file, sanitizedOriginalName, tags } of newFiles) {
             const { filename } = file;
             const filePath = path.join(uploadsDirectory, filename);
             const contentCreatedAt = await getVideoCreationDate(filePath);
@@ -945,8 +971,8 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
             const { rows } = await client.query(insertVideoQuery, [filename, sanitizedOriginalName, uploaderId, contentCreatedAt]);
             const videoId = rows[0]?.id;
 
-            if (videoId && tagIds.length) {
-                for (const tagId of tagIds) {
+            if (videoId && tags.length) {
+                for (const tagId of tags) {
                     await client.query(
                         'INSERT INTO video_tags (video_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
                         [videoId, tagId]
