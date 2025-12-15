@@ -856,6 +856,21 @@ app.get('/api/videos', async (req, res) => {
     }
 });
 
+app.get('/api/videos/get-uploaded-titles', async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT original_name FROM videos');
+        const titles = (rows || []).map((row) => {
+            const originalName = typeof row.original_name === 'string' ? row.original_name : '';
+            return path.parse(originalName).name;
+        });
+
+        res.status(200).json(titles);
+    } catch (err) {
+        console.error('Hiba a videók neveinek lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni a videók neveit.' });
+    }
+});
+
 function normalizeFilename(originalName) {
     if (!originalName) {
         return '';
