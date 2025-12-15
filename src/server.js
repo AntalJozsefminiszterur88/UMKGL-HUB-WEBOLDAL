@@ -893,7 +893,7 @@ function sanitizeFolderName(name) {
 }
 
 app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) => {
-    const limits = {};
+    const limits = { files: 100 };
     if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
         limits.fileSize = req.uploadSettings.maxFileSizeBytes;
     }

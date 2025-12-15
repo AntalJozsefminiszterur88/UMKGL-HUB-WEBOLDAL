@@ -5489,6 +5489,7 @@
       const selectedFileName = document.getElementById("selectedFileName");
       const uploadSummary = document.getElementById("uploadSummary");
       const uploadToast = document.getElementById("uploadToast");
+      const MAX_UPLOAD_FILES = 100;
       const globalTagSelect = document.getElementById("globalTagSelect");
       const videoSearchInput = document.getElementById("videoSearchInput");
       const tagFilterSelect = document.getElementById("tagFilterSelect");
@@ -6599,8 +6600,19 @@
           return;
         }
 
+        const remainingSlots = MAX_UPLOAD_FILES - uploadQueue.length;
+        if (remainingSlots <= 0) {
+          showUploadToast(`Egyszerre legfeljebb ${MAX_UPLOAD_FILES} fájl tölthető fel.`);
+          return;
+        }
+
+        const limitedFiles = normalized.slice(0, remainingSlots);
+        if (limitedFiles.length < normalized.length) {
+          showUploadToast(`Csak az első ${remainingSlots} fájl került a sorba (maximum ${MAX_UPLOAD_FILES} egyszerre).`);
+        }
+
         const globalTags = getSelectValues(globalTagSelect);
-        for (const file of normalized) {
+        for (const file of limitedFiles) {
           const signature = getFileSignature(file);
           if (fileSignatures.has(signature)) {
             showUploadToast("Ez a videó már a listán van!");
