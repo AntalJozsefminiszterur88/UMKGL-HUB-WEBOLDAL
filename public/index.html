@@ -1837,11 +1837,6 @@
         font-weight: 600;
       }
 
-      #registerBtn {
-        font-weight: 700;
-        text-transform: uppercase;
-      }
-
       .modal-overlay {
         position: fixed;
         top: 0;
@@ -2392,7 +2387,7 @@
       <div class="auth-buttons">
         <div id="authLoggedOut" class="auth-buttons__group">
           <button id="loginBtn" type="button" class="auth-button">Bejelentkezés</button>
-          <a href="register.html" id="registerBtn" class="auth-button">Regisztráció</a>
+          <button id="registerBtn" type="button" class="auth-button">Regisztráció</button>
         </div>
         <div id="authLoggedIn" class="auth-buttons__group" style="display: none">
           <a href="#profile" id="userProfileLink" data-section="profile" class="header-user">
@@ -2930,6 +2925,7 @@
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
     const loginBtn = document.getElementById("loginBtn");
+    const registerBtn = document.getElementById("registerBtn");
     const logoutBtn = document.getElementById("logoutBtn");
     const authLoggedOut = document.getElementById("authLoggedOut");
     const authLoggedIn = document.getElementById("authLoggedIn");
@@ -4796,6 +4792,12 @@
 
     if (loginBtn) {
       loginBtn.addEventListener("click", openLoginModal);
+    }
+
+    if (registerBtn) {
+      registerBtn.addEventListener("click", () => {
+        window.location.href = "register.html";
+      });
     }
 
     function renderUserList(users) {
