@@ -56,8 +56,6 @@ const storage = multer.diskStorage({
     }
 });
 
-const uploadProgramFiles = multer({ storage: programStorage });
-
 async function safeUnlink(filePath) {
     try {
         await fs.promises.unlink(filePath);
@@ -83,6 +81,8 @@ const programStorage = multer.diskStorage({
         cb(null, uniqueName);
     }
 });
+
+const uploadProgramFiles = multer({ storage: programStorage });
 
 function getNumberSetting(value, defaultValue) {
     const parsed = Number(value);
