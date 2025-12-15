@@ -11,10 +11,23 @@
       href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=Roboto+Condensed:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"
+      integrity="sha512-7GndGpVqJYG1ChcxrFAuo0xO+ogzAm8hFyr5YYhgtJfj+CDWkAQ+oAYamSt0aL94hEuj9Y5mROgPpN5NrpQwtQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
     <link rel="stylesheet" href="HOI4-Porgonc/style.css" />
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
+      integrity="sha512-evZk1k+JGoqV9jQsy8+6uXxNdQUYm5OBAWzzZhIh7cJXUUEd2gKz5qYPUwE/UgNL80m4pGWQRt2mjgTg5azZKg=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
     <style>
       #fajlkuldes {
         background: rgba(24, 25, 28, 0.95);
@@ -1323,35 +1336,189 @@
           background: rgb(47, 49, 54);
         }
       /* Programok szekció stílusai */
-      #programok .program-grid {
+      #programok {
+        position: relative;
+      }
+
+      .programs-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .programs-subtitle {
+        color: rgba(255, 255, 255, 0.65);
+        margin-top: 0.35rem;
+      }
+
+      .program-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 20px;
-        justify-items: center;
-      }
-
-      #programok .box {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1rem;
         width: 100%;
-        max-width: 250px;
-        text-align: center;
       }
 
-      .program-icon {
-        width: 120px;
-        height: 120px;
-        object-fit: contain;
-        margin-bottom: 10px;
+      .program-card {
+        position: relative;
+        background: linear-gradient(145deg, rgba(34, 36, 40, 0.9), rgba(21, 22, 25, 0.9));
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 16px 35px rgba(0, 0, 0, 0.35);
       }
 
-      .download-btn {
-        margin-top: 10px;
-        padding: 0.5rem 1rem;
-        background: var(--accent);
-        color: #fff;
+      .program-card__thumbnail {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        background: #1e1f22;
+      }
+
+      .program-card__body {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+
+      .program-card__title {
+        margin: 0;
+      }
+
+      .program-card__description {
+        color: rgba(255, 255, 255, 0.7);
+        line-height: 1.5;
+        min-height: 44px;
+      }
+
+      .program-card__meta {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.9rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+
+      .program-card__actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+      }
+
+      .program-card__download {
+        flex: 1;
+      }
+
+      .program-card__delete {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
         border: none;
-        border-radius: 4px;
-        text-decoration: none;
-        cursor: not-allowed;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #ff5555, #c0392b);
+        color: #fff;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+      }
+
+      .program-card.program-card--admin .program-card__delete {
+        display: inline-flex;
+      }
+
+      .programs-empty {
+        padding: 1rem;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px dashed rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+      }
+
+      .program-upload-form .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+
+      .program-upload-form input,
+      .program-upload-form textarea {
+        background: #1e2124;
+        border: 1px solid #2c2f33;
+        color: #fff;
+        border-radius: 10px;
+        padding: 0.75rem;
+      }
+
+      .program-upload-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+
+      .program-upload-tile {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        padding: 0.9rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .tile-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .tile-hint {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.9rem;
+      }
+
+      .program-cropper-wrapper {
+        background: #0f1013;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        min-height: 220px;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+
+      .program-cropper-wrapper img {
+        max-width: 100%;
+        display: block;
+      }
+
+      .program-file-name {
+        color: rgba(255, 255, 255, 0.7);
+        margin: 0;
+      }
+
+      .upload-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+
+      .upload-modal-close {
+        background: transparent;
+        border: none;
+        color: #fff;
+        font-size: 1.2rem;
+        cursor: pointer;
       }
 
       .user-table {
@@ -1893,8 +2060,6 @@
           href="#programok"
           data-section="programok"
           id="programNavBtn"
-          data-requires-admin="true"
-          style="display: none;"
           >Programok</a
         >
         <a
@@ -1941,6 +2106,56 @@
         <div class="feedback-modal__actions">
           <button id="feedbackModalOk" type="button">OK</button>
         </div>
+      </div>
+    </div>
+
+    <div id="programUploadModal" class="upload-modal" style="display: none">
+      <div class="upload-modal-content">
+        <div class="upload-modal-header">
+          <h3>Új Program Feltöltése</h3>
+          <button id="closeProgramUploadModal" class="upload-modal-close" type="button">✕</button>
+        </div>
+        <form id="programUploadForm" class="program-upload-form">
+          <div class="form-group">
+            <label for="programNameInput">Program neve</label>
+            <input type="text" id="programNameInput" name="name" placeholder="Adj meg egy nevet" required />
+          </div>
+          <div class="form-group">
+            <label for="programDescriptionInput">Rövid leírás</label>
+            <textarea
+              id="programDescriptionInput"
+              name="description"
+              rows="3"
+              placeholder="Pár szóban foglald össze, mit tud a program"
+              required
+            ></textarea>
+          </div>
+          <div class="program-upload-grid">
+            <div class="program-upload-tile">
+              <div class="tile-header">
+                <label for="programImageInput">Borítókép</label>
+                <span class="tile-hint">PNG vagy JPG, vágd a kerethez</span>
+              </div>
+              <label class="ghost-button" for="programImageInput">Kép kiválasztása</label>
+              <input type="file" id="programImageInput" accept="image/png,image/jpeg,image/jpg" style="display: none" />
+              <div class="program-cropper-wrapper">
+                <img id="programImagePreview" alt="Program kép előnézet" />
+              </div>
+            </div>
+            <div class="program-upload-tile">
+              <div class="tile-header">
+                <label for="programFileInput">Program fájl</label>
+                <span class="tile-hint">.exe vagy .zip</span>
+              </div>
+              <input type="file" id="programFileInput" accept=".exe,.zip" required />
+              <p id="programFileName" class="program-file-name">Nincs kiválasztva fájl.</p>
+            </div>
+          </div>
+          <div class="upload-modal-actions">
+            <button type="button" id="cancelProgramUploadBtn" class="ghost-button">Mégse</button>
+            <button type="submit" id="submitProgramUploadBtn" class="primary-button">Mentés</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -2274,32 +2489,14 @@
 
 <!-- Programok -->
       <section id="programok">
-        <div class="flex program-grid">
-          <div class="box">
-            <img src="program_icons/foto-apparatus.png" alt="FOTO-Apparátus ikon" class="program-icon" />
-            <h3>FOTO-Apparátus</h3>
-            <p>Lefotózza a fitymádat bizonyos időközönként</p>
-            <button class="download-btn" disabled>Letöltés</button>
+        <div class="programs-header">
+          <div>
+            <h2>Programok</h2>
+            <p class="programs-subtitle">Letölthető eszközök és programok a közösség számára.</p>
           </div>
-          <div class="box">
-            <img src="program_icons/default-avatar.png" alt="Program ikon" class="program-icon" />
-            <h3>Program 2</h3>
-            <p>Hamarosan...</p>
-            <button class="download-btn" disabled>Letöltés</button>
-          </div>
-          <div class="box">
-            <img src="program_icons/default-avatar.png" alt="Program ikon" class="program-icon" />
-            <h3>Program 3</h3>
-            <p>Hamarosan...</p>
-            <button class="download-btn" disabled>Letöltés</button>
-          </div>
-          <div class="box">
-            <img src="program_icons/default-avatar.png" alt="Program ikon" class="program-icon" />
-            <h3>Program 4</h3>
-            <p>Hamarosan...</p>
-            <button class="download-btn" disabled>Letöltés</button>
-          </div>
+          <button id="addProgramBtn" class="primary-button" type="button" style="display: none;">Új Program Hozzáadása</button>
         </div>
+        <div id="programsContainer" class="program-grid"></div>
       </section>
 
       <section id="admin">
@@ -2356,7 +2553,7 @@
 
   <script>
     const ADMIN_SESSION_KEY = "isAdmin";
-    const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
+    const ADMIN_ONLY_SECTIONS = new Set(["admin"]);
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
@@ -2387,6 +2584,19 @@
     const receiverStatus = document.getElementById("receiverStatus");
     const p2pFileInput = document.getElementById("p2pFileInput");
     const transferList = document.getElementById("transferList");
+    const programsContainer = document.getElementById("programsContainer");
+    const addProgramBtn = document.getElementById("addProgramBtn");
+    const programUploadModal = document.getElementById("programUploadModal");
+    const programUploadForm = document.getElementById("programUploadForm");
+    const programNameInput = document.getElementById("programNameInput");
+    const programDescriptionInput = document.getElementById("programDescriptionInput");
+    const programImageInput = document.getElementById("programImageInput");
+    const programFileInput = document.getElementById("programFileInput");
+    const programImagePreview = document.getElementById("programImagePreview");
+    const programFileName = document.getElementById("programFileName");
+    const closeProgramUploadModalBtn = document.getElementById("closeProgramUploadModal");
+    const cancelProgramUploadBtn = document.getElementById("cancelProgramUploadBtn");
+    const submitProgramUploadBtn = document.getElementById("submitProgramUploadBtn");
 
     const SESSION_KEYS = {
       token: "token",
@@ -2397,6 +2607,8 @@
     };
     const POLL_MIN_OPTIONS = 2;
     let pollsShouldRefresh = true;
+    let programImageCropper = null;
+    let programImageObjectUrl = null;
 
     function isPollSectionActive() {
       return pollSection?.classList.contains("active");
@@ -3851,21 +4063,176 @@
     updatePollCreatorState();
     markPollsForRefresh();
 
-    function updateAdminNavVisibility() {
-      const isAdmin = isAdminUser();
+    if (programFileInput && programFileName) {
+      programFileInput.addEventListener("change", () => {
+        const file = programFileInput.files?.[0];
+        programFileName.textContent = file ? file.name : "Nincs kiválasztva fájl.";
+      });
+    }
 
-      if (adminNavBtn) {
-        adminNavBtn.style.display = isAdmin ? "inline-block" : "none";
-      }
+    if (programImageInput && programImagePreview) {
+      programImageInput.addEventListener("change", () => {
+        const file = programImageInput.files?.[0];
 
-      if (programNavBtn) {
-        programNavBtn.style.display = isAdmin ? "inline-block" : "none";
-      }
+        if (programImageCropper) {
+          programImageCropper.destroy();
+          programImageCropper = null;
+        }
 
-      if (!isAdmin) {
-        const activeSection = document.querySelector("main section.active");
-        if (
-          activeSection &&
+        if (programImageObjectUrl) {
+          URL.revokeObjectURL(programImageObjectUrl);
+          programImageObjectUrl = null;
+        }
+
+        if (!file) {
+          programImagePreview.removeAttribute("src");
+          return;
+        }
+
+        programImageObjectUrl = URL.createObjectURL(file);
+        programImagePreview.src = programImageObjectUrl;
+        programImageCropper = new Cropper(programImagePreview, {
+          aspectRatio: 4 / 3,
+          viewMode: 1,
+          dragMode: "move",
+          background: false,
+          autoCropArea: 1,
+          responsive: true,
+        });
+      });
+    }
+
+    if (addProgramBtn) {
+      addProgramBtn.addEventListener("click", openProgramUploadModal);
+    }
+
+    if (closeProgramUploadModalBtn) {
+      closeProgramUploadModalBtn.addEventListener("click", () => {
+        closeProgramUploadModal();
+      });
+    }
+
+    if (cancelProgramUploadBtn) {
+      cancelProgramUploadBtn.addEventListener("click", () => {
+        closeProgramUploadModal();
+      });
+    }
+
+    if (programUploadModal) {
+      programUploadModal.addEventListener("click", (event) => {
+        if (event.target === programUploadModal) {
+          closeProgramUploadModal();
+        }
+      });
+    }
+
+    if (programUploadForm) {
+      programUploadForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if (!isAdminUser()) {
+          alert("Csak adminok tölthetnek fel új programokat.");
+          return;
+        }
+
+        const name = programNameInput?.value.trim();
+        const description = programDescriptionInput?.value.trim();
+        const file = programFileInput?.files?.[0];
+
+        if (!name || !description) {
+          alert("A név és a leírás megadása kötelező.");
+          return;
+        }
+
+        if (!file) {
+          alert("Válassz ki egy feltöltendő program fájlt.");
+          return;
+        }
+
+        let imageBlob = null;
+        try {
+          if (programImageCropper) {
+            imageBlob = await new Promise((resolve, reject) => {
+              const canvas = programImageCropper.getCroppedCanvas({ width: 1200, height: 900 });
+              if (!canvas) {
+                reject(new Error("Nem sikerült a kép vágása."));
+                return;
+              }
+              canvas.toBlob((blob) => {
+                if (blob) {
+                  resolve(blob);
+                } else {
+                  reject(new Error("Nem sikerült a kép vágása."));
+                }
+              }, "image/png");
+            });
+          } else if (programImageInput?.files?.[0]) {
+            imageBlob = programImageInput.files[0];
+          }
+        } catch (error) {
+          console.error("Kép feldolgozási hiba:", error);
+          alert(error.message || "Nem sikerült feldolgozni a képet.");
+          return;
+        }
+
+        if (!imageBlob) {
+          alert("Adj meg egy borítóképet a programhoz.");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("name", name);
+        formData.append("description", description);
+        formData.append("image", imageBlob, "program-image.png");
+        formData.append("file", file);
+
+        const originalText = submitProgramUploadBtn?.textContent;
+        if (submitProgramUploadBtn) {
+          submitProgramUploadBtn.disabled = true;
+          submitProgramUploadBtn.textContent = "Mentés...";
+        }
+
+        try {
+          const response = await fetch("/api/programs", {
+            method: "POST",
+            headers: buildAuthHeaders(),
+            body: formData,
+          });
+
+          const payload = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            const message = payload?.message || "Nem sikerült menteni a programot.";
+            throw new Error(message);
+          }
+
+          closeProgramUploadModal();
+          await loadPrograms();
+        } catch (error) {
+          console.error("Program feltöltési hiba:", error);
+          alert(error.message || "Nem sikerült feltölteni a programot.");
+        } finally {
+          if (submitProgramUploadBtn) {
+            submitProgramUploadBtn.disabled = false;
+            submitProgramUploadBtn.textContent = originalText || "Mentés";
+          }
+        }
+      });
+    }
+
+      function updateAdminNavVisibility() {
+        const isAdmin = isAdminUser();
+
+        if (adminNavBtn) {
+          adminNavBtn.style.display = isAdmin ? "inline-block" : "none";
+        }
+
+        updateProgramAdminControls();
+
+        if (!isAdmin) {
+          const activeSection = document.querySelector("main section.active");
+          if (
+            activeSection &&
           typeof ADMIN_ONLY_SECTIONS !== "undefined" &&
           ADMIN_ONLY_SECTIONS.has(activeSection.id)
         ) {
@@ -3928,9 +4295,11 @@
       }
 
       updateAdminNavVisibility();
+      updateProgramAdminControls();
       updateFileTransferNavVisibility();
       updatePollCreatorState(true);
       markPollsForRefresh();
+      loadPrograms();
 
       if (hasFileTransferPermission()) {
         initializeRealtimeFeatures();
@@ -3976,9 +4345,11 @@
         newUsernameInput.value = '';
       }
       updateAdminNavVisibility();
+      updateProgramAdminControls();
       updateFileTransferNavVisibility();
       updatePollCreatorState(false);
       markPollsForRefresh();
+      loadPrograms();
       teardownRealtimeFeatures();
       updateReceiverStatus("Csatlakozz bejelentkezés után a fogadó módhoz.");
     }
@@ -4318,6 +4689,7 @@
 
     window.addEventListener("load", () => {
         ensureSessionOnLoad();
+        loadPrograms();
     });
 
     const userProfileLink = document.getElementById('userProfileLink');
@@ -4596,6 +4968,247 @@
 
           return true;
         });
+      }
+
+      function updateProgramAdminControls() {
+        if (addProgramBtn) {
+          addProgramBtn.style.display = isAdminUser() ? "inline-flex" : "none";
+        }
+
+        if (!programsContainer) {
+          return;
+        }
+
+        programsContainer.querySelectorAll(".program-card").forEach((card) => {
+          card.classList.toggle("program-card--admin", isAdminUser());
+        });
+      }
+
+      function resetProgramUploadModal() {
+        if (programUploadForm) {
+          programUploadForm.reset();
+        }
+
+        if (programFileName) {
+          programFileName.textContent = "Nincs kiválasztva fájl.";
+        }
+
+        if (programImageCropper) {
+          programImageCropper.destroy();
+          programImageCropper = null;
+        }
+
+        if (programImageObjectUrl) {
+          URL.revokeObjectURL(programImageObjectUrl);
+          programImageObjectUrl = null;
+        }
+
+        if (programImagePreview) {
+          programImagePreview.removeAttribute("src");
+        }
+      }
+
+      function closeProgramUploadModal() {
+        if (programUploadModal) {
+          programUploadModal.style.display = "none";
+        }
+      }
+
+      function openProgramUploadModal() {
+        if (!isAdminUser()) {
+          alert("Csak adminok tölthetnek fel új programokat.");
+          return;
+        }
+
+        resetProgramUploadModal();
+        if (programUploadModal) {
+          programUploadModal.style.display = "flex";
+        }
+      }
+
+      function renderProgramCard(program) {
+        const card = document.createElement("article");
+        card.className = "program-card";
+        if (isAdminUser()) {
+          card.classList.add("program-card--admin");
+        }
+
+        const thumb = document.createElement("img");
+        thumb.className = "program-card__thumbnail";
+        thumb.src = program?.image_filename
+          ? `/uploads/programs/images/${program.image_filename}`
+          : "program_icons/default-avatar.png";
+        thumb.alt = `${program?.name || "Program"} borítókép`;
+        card.appendChild(thumb);
+
+        const body = document.createElement("div");
+        body.className = "program-card__body";
+
+        const title = document.createElement("h3");
+        title.className = "program-card__title";
+        title.textContent = program?.name || "Program";
+
+        const description = document.createElement("p");
+        description.className = "program-card__description";
+        description.textContent = program?.description || "Nincs leírás megadva.";
+
+        const meta = document.createElement("div");
+        meta.className = "program-card__meta";
+        const createdAt = program?.created_at ? new Date(program.created_at) : null;
+        const downloadInfo = document.createElement("span");
+        downloadInfo.textContent = `Letöltések: ${Number(program?.download_count) || 0}`;
+        meta.appendChild(downloadInfo);
+        if (createdAt) {
+          const dateInfo = document.createElement("span");
+          dateInfo.textContent = createdAt.toLocaleDateString("hu-HU");
+          meta.appendChild(dateInfo);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "program-card__actions";
+
+        const downloadBtn = document.createElement("button");
+        downloadBtn.type = "button";
+        downloadBtn.className = "primary-button program-card__download";
+        downloadBtn.textContent = "Letöltés";
+        downloadBtn.addEventListener("click", () => handleProgramDownload(program));
+
+        actions.appendChild(downloadBtn);
+
+        body.appendChild(title);
+        body.appendChild(description);
+        body.appendChild(meta);
+        body.appendChild(actions);
+
+        card.appendChild(body);
+
+        if (isAdminUser()) {
+          const deleteBtn = document.createElement("button");
+          deleteBtn.type = "button";
+          deleteBtn.className = "program-card__delete";
+          deleteBtn.setAttribute("aria-label", "Program törlése");
+          deleteBtn.textContent = "✕";
+          deleteBtn.addEventListener("click", () => handleProgramDelete(program.id, card, deleteBtn));
+          card.appendChild(deleteBtn);
+        }
+
+        return card;
+      }
+
+      async function loadPrograms() {
+        if (!programsContainer) {
+          return;
+        }
+
+        programsContainer.innerHTML = "<p class='programs-empty'>Betöltés...</p>";
+
+        try {
+          const response = await fetch("/api/programs");
+          if (!response.ok) {
+            throw new Error("Nem sikerült lekérni a programokat.");
+          }
+
+          const programs = await response.json();
+          programsContainer.innerHTML = "";
+
+          if (!Array.isArray(programs) || programs.length === 0) {
+            programsContainer.innerHTML = "<p class='programs-empty'>Még nincs feltöltött program.</p>";
+            updateProgramAdminControls();
+            return;
+          }
+
+          programs.forEach((program) => {
+            const card = renderProgramCard(program);
+            programsContainer.appendChild(card);
+          });
+
+          updateProgramAdminControls();
+        } catch (error) {
+          console.error("Programok betöltési hiba:", error);
+          programsContainer.innerHTML =
+            "<p class='programs-empty'>Nem sikerült betölteni a programokat. Próbáld meg később.</p>";
+        }
+      }
+
+      async function handleProgramDownload(program) {
+        if (!program?.id) {
+          return;
+        }
+
+        const downloadUrl = `/api/programs/${program.id}/download`;
+        try {
+          const response = await fetch(downloadUrl);
+
+          if (response.status === 429) {
+            const payload = await response.json().catch(() => ({}));
+            alert(payload.message || "Túllépted a letöltési keretet (Max 3/óra, 10/nap).");
+            return;
+          }
+
+          if (!response.ok) {
+            throw new Error("Nem sikerült letölteni a programot.");
+          }
+
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = objectUrl;
+          a.download = program?.original_filename || `${program?.name || "program"}.exe`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(objectUrl);
+        } catch (error) {
+          console.error("Program letöltési hiba:", error);
+          alert(error.message || "Nem sikerült letölteni a programot.");
+        }
+      }
+
+      async function handleProgramDelete(programId, card, button) {
+        if (!isAdminUser()) {
+          alert("Csak admin törölhet programot.");
+          return;
+        }
+
+        if (!confirm("Biztosan törlöd ezt a programot?")) {
+          return;
+        }
+
+        const originalText = button?.textContent;
+        if (button) {
+          button.disabled = true;
+          button.textContent = "...";
+        }
+
+        try {
+          const response = await fetch(`/api/programs/${programId}`, {
+            method: "DELETE",
+            headers: buildAuthHeaders(),
+          });
+
+          const payload = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            const message = payload?.message || "Nem sikerült törölni a programot.";
+            throw new Error(message);
+          }
+
+          if (card) {
+            card.remove();
+          }
+
+          if (!programsContainer?.children.length) {
+            programsContainer.innerHTML = "<p class='programs-empty'>Még nincs feltöltött program.</p>";
+          }
+        } catch (error) {
+          console.error("Program törlési hiba:", error);
+          alert(error.message || "Nem sikerült törölni a programot.");
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = originalText || "✕";
+          }
+        }
       }
 
       function formatDate(dateString) {
@@ -5351,6 +5964,10 @@
 
         if (target === "szavazas") {
           refreshPollsIfVisible();
+        }
+
+        if (target === "programok") {
+          loadPrograms();
         }
 
         if (shouldPushState) {

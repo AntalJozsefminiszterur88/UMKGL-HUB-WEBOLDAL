@@ -75,6 +75,28 @@ async function initializeDatabase() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS programs (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        description TEXT,
+        image_filename TEXT,
+        file_filename TEXT,
+        original_filename TEXT,
+        download_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS downloads_log (
+        id SERIAL PRIMARY KEY,
+        program_id INTEGER REFERENCES programs(id) ON DELETE CASCADE,
+        ip_address TEXT,
+        downloaded_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS polls (
           id SERIAL PRIMARY KEY,
           question TEXT NOT NULL,
