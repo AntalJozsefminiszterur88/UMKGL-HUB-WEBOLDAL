@@ -1507,9 +1507,13 @@
 
       .program-card__thumbnail {
         width: 100%;
-        aspect-ratio: 4 / 3;
+        aspect-ratio: 1 / 1;
         object-fit: cover;
-        background: #1e1f22;
+        background: #d8dadd;
+        border-radius: 50%;
+        padding: 0.75rem;
+        box-sizing: border-box;
+        display: block;
       }
 
       .program-card__body {
@@ -1621,7 +1625,7 @@
       }
 
       .program-cropper-wrapper {
-        background: #0f1013;
+        background: #d8dadd;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         min-height: 220px;
@@ -2268,7 +2272,7 @@
             <div class="program-upload-tile">
               <div class="tile-header">
                 <label for="programImageInput">Borítókép</label>
-                <span class="tile-hint">PNG vagy JPG, vágd a kerethez</span>
+                <span class="tile-hint">PNG vagy JPG, kör alakú kivágással</span>
               </div>
               <label class="ghost-button" for="programImageInput">Kép kiválasztása</label>
               <input type="file" id="programImageInput" accept="image/png,image/jpeg,image/jpg" style="display: none" />
@@ -4261,7 +4265,7 @@
         programImageObjectUrl = URL.createObjectURL(file);
         programImagePreview.src = programImageObjectUrl;
         programImageCropper = new Cropper(programImagePreview, {
-          aspectRatio: 4 / 3,
+          aspectRatio: 1,
           viewMode: 1,
           dragMode: "move",
           background: false,
@@ -4334,7 +4338,10 @@
         try {
           if (programImageCropper) {
             imageBlob = await new Promise((resolve, reject) => {
-              const canvas = programImageCropper.getCroppedCanvas({ width: 1200, height: 900 });
+              const canvas = programImageCropper.getCroppedCanvas({
+                width: 1200,
+                height: 1200,
+              });
               if (!canvas) {
                 reject(new Error("Nem sikerült a kép vágása."));
                 return;
