@@ -809,13 +809,6 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
     }
 
     const uploaderId = req.user.id;
-    const projectedUploadCount = req.uploadSettings
-        ? req.uploadSettings.uploadCount + req.files.length
-        : null;
-
-    if (req.uploadSettings && req.uploadSettings.maxVideos > 0 && projectedUploadCount > req.uploadSettings.maxVideos) {
-        return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
-    }
 
     const tagIds = (() => {
         try {
@@ -828,14 +821,59 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         }
     })();
 
+    const filesWithNames = req.files.map((file) => {
+        const { originalname } = file;
+        const normalizedOriginalName = normalizeFilename(originalname);
+        const parsedName = path.parse(normalizedOriginalName).name.trim();
+        const sanitizedOriginalName = parsedName || normalizedOriginalName;
+        return { file, sanitizedOriginalName };
+    });
+
+    const originalNames = filesWithNames.map(({ sanitizedOriginalName }) => sanitizedOriginalName);
+
+    let existingNames = [];
+    try {
+        const { rows } = await db.query(
+            'SELECT original_name FROM videos WHERE original_name = ANY($1)',
+            [originalNames]
+        );
+        existingNames = rows.map((row) => row.original_name);
+    } catch (err) {
+        console.error('Hiba a meglévő videók lekérdezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a meglévő videókat.' });
+    }
+
+    const existingNameSet = new Set(existingNames);
+    const duplicateFiles = filesWithNames.filter(({ sanitizedOriginalName }) => existingNameSet.has(sanitizedOriginalName));
+    const newFiles = filesWithNames.filter(({ sanitizedOriginalName }) => !existingNameSet.has(sanitizedOriginalName));
+
+    for (const { file } of duplicateFiles) {
+        const filePath = path.join(uploadsDirectory, file.filename);
+        await safeUnlink(filePath);
+    }
+
+    const projectedUploadCount = req.uploadSettings
+        ? req.uploadSettings.uploadCount + newFiles.length
+        : null;
+
+    if (req.uploadSettings && req.uploadSettings.maxVideos > 0 && projectedUploadCount > req.uploadSettings.maxVideos) {
+        return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
+    }
+
+    if (!newFiles.length) {
+        const duplicateList = duplicateFiles.map(({ sanitizedOriginalName }) => sanitizedOriginalName).join(', ');
+        return res.status(409).json({
+            message: duplicateFiles.length > 1
+                ? `A következő nevű klipek már léteznek: ${duplicateList}.`
+                : `Már létezik ilyen nevű klip: ${duplicateList}.`,
+        });
+    }
+
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
-        for (const file of req.files) {
-            const { filename, originalname } = file;
-            const normalizedOriginalName = normalizeFilename(originalname);
-            const parsedName = path.parse(normalizedOriginalName).name.trim();
-            const sanitizedOriginalName = parsedName || normalizedOriginalName;
+        for (const { file, sanitizedOriginalName } of newFiles) {
+            const { filename } = file;
             const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id) VALUES ($1, $2, $3) RETURNING id`;
             const { rows } = await client.query(insertVideoQuery, [filename, sanitizedOriginalName, uploaderId]);
             const videoId = rows[0]?.id;
@@ -850,8 +888,15 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
             }
         }
 
-        await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [req.files.length, uploaderId]);
+        await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [newFiles.length, uploaderId]);
         await client.query('COMMIT');
+        if (duplicateFiles.length) {
+            const duplicateList = duplicateFiles.map(({ sanitizedOriginalName }) => sanitizedOriginalName).join(', ');
+            return res.status(207).json({
+                message: `A videók feltöltése részben sikerült. A következő nevű klipeket kihagytuk, mert már léteznek: ${duplicateList}.`,
+            });
+        }
+
         res.status(201).json({ message: 'Videók sikeresen feltöltve.' });
     } catch (err) {
         await client.query('ROLLBACK');
