@@ -973,6 +973,7 @@ app.get('/api/programs/:id/download', async (req, res) => {
         }
 
         const normalizedPath = path.normalize(path.join(programFilesDirectory, program.file_filename));
+        console.log('DEBUG: Letöltési útvonal:', normalizedPath);
         if (!normalizedPath.startsWith(programFilesDirectory)) {
             return res.status(400).json({ message: 'Érvénytelen fájl elérési út.' });
         }
@@ -980,6 +981,7 @@ app.get('/api/programs/:id/download', async (req, res) => {
         try {
             await fs.promises.stat(normalizedPath);
         } catch (statErr) {
+            console.error('DEBUG: Fájl elérési hiba:', statErr);
             return res.status(404).json({ message: 'A program fájlja nem található.' });
         }
 
