@@ -100,7 +100,7 @@ async function loadAppSettings() {
         rows.forEach((row) => {
             settings[row.key] = row.value;
         });
-        app.settings = settings;
+        Object.assign(app.settings, settings);
         return settings;
     } catch (err) {
         console.error('Hiba a beállítások betöltésekor:', err);

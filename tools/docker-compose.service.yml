@@ -11,6 +11,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - "D:/weboldal fájlok:/usr/src/app/public/uploads"
     networks:
       - umgkl_net
       - shared_proxy_net
@@ -18,25 +20,22 @@ services:
   db:
     image: postgres:15-alpine
     restart: unless-stopped
-    # EZ A RÉSZ NYITJA KI A PORTOT A DBeavernek
-    ports:
-      - "127.0.0.1:5432:5432"
+    ports:                 # <--- EZT KELL HOZZÁADNI A SERVICE VERZIÓHOZ
+      - "5432:5432"        # <--- HOGY A DBEAVER LÁSSA
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
     environment:
       - POSTGRES_USER=myuser
       - POSTGRES_PASSWORD=mypassword
       - POSTGRES_DB=mydb
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - "D:/weboldal fájlok/adatbazis:/var/lib/postgresql/data"
     networks:
       - umgkl_net
-
-volumes:
-  postgres_data:
 
 networks:
   umgkl_net:
