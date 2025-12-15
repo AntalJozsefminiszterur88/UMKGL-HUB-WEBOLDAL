@@ -6053,7 +6053,9 @@
 
           let hasPlaybackError = false;
 
-          videoElement.addEventListener("click", () => {
+          videoElement.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
             if (videoElement.paused) {
               videoElement.play().catch(() => {});
             } else {
