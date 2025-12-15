@@ -28,7 +28,7 @@ services:
       - POSTGRES_PASSWORD=mypassword
       - POSTGRES_DB=mydb
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - "D:/weboldal fájlok/adatbazis:/var/lib/postgresql/data"
     networks:
       - umgkl_net
 
