@@ -705,11 +705,12 @@ app.post('/api/tags', authenticateToken, isAdmin, async (req, res) => {
 app.get('/api/videos', async (req, res) => {
     try {
         const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
-        const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 9, 1), 50);
+        const allowedLimits = [12, 24, 40, 80];
+        const requestedLimit = Number.parseInt(req.query.limit, 10);
+        const limit = allowedLimits.includes(requestedLimit) ? requestedLimit : 24;
         const search = (req.query.search || '').trim();
         const tagId = Number.parseInt(req.query.tag, 10);
-        const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom) : null;
-        const dateTo = req.query.dateTo ? new Date(req.query.dateTo) : null;
+        const sortOrder = req.query.sort === 'oldest' ? 'ASC' : 'DESC';
 
         const filters = [];
         const params = [];
@@ -722,16 +723,6 @@ app.get('/api/videos', async (req, res) => {
         if (Number.isInteger(tagId)) {
             const idx = params.push(tagId);
             filters.push(`EXISTS (SELECT 1 FROM video_tags vt WHERE vt.video_id = videos.id AND vt.tag_id = $${idx})`);
-        }
-
-        if (dateFrom && !Number.isNaN(dateFrom.getTime())) {
-            const idx = params.push(dateFrom);
-            filters.push(`videos.uploaded_at >= $${idx}`);
-        }
-
-        if (dateTo && !Number.isNaN(dateTo.getTime())) {
-            const idx = params.push(dateTo);
-            filters.push(`videos.uploaded_at <= $${idx}`);
         }
 
         const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
@@ -752,7 +743,7 @@ app.get('/api/videos', async (req, res) => {
                 FROM videos
                 LEFT JOIN users ON videos.uploader_id = users.id
                 ${whereClause}
-                ORDER BY videos.uploaded_at DESC
+                ORDER BY videos.uploaded_at ${sortOrder}
                 LIMIT $${dataParams.length - 1}
                 OFFSET $${dataParams.length}
             )
@@ -762,7 +753,7 @@ app.get('/api/videos', async (req, res) => {
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id
             GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username
-            ORDER BY fv.uploaded_at DESC;
+            ORDER BY fv.uploaded_at ${sortOrder};
         `;
 
         const { rows } = await db.query(dataQuery, dataParams);
@@ -821,8 +812,10 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         await client.query('BEGIN');
         for (const file of req.files) {
             const { filename, originalname } = file;
+            const parsedName = path.parse(originalname).name.trim();
+            const sanitizedOriginalName = parsedName || originalname;
             const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id) VALUES ($1, $2, $3) RETURNING id`;
-            const { rows } = await client.query(insertVideoQuery, [filename, originalname, uploaderId]);
+            const { rows } = await client.query(insertVideoQuery, [filename, sanitizedOriginalName, uploaderId]);
             const videoId = rows[0]?.id;
 
             if (videoId && tagIds.length) {
