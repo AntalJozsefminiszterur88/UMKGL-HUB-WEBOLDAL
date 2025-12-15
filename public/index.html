@@ -2081,6 +2081,45 @@
         color: rgba(255, 255, 255, 0.7);
       }
 
+      .upload-progress {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 0.65rem 0.75rem;
+        margin-top: 0.35rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .upload-progress__bar {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        overflow: hidden;
+        height: 10px;
+      }
+
+      .upload-progress__fill {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(90deg, #6f8bff, #9c6dff);
+        transition: width 0.15s ease;
+      }
+
+      .upload-progress__meta {
+        display: flex;
+        justify-content: space-between;
+        color: rgba(255, 255, 255, 0.78);
+        font-weight: 600;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .upload-progress__details {
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 0.95rem;
+      }
+
       .upload-modal-content.shake {
         animation: uploadShake 0.35s ease;
       }
@@ -2518,6 +2557,16 @@
               <div>
                 <div id="uploadSummary" class="upload-summary">Nincs kiválasztott fájl.</div>
                 <p id="uploadStatus" class="upload-status"></p>
+                <div id="uploadProgress" class="upload-progress" style="display: none">
+                  <div class="upload-progress__bar">
+                    <div id="uploadProgressFill" class="upload-progress__fill"></div>
+                  </div>
+                  <div class="upload-progress__meta">
+                    <span id="uploadProgressCount">0 / 0 klip</span>
+                    <span id="uploadProgressEta">Hátralévő idő: --</span>
+                  </div>
+                  <div id="uploadProgressDetails" class="upload-progress__details"></div>
+                </div>
               </div>
               <button id="uploadBtn" class="primary-btn large" disabled>FELTÖLTÉS</button>
             </div>
@@ -5289,6 +5338,11 @@
       const addFilesBtn = document.getElementById("addFilesBtn");
       const uploadBtn = document.getElementById("uploadBtn");
       const uploadStatus = document.getElementById("uploadStatus");
+      const uploadProgress = document.getElementById("uploadProgress");
+      const uploadProgressFill = document.getElementById("uploadProgressFill");
+      const uploadProgressCount = document.getElementById("uploadProgressCount");
+      const uploadProgressEta = document.getElementById("uploadProgressEta");
+      const uploadProgressDetails = document.getElementById("uploadProgressDetails");
       const selectedFileName = document.getElementById("selectedFileName");
       const uploadSummary = document.getElementById("uploadSummary");
       const uploadToast = document.getElementById("uploadToast");
@@ -5727,6 +5781,72 @@
         }
         uploadSummary.textContent = `${count} fájl kiválasztva.`;
         selectedFileName.textContent = uploadSummary.textContent;
+      }
+
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+          value /= 1024;
+          unitIndex += 1;
+        }
+        const precision = value >= 10 || unitIndex === 0 ? 0 : 1;
+        return `${value.toFixed(precision)} ${units[unitIndex]}`;
+      }
+
+      function formatDuration(seconds) {
+        if (!Number.isFinite(seconds) || seconds < 0) return "--";
+        const totalSeconds = Math.ceil(seconds);
+        const minutes = Math.floor(totalSeconds / 60);
+        const remainingSeconds = totalSeconds % 60;
+        return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+      }
+
+      function resetUploadProgress() {
+        if (uploadProgress) {
+          uploadProgress.style.display = "none";
+        }
+        if (uploadProgressFill) {
+          uploadProgressFill.style.width = "0%";
+        }
+        if (uploadProgressCount) {
+          uploadProgressCount.textContent = "0 / 0 klip";
+        }
+        if (uploadProgressEta) {
+          uploadProgressEta.textContent = "Hátralévő idő: --";
+        }
+        if (uploadProgressDetails) {
+          uploadProgressDetails.textContent = "";
+        }
+      }
+
+      function updateUploadProgressUI({
+        uploadedBytes,
+        totalBytes,
+        completedFiles,
+        totalFiles,
+        etaSeconds,
+      }) {
+        if (!uploadProgress || !uploadProgressFill || !uploadProgressCount || !uploadProgressEta) {
+          return;
+        }
+
+        const safeTotalBytes = totalBytes || 0;
+        const percent = safeTotalBytes > 0 ? Math.min(100, (uploadedBytes / safeTotalBytes) * 100) : 0;
+
+        uploadProgress.style.display = "flex";
+        uploadProgressFill.style.width = `${percent}%`;
+        uploadProgressCount.textContent = `${completedFiles} / ${totalFiles} klip`;
+        uploadProgressEta.textContent = `Hátralévő idő: ${formatDuration(etaSeconds)}`;
+
+        if (uploadProgressDetails) {
+          const remainingBytes = Math.max(safeTotalBytes - uploadedBytes, 0);
+          uploadProgressDetails.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(
+            safeTotalBytes
+          )} • Hátra: ${formatBytes(remainingBytes)}`;
+        }
       }
 
       function removeFromQueue(signature) {
@@ -6171,6 +6291,7 @@
         if (uploadStatus) {
           uploadStatus.textContent = "";
         }
+        resetUploadProgress();
         if (uploadToast) {
           uploadToast.classList.remove("upload-toast--visible");
           uploadToast.textContent = "";
@@ -6347,19 +6468,92 @@
             uploadStatus.textContent = "Feltöltés folyamatban...";
           }
 
-          try {
-            const response = await fetch("/upload", {
-              method: "POST",
-              headers: buildAuthHeaders(),
-              body: formData,
+          const totalUploadBytes = uploadQueue.reduce((sum, item) => sum + (item.file?.size || 0), 0);
+          const totalFiles = uploadQueue.length;
+          const uploadStartTime = performance.now();
+
+          const uploadPromise = () =>
+            new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open("POST", "/upload");
+              xhr.responseType = "json";
+
+              const headers = buildAuthHeaders();
+              if (headers && typeof headers === "object") {
+                Object.entries(headers).forEach(([key, value]) => {
+                  if (value) {
+                    xhr.setRequestHeader(key, value);
+                  }
+                });
+              }
+
+              xhr.upload.addEventListener("progress", (event) => {
+                const uploadedBytes = event.loaded || 0;
+                const totalBytes = event.total || totalUploadBytes;
+                const elapsedSeconds = Math.max((performance.now() - uploadStartTime) / 1000, 0.001);
+                const speed = uploadedBytes / elapsedSeconds;
+                const remainingBytes = Math.max(totalUploadBytes - uploadedBytes, 0);
+                const etaSeconds = speed > 0 ? remainingBytes / speed : Infinity;
+
+                let completedFiles = 0;
+                let remainingForCount = uploadedBytes;
+                for (const item of uploadQueue) {
+                  const fileSize = item.file?.size || 0;
+                  if (fileSize === 0) {
+                    completedFiles += 1;
+                    continue;
+                  }
+                  if (remainingForCount >= fileSize) {
+                    completedFiles += 1;
+                    remainingForCount -= fileSize;
+                  } else {
+                    break;
+                  }
+                }
+
+                updateUploadProgressUI({
+                  uploadedBytes,
+                  totalBytes,
+                  completedFiles,
+                  totalFiles,
+                  etaSeconds,
+                });
+              });
+
+              xhr.addEventListener("load", () => {
+                const result = xhr.response;
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  updateUploadProgressUI({
+                    uploadedBytes: totalUploadBytes,
+                    totalBytes: totalUploadBytes,
+                    completedFiles: totalFiles,
+                    totalFiles,
+                    etaSeconds: 0,
+                  });
+                  resolve(result);
+                } else {
+                  const message = (result && result.message) || "Nem sikerült feltölteni a videót.";
+                  reject(new Error(message));
+                }
+              });
+
+              xhr.addEventListener("error", () => {
+                reject(new Error("Hálózati hiba történt a feltöltés során."));
+              });
+
+              updateUploadProgressUI({
+                uploadedBytes: 0,
+                totalBytes: totalUploadBytes,
+                completedFiles: 0,
+                totalFiles,
+                etaSeconds: Infinity,
+              });
+
+              xhr.send(formData);
             });
 
-            const result = await response.json().catch(() => null);
-
-            if (!response.ok) {
-              const message = (result && result.message) || "Nem sikerült feltölteni a videót.";
-              throw new Error(message);
-            }
+          try {
+            const result = await uploadPromise();
 
             if (uploadStatus) {
               uploadStatus.textContent = (result && result.message) || "Videók sikeresen feltöltve.";
