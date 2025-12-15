@@ -14,8 +14,6 @@
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"
-      integrity="sha512-7GndGpVqJYG1ChcxrFAuo0xO+ogzAm8hFyr5YYhgtJfj+CDWkAQ+oAYamSt0aL94hEuj9Y5mROgPpN5NrpQwtQ=="
-      crossorigin="anonymous"
       referrerpolicy="no-referrer"
     />
     <link rel="stylesheet" href="HOI4-Porgonc/style.css" />
@@ -24,8 +22,6 @@
     <script src="/socket.io/socket.io.js"></script>
     <script
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
-      integrity="sha512-evZk1k+JGoqV9jQsy8+6uXxNdQUYm5OBAWzzZhIh7cJXUUEd2gKz5qYPUwE/UgNL80m4pGWQRt2mjgTg5azZKg=="
-      crossorigin="anonymous"
       referrerpolicy="no-referrer"
     ></script>
     <style>
@@ -4275,6 +4271,18 @@
       });
     }
 
+    function openProgramUploadModal() {
+      if (!isAdminUser()) {
+        alert("Csak adminok tölthetnek fel új programokat.");
+        return;
+      }
+
+      resetProgramUploadModal();
+      if (programUploadModal) {
+        programUploadModal.style.display = "flex";
+      }
+    }
+
     if (addProgramBtn) {
       addProgramBtn.addEventListener("click", openProgramUploadModal);
     }
@@ -5284,18 +5292,6 @@
       function closeProgramUploadModal() {
         if (programUploadModal) {
           programUploadModal.style.display = "none";
-        }
-      }
-
-      function openProgramUploadModal() {
-        if (!isAdminUser()) {
-          alert("Csak adminok tölthetnek fel új programokat.");
-          return;
-        }
-
-        resetProgramUploadModal();
-        if (programUploadModal) {
-          programUploadModal.style.display = "flex";
         }
       }
 
