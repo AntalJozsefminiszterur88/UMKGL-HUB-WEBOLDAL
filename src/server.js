@@ -922,6 +922,76 @@ app.post('/api/programs', authenticateToken, isAdmin, (req, res, next) => {
     }
 });
 
+app.put('/api/programs/:id', authenticateToken, isAdmin, (req, res, next) => {
+    const uploadHandler = uploadProgramFiles.fields([
+        { name: 'image', maxCount: 1 },
+        { name: 'file', maxCount: 1 }
+    ]);
+
+    uploadHandler(req, res, (err) => {
+        if (err) return next(err);
+        next();
+    });
+}, async (req, res) => {
+    const imageFile = req.files && req.files.image ? req.files.image[0] : null;
+    const programFile = req.files && req.files.file ? req.files.file[0] : null;
+
+    const cleanupUploads = async () => {
+        if (imageFile) {
+            await safeUnlink(path.join(programImagesDirectory, imageFile.filename));
+        }
+        if (programFile) {
+            await safeUnlink(path.join(programFilesDirectory, programFile.filename));
+        }
+    };
+
+    const programId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(programId)) {
+        await cleanupUploads();
+        return res.status(400).json({ message: 'Érvénytelen program azonosító.' });
+    }
+
+    const { name, description } = req.body || {};
+
+    if (!name || !description) {
+        await cleanupUploads();
+        return res.status(400).json({ message: 'A név és a leírás megadása kötelező.' });
+    }
+
+    try {
+        const { rows } = await db.query('SELECT image_filename, file_filename, original_filename FROM programs WHERE id = $1', [programId]);
+        const existingProgram = rows[0];
+
+        if (!existingProgram) {
+            await cleanupUploads();
+            return res.status(404).json({ message: 'A program nem található.' });
+        }
+
+        const newImageFilename = imageFile ? imageFile.filename : existingProgram.image_filename;
+        const newFileFilename = programFile ? programFile.filename : existingProgram.file_filename;
+        const newOriginalFilename = programFile ? programFile.originalname : existingProgram.original_filename;
+
+        await db.query(
+            'UPDATE programs SET name = $1, description = $2, image_filename = $3, file_filename = $4, original_filename = $5 WHERE id = $6',
+            [name, description, newImageFilename, newFileFilename, newOriginalFilename, programId]
+        );
+
+        if (imageFile && existingProgram.image_filename) {
+            await safeUnlink(path.join(programImagesDirectory, existingProgram.image_filename));
+        }
+
+        if (programFile && existingProgram.file_filename) {
+            await safeUnlink(path.join(programFilesDirectory, existingProgram.file_filename));
+        }
+
+        res.status(200).json({ message: 'Program sikeresen frissítve.' });
+    } catch (err) {
+        console.error('Hiba a program frissítésekor:', err);
+        await cleanupUploads();
+        res.status(500).json({ message: 'Nem sikerült frissíteni a programot.' });
+    }
+});
+
 app.delete('/api/programs/:id', authenticateToken, isAdmin, async (req, res) => {
     const programId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(programId)) {

@@ -1594,7 +1594,28 @@
         box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
       }
 
+      .program-card__edit {
+        position: absolute;
+        top: 10px;
+        right: 52px;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        border: none;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #4a90e2, #2a73c5);
+        color: #fff;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+      }
+
       .program-card.program-card--admin .program-card__delete {
+        display: inline-flex;
+      }
+
+      .program-card.program-card--admin .program-card__edit {
         display: inline-flex;
       }
 
@@ -2276,7 +2297,7 @@
     <div id="programUploadModal" class="upload-modal" style="display: none">
       <div class="upload-modal-content">
         <div class="upload-modal-header">
-          <h3>Új Program Feltöltése</h3>
+          <h3 id="programUploadTitle">Új Program Feltöltése</h3>
           <button id="closeProgramUploadModal" class="upload-modal-close" type="button">✕</button>
         </div>
         <form id="programUploadForm" class="program-upload-form">
@@ -2794,6 +2815,7 @@
     const programsContainer = document.getElementById("programsContainer");
     const addProgramBtn = document.getElementById("addProgramBtn");
     const programUploadModal = document.getElementById("programUploadModal");
+    const programUploadTitle = document.getElementById("programUploadTitle");
     const programUploadForm = document.getElementById("programUploadForm");
     const programNameInput = document.getElementById("programNameInput");
     const programDescriptionInput = document.getElementById("programDescriptionInput");
@@ -2816,6 +2838,7 @@
     let pollsShouldRefresh = true;
     let programImageCropper = null;
     let programImageObjectUrl = null;
+    let editingProgram = null;
 
     function isPollSectionActive() {
       return pollSection?.classList.contains("active");
@@ -4309,17 +4332,56 @@
       });
     }
 
-    function openProgramUploadModal() {
-      if (!isAdminUser()) {
-        alert("Csak adminok tölthetnek fel új programokat.");
-        return;
+      function openProgramUploadModal() {
+        if (!isAdminUser()) {
+          alert("Csak adminok tölthetnek fel új programokat.");
+          return;
+        }
+
+        setProgramUploadMode("create");
+        resetProgramUploadModal();
+        if (programUploadModal) {
+          programUploadModal.style.display = "flex";
+        }
       }
 
-      resetProgramUploadModal();
-      if (programUploadModal) {
-        programUploadModal.style.display = "flex";
+      function openProgramEditModal(program) {
+        if (!isAdminUser()) {
+          alert("Csak admin szerkeszthet programot.");
+          return;
+        }
+
+        if (!program || !program.id) {
+          return;
+        }
+
+        resetProgramUploadModal();
+        setProgramUploadMode("edit", program);
+
+        if (programNameInput) {
+          programNameInput.value = program.name || "";
+        }
+
+        if (programDescriptionInput) {
+          programDescriptionInput.value = program.description || "";
+        }
+
+        if (programFileName) {
+          programFileName.textContent = program.original_filename || "Nincs kiválasztva fájl.";
+        }
+
+        if (programImagePreview) {
+          if (program.image_filename) {
+            programImagePreview.src = `/uploads/programs/images/${program.image_filename}`;
+          } else {
+            programImagePreview.removeAttribute("src");
+          }
+        }
+
+        if (programUploadModal) {
+          programUploadModal.style.display = "flex";
+        }
       }
-    }
 
     if (addProgramBtn) {
       addProgramBtn.addEventListener("click", openProgramUploadModal);
@@ -4350,10 +4412,11 @@
         event.preventDefault();
 
         if (!isAdminUser()) {
-          alert("Csak adminok tölthetnek fel új programokat.");
+          alert("Csak adminok menthetnek programokat.");
           return;
         }
 
+        const isEditMode = Boolean(editingProgram && editingProgram.id);
         const name = programNameInput?.value.trim();
         const description = programDescriptionInput?.value.trim();
         const file = programFileInput?.files?.[0];
@@ -4363,7 +4426,7 @@
           return;
         }
 
-        if (!file) {
+        if (!file && !isEditMode) {
           alert("Válassz ki egy feltöltendő program fájlt.");
           return;
         }
@@ -4397,7 +4460,7 @@
           return;
         }
 
-        if (!imageBlob) {
+        if (!imageBlob && !isEditMode) {
           alert("Adj meg egy borítóképet a programhoz.");
           return;
         }
@@ -4405,18 +4468,25 @@
         const formData = new FormData();
         formData.append("name", name);
         formData.append("description", description);
-        formData.append("image", imageBlob, "program-image.png");
-        formData.append("file", file);
+        if (imageBlob) {
+          formData.append("image", imageBlob, "program-image.png");
+        }
+        if (file) {
+          formData.append("file", file);
+        }
+
+        const endpoint = isEditMode ? `/api/programs/${editingProgram.id}` : "/api/programs";
+        const method = isEditMode ? "PUT" : "POST";
 
         const originalText = submitProgramUploadBtn?.textContent;
         if (submitProgramUploadBtn) {
           submitProgramUploadBtn.disabled = true;
-          submitProgramUploadBtn.textContent = "Mentés...";
+          submitProgramUploadBtn.textContent = isEditMode ? "Frissítés..." : "Mentés...";
         }
 
         try {
-          const response = await fetch("/api/programs", {
-            method: "POST",
+          const response = await fetch(endpoint, {
+            method,
             headers: buildAuthHeaders(),
             body: formData,
           });
@@ -4424,7 +4494,7 @@
           const payload = await response.json().catch(() => ({}));
 
           if (!response.ok) {
-            const message = payload?.message || "Nem sikerült menteni a programot.";
+            const message = payload?.message || (isEditMode ? "Nem sikerült frissíteni a programot." : "Nem sikerült menteni a programot.");
             throw new Error(message);
           }
 
@@ -5318,6 +5388,32 @@
         });
       }
 
+      function setProgramUploadMode(mode, program = null) {
+        const isEditMode = mode === "edit";
+        editingProgram = isEditMode ? program : null;
+
+        if (programUploadTitle) {
+          programUploadTitle.textContent = isEditMode ? "Program szerkesztése" : "Új Program Feltöltése";
+        }
+
+        if (submitProgramUploadBtn) {
+          submitProgramUploadBtn.textContent = isEditMode ? "Frissítés" : "Mentés";
+        }
+
+        if (programFileInput) {
+          if (isEditMode) {
+            programFileInput.removeAttribute("required");
+          } else {
+            programFileInput.setAttribute("required", "required");
+          }
+          programFileInput.value = "";
+        }
+
+        if (!isEditMode && programFileName) {
+          programFileName.textContent = "Nincs kiválasztva fájl.";
+        }
+      }
+
       function resetProgramUploadModal() {
         if (programUploadForm) {
           programUploadForm.reset();
@@ -5346,6 +5442,9 @@
         if (programUploadModal) {
           programUploadModal.style.display = "none";
         }
+
+        setProgramUploadMode("create");
+        resetProgramUploadModal();
       }
 
       function renderProgramCard(program) {
@@ -5405,6 +5504,14 @@
         card.appendChild(body);
 
         if (isAdminUser()) {
+          const editBtn = document.createElement("button");
+          editBtn.type = "button";
+          editBtn.className = "program-card__edit";
+          editBtn.setAttribute("aria-label", "Program szerkesztése");
+          editBtn.textContent = "✎";
+          editBtn.addEventListener("click", () => openProgramEditModal(program));
+          card.appendChild(editBtn);
+
           const deleteBtn = document.createElement("button");
           deleteBtn.type = "button";
           deleteBtn.className = "program-card__delete";
