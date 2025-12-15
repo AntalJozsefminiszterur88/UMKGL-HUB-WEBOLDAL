@@ -1203,18 +1203,26 @@
 
       .create-tag-row {
         display: flex;
-        gap: 0.5rem;
+        gap: 0.75rem;
         margin-top: 0.5rem;
-        align-items: center;
+        align-items: flex-start;
+        flex-wrap: wrap;
       }
 
-      .create-tag-row input {
-        flex: 1;
+      .tag-field-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        width: 220px;
+      }
+
+      .create-tag-row input[type="text"] {
         background: #2c2f33;
         border: 1px solid #3c4047;
         color: #fff;
         padding: 0.5rem 0.65rem;
         border-radius: 8px;
+        width: 100%;
       }
 
       .create-tag-row button {
@@ -1224,6 +1232,23 @@
         padding: 0.5rem 0.75rem;
         border-radius: 8px;
         cursor: pointer;
+        width: 100%;
+      }
+
+      .tag-action-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-width: 140px;
+      }
+
+      .danger-btn {
+        background: #d84848;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+      }
+
+      .danger-btn:hover {
+        background: #c13c3c;
       }
 
       .tag-color-button {
@@ -1237,6 +1262,8 @@
         padding: 0.5rem 0.9rem;
         border-radius: 10px;
         cursor: pointer;
+        width: 100%;
+        justify-content: center;
       }
 
       .tag-color-button:hover {
@@ -2629,13 +2656,23 @@
               </div>
               <div id="createTagWrapper" style="display: none;">
                 <div class="create-tag-row">
-                  <input type="text" id="newTagName" placeholder="Új címke neve" />
-                  <button id="tagColorButton" type="button" class="tag-color-button">
-                    <span class="tag-color-swatch"></span>
-                    Szín
-                  </button>
+                  <div class="tag-field-group">
+                    <input
+                      type="text"
+                      id="newTagName"
+                      placeholder="Új címke neve"
+                      class="new-tag-input"
+                    />
+                    <button id="tagColorButton" type="button" class="tag-color-button">
+                      <span class="tag-color-swatch"></span>
+                      Szín
+                    </button>
+                  </div>
+                  <div class="tag-action-group">
+                    <button id="deleteTagButton" type="button" class="danger-btn">Törlés</button>
+                    <button id="createTagButton" type="button">Hozzáadás</button>
+                  </div>
                   <input type="color" id="newTagColor" class="tag-color-input" value="#5865f2" />
-                  <button id="createTagButton" type="button">Hozzáadás</button>
                 </div>
                 <small id="createTagStatus"></small>
               </div>
@@ -5456,6 +5493,7 @@
       const newTagColorInput = document.getElementById("newTagColor");
       const tagColorButton = document.getElementById("tagColorButton");
       const createTagButton = document.getElementById("createTagButton");
+      const deleteTagButton = document.getElementById("deleteTagButton");
       const createTagStatus = document.getElementById("createTagStatus");
       const DEFAULT_TAG_COLOR = "#5865f2";
       let uploadQueue = [];
@@ -6442,6 +6480,35 @@
         }
       }
 
+      async function handleDeleteTag() {
+        if (!createTagStatus) return;
+        const selectedOption = globalTagSelect?.selectedOptions?.[0];
+        const tagId = Number.parseInt(selectedOption?.value, 10);
+        if (!tagId) {
+          createTagStatus.textContent = "Válassz ki egy címkét a törléshez.";
+          return;
+        }
+
+        createTagStatus.textContent = "Címke törlése...";
+        try {
+          const response = await fetch(`/api/tags/${tagId}`, {
+            method: "DELETE",
+            headers: buildAuthHeaders(),
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error((result && result.message) || "Nem sikerült törölni a címkét.");
+          }
+          createTagStatus.textContent = "Címke törölve.";
+          if (globalTagSelect) {
+            globalTagSelect.value = "";
+          }
+          await fetchTags();
+        } catch (error) {
+          createTagStatus.textContent = error.message;
+        }
+      }
+
       if (newTagColorInput && tagColorButton) {
         const updateTagColorPreview = () => {
           const color = normalizeColor(newTagColorInput.value || DEFAULT_TAG_COLOR);
@@ -6455,6 +6522,10 @@
 
       if (createTagButton) {
         createTagButton.addEventListener("click", handleCreateTag);
+      }
+
+      if (deleteTagButton) {
+        deleteTagButton.addEventListener("click", handleDeleteTag);
       }
 
       function resetUploadModal() {

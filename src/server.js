@@ -726,6 +726,25 @@ app.post('/api/tags', authenticateToken, isAdmin, async (req, res) => {
     }
 });
 
+app.delete('/api/tags/:tagId', authenticateToken, isAdmin, async (req, res) => {
+    const tagId = Number.parseInt(req.params.tagId, 10);
+
+    if (!tagId) {
+        return res.status(400).json({ message: 'Érvénytelen címke azonosító.' });
+    }
+
+    try {
+        const result = await db.query('DELETE FROM tags WHERE id = $1', [tagId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'A címke nem található.' });
+        }
+        res.status(200).json({ message: 'Címke törölve.' });
+    } catch (err) {
+        console.error('Hiba a címke törlése során:', err);
+        res.status(500).json({ message: 'Nem sikerült törölni a címkét.' });
+    }
+});
+
 app.get('/api/videos', async (req, res) => {
     try {
         const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
