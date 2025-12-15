@@ -5790,7 +5790,19 @@
 
       function cleanVideoTitle(rawTitle) {
         if (!rawTitle) return "";
-        return rawTitle.replace(/\.mp4$/i, "").trim();
+
+        const trimmed = rawTitle.trim();
+        const looksLikeMojibake = /[Ã�Â]/.test(trimmed);
+        if (looksLikeMojibake) {
+          const decoded = new TextDecoder("utf-8").decode(
+            Uint8Array.from(trimmed.split("").map((char) => char.charCodeAt(0)))
+          );
+          if (decoded && !decoded.includes("�")) {
+            return decoded.replace(/\.[^.]+$/i, "").trim();
+          }
+        }
+
+        return trimmed.replace(/\.[^.]+$/i, "").trim();
       }
 
       function renderVideoGrid(videos) {

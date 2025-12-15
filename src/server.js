@@ -772,6 +772,27 @@ app.get('/api/videos', async (req, res) => {
     }
 });
 
+function normalizeFilename(originalName) {
+    if (!originalName) {
+        return '';
+    }
+
+    const trimmedName = originalName.trim();
+
+    // A böngészőkből érkező fájlnevek gyakran Latin-1 kódolással érkeznek,
+    // ezért a magyar ékezetes karakterek hibásan jelenhetnek meg (pl. "Ã¡" az "á" helyett).
+    // Ha ilyen mintát érzékelünk, újrakódoljuk UTF-8-ra.
+    const looksLikeMojibake = /[Ã�Â]/.test(trimmedName);
+    if (looksLikeMojibake) {
+        const decoded = Buffer.from(trimmedName, 'latin1').toString('utf8').trim();
+        if (decoded && !decoded.includes('�')) {
+            return decoded;
+        }
+    }
+
+    return trimmedName;
+}
+
 app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) => {
     const limits = {};
     if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
@@ -812,8 +833,9 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         await client.query('BEGIN');
         for (const file of req.files) {
             const { filename, originalname } = file;
-            const parsedName = path.parse(originalname).name.trim();
-            const sanitizedOriginalName = parsedName || originalname;
+            const normalizedOriginalName = normalizeFilename(originalname);
+            const parsedName = path.parse(normalizedOriginalName).name.trim();
+            const sanitizedOriginalName = parsedName || normalizedOriginalName;
             const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id) VALUES ($1, $2, $3) RETURNING id`;
             const { rows } = await client.query(insertVideoQuery, [filename, sanitizedOriginalName, uploaderId]);
             const videoId = rows[0]?.id;
