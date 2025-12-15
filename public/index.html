@@ -4761,9 +4761,11 @@
       });
     }
 
-    closeLogin.addEventListener("click", () => {
-      loginModal.style.display = "none";
-    });
+    if (closeLogin) {
+      closeLogin.addEventListener("click", () => {
+        loginModal.style.display = "none";
+      });
+    }
 
     if (adminNavBtn) {
       adminNavBtn.addEventListener("click", loadAdminPanel);
