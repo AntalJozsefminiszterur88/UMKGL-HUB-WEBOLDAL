@@ -1084,12 +1084,15 @@
       }
 
       .tag-chip {
-        background: #2d6cdf;
+        --tag-color: #5865f2;
+        background: var(--tag-color);
         color: #fff;
         padding: 0.25rem 0.6rem;
         border-radius: 999px;
         font-size: 0.8rem;
         font-weight: 600;
+        border: 1px solid var(--tag-color);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
       }
 
       @media (max-width: 1200px) {
@@ -6297,6 +6300,7 @@
           (video.tags || []).forEach((tag) => {
             const chip = document.createElement("span");
             chip.className = "tag-chip";
+            chip.style.setProperty("--tag-color", normalizeColor(tag.color));
             chip.textContent = tag.name;
             tagList.appendChild(chip);
           });
