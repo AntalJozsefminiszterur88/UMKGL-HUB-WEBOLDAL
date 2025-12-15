@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const ffmpeg = require('fluent-ffmpeg');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const db = require('./database');
 
@@ -88,6 +89,17 @@ function getVideoCreationDate(filePath) {
 
             return resolve(parsedDate);
         });
+    });
+}
+
+function computeFileHash(filePath) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha1');
+        const stream = fs.createReadStream(filePath);
+
+        stream.on('data', (chunk) => hash.update(chunk));
+        stream.on('error', reject);
+        stream.on('end', () => resolve(hash.digest('hex')));
     });
 }
 
@@ -871,6 +883,17 @@ app.get('/api/videos/get-uploaded-titles', async (_req, res) => {
     }
 });
 
+app.get('/api/videos/get-uploaded-hashes', async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT file_hash FROM videos WHERE file_hash IS NOT NULL');
+        const hashes = (rows || []).map((row) => row.file_hash).filter(Boolean);
+        res.status(200).json(hashes);
+    } catch (err) {
+        console.error('Hiba a videók hash értékeinek lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni a videók hash értékeit.' });
+    }
+});
+
 function normalizeFilename(originalName) {
     if (!originalName) {
         return '';
@@ -958,7 +981,7 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         }
     })();
 
-    const filesWithNames = req.files.map((file, index) => {
+    const filesWithNames = await Promise.all(req.files.map(async (file, index) => {
         const { originalname } = file;
         const normalizedOriginalName = normalizeFilename(originalname);
         const metadata = metadataList[index] || {};
@@ -966,8 +989,10 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         const parsedName = path.parse(customName || normalizedOriginalName).name.trim();
         const sanitizedOriginalName = parsedName || normalizedOriginalName;
         const tagsForFile = normalizeTagIds(metadata.tags);
-        return { file, sanitizedOriginalName, tags: tagsForFile.length ? tagsForFile : fallbackTagIds };
-    });
+        const filePath = path.join(clipsDirectory, file.filename);
+        const fileHash = await computeFileHash(filePath);
+        return { file, sanitizedOriginalName, tags: tagsForFile.length ? tagsForFile : fallbackTagIds, fileHash };
+    }));
 
     const originalNames = filesWithNames.map(({ sanitizedOriginalName }) => sanitizedOriginalName);
 
@@ -1039,7 +1064,7 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
-        for (const { file, sanitizedOriginalName, tags } of newFiles) {
+        for (const { file, sanitizedOriginalName, tags, fileHash } of newFiles) {
             const { filename } = file;
             const currentFilePath = path.join(clipsDirectory, filename);
             const folderName = resolveFolderName(tags);
@@ -1050,8 +1075,19 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
 
             const storedFilename = path.posix.join('klippek', folderName, filename);
             const contentCreatedAt = await getVideoCreationDate(targetFilePath);
-            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at) VALUES ($1, $2, $3, $4) RETURNING id`;
-            const { rows } = await client.query(insertVideoQuery, [storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt]);
+            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at, file_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id`;
+            let insertResult;
+            try {
+                insertResult = await client.query(insertVideoQuery, [storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt, fileHash]);
+            } catch (err) {
+                if (err.code === '23505') {
+                    await safeUnlink(targetFilePath);
+                    await client.query('ROLLBACK');
+                    return res.status(409).json({ message: 'Ezt a videót már feltöltötték.' });
+                }
+                throw err;
+            }
+            const { rows } = insertResult;
             const videoId = rows[0]?.id;
 
             if (videoId && tags.length) {
