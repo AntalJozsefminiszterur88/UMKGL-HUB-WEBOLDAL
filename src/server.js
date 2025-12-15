@@ -20,6 +20,7 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
 const server = http.createServer(app);
+server.setTimeout(0); // Added to prevent timeouts during large uploads
 const io = new Server(server);
 app.settings = app.settings || {};
 
