@@ -12,9 +12,14 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="HOI4-Porgonc/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"
+    />
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <style>
       #fajlkuldes {
         background: rgba(24, 25, 28, 0.95);
@@ -1871,6 +1876,126 @@
         border-radius: 4px;
         cursor: pointer;
       }
+
+      #avatarCropperModal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1500;
+        padding: 1.5rem;
+      }
+
+      #avatarCropperModal.show {
+        display: flex;
+      }
+
+      .avatar-cropper-dialog {
+        background: #36393f;
+        color: #fff;
+        border-radius: 12px;
+        width: min(720px, 100%);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .avatar-cropper-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        font-weight: 700;
+        font-size: 1.1rem;
+      }
+
+      .avatar-cropper-body {
+        padding: 1rem 1.25rem 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .avatar-cropper-canvas {
+        background: #2f3136;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 0.75rem;
+        display: grid;
+        place-items: center;
+        min-height: 360px;
+      }
+
+      #avatarCropperImage {
+        max-width: 100%;
+        max-height: 60vh;
+        display: block;
+      }
+
+      .avatar-zoom-control {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem 1rem;
+      }
+
+      .avatar-zoom-control .zoom-icon {
+        color: #b9bbbe;
+        font-size: 1rem;
+      }
+
+      .avatar-zoom-control .zoom-icon.large {
+        font-size: 1.3rem;
+      }
+
+      .avatar-zoom-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(88, 101, 242, 0.35);
+        outline: none;
+        cursor: pointer;
+      }
+
+      .avatar-zoom-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #5865f2;
+        box-shadow: 0 0 0 4px rgba(88, 101, 242, 0.15);
+        border: none;
+      }
+
+      .avatar-zoom-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #5865f2;
+        box-shadow: 0 0 0 4px rgba(88, 101, 242, 0.15);
+        border: none;
+      }
+
+      .avatar-cropper-footer {
+        padding: 0.85rem 1.25rem 1.25rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .cropper-view-box,
+      .cropper-face {
+        border-radius: 50%;
+      }
+
+      .cropper-view-box {
+        box-shadow: 0 0 0 1px #5865f2;
+      }
     </style>
   </head>
   <body>
@@ -2349,6 +2474,34 @@
         </div>
       </section>
     </main>
+
+    <div id="avatarCropperModal">
+      <div class="avatar-cropper-dialog">
+        <div class="avatar-cropper-header">Kép szerkesztése</div>
+        <div class="avatar-cropper-body">
+          <div class="avatar-cropper-canvas">
+            <img id="avatarCropperImage" alt="Avatar szerkesztése" />
+          </div>
+          <div class="avatar-zoom-control">
+            <span class="zoom-icon" aria-hidden="true">🖼️</span>
+            <input
+              type="range"
+              id="avatarZoomSlider"
+              class="avatar-zoom-slider"
+              min="0.5"
+              max="3"
+              step="0.01"
+              value="1"
+            />
+            <span class="zoom-icon large" aria-hidden="true">🖼️</span>
+          </div>
+        </div>
+        <div class="avatar-cropper-footer">
+          <button type="button" id="avatarCropCancelBtn" class="ghost-button">Mégse</button>
+          <button type="button" id="avatarCropSaveBtn" class="primary-button">Mentés</button>
+        </div>
+      </div>
+    </div>
 
     <footer>
       <p>© 2025 UMGKL HUB Minden jog fenntartva</p>
@@ -4380,30 +4533,135 @@
     const avatarInput = document.getElementById('avatarInput');
     const avatarUploadStatus = document.getElementById('avatarUploadStatus');
     const profileAvatarPreview = document.getElementById('profileAvatarPreview');
-    let avatarPreviewObjectUrl = null;
+    const avatarCropperModal = document.getElementById('avatarCropperModal');
+    const avatarCropperImage = document.getElementById('avatarCropperImage');
+    const avatarZoomSlider = document.getElementById('avatarZoomSlider');
+    const avatarCropCancelBtn = document.getElementById('avatarCropCancelBtn');
+    const avatarCropSaveBtn = document.getElementById('avatarCropSaveBtn');
+    let avatarCropperInstance = null;
+    let croppedAvatarBlob = null;
+    let croppedAvatarObjectUrl = null;
+    let croppedAvatarFilename = 'avatar.png';
+    let avatarSourceFileType = 'image/png';
+
+    function resetAvatarPreviewToStored() {
+        if (!profileAvatarPreview) return;
+        if (croppedAvatarObjectUrl) {
+            URL.revokeObjectURL(croppedAvatarObjectUrl);
+            croppedAvatarObjectUrl = null;
+        }
+        croppedAvatarBlob = null;
+        delete profileAvatarPreview.dataset.override;
+        const storedAvatar = localStorage.getItem(SESSION_KEYS.profilePictureFilename);
+        profileAvatarPreview.src = storedAvatar ? `/uploads/avatars/${storedAvatar}` : 'program_icons/default-avatar.png';
+    }
+
+    function closeAvatarCropper(resetSelection = false) {
+        if (avatarCropperModal) {
+            avatarCropperModal.classList.remove('show');
+        }
+        if (avatarCropperInstance) {
+            avatarCropperInstance.destroy();
+            avatarCropperInstance = null;
+        }
+        if (avatarZoomSlider) {
+            avatarZoomSlider.value = '1';
+        }
+        if (resetSelection && avatarInput) {
+            avatarInput.value = '';
+        }
+    }
+
+    function openAvatarCropper(file) {
+        if (!avatarCropperImage || !avatarCropperModal) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            avatarCropperImage.src = reader.result;
+            avatarCropperModal.classList.add('show');
+
+            if (avatarCropperInstance) {
+                avatarCropperInstance.destroy();
+            }
+
+            avatarCropperInstance = new Cropper(avatarCropperImage, {
+                aspectRatio: 1,
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 1,
+                ready() {
+                    if (avatarZoomSlider) {
+                        avatarZoomSlider.value = '1';
+                    }
+                },
+                zoom(event) {
+                    if (avatarZoomSlider) {
+                        avatarZoomSlider.value = Math.min(
+                            Math.max(event.detail.ratio, parseFloat(avatarZoomSlider.min)),
+                            parseFloat(avatarZoomSlider.max)
+                        );
+                    }
+                },
+            });
+        };
+        reader.readAsDataURL(file);
+    }
+
+    if (avatarZoomSlider) {
+        avatarZoomSlider.addEventListener('input', () => {
+            if (avatarCropperInstance) {
+                avatarCropperInstance.zoomTo(parseFloat(avatarZoomSlider.value));
+            }
+        });
+    }
 
     if (avatarInput && profileAvatarPreview) {
         avatarInput.addEventListener('change', () => {
             const file = avatarInput.files[0];
 
-            if (avatarPreviewObjectUrl) {
-                URL.revokeObjectURL(avatarPreviewObjectUrl);
-                avatarPreviewObjectUrl = null;
-            }
-
             if (!file) {
-                delete profileAvatarPreview.dataset.override;
-                const storedAvatar = localStorage.getItem(SESSION_KEYS.profilePictureFilename);
-                profileAvatarPreview.src = storedAvatar ? `/uploads/avatars/${storedAvatar}` : 'program_icons/default-avatar.png';
+                if (!croppedAvatarBlob) {
+                    resetAvatarPreviewToStored();
+                }
                 return;
             }
 
-            avatarPreviewObjectUrl = URL.createObjectURL(file);
-            profileAvatarPreview.src = avatarPreviewObjectUrl;
-            profileAvatarPreview.dataset.override = 'true';
             if (avatarUploadStatus) {
               avatarUploadStatus.textContent = '';
             }
+
+            croppedAvatarFilename = file.name || 'avatar.png';
+            avatarSourceFileType = file.type || 'image/png';
+            openAvatarCropper(file);
+        });
+    }
+
+    if (avatarCropCancelBtn) {
+        avatarCropCancelBtn.addEventListener('click', () => {
+            closeAvatarCropper(true);
+            if (!croppedAvatarBlob) {
+                resetAvatarPreviewToStored();
+            }
+        });
+    }
+
+    if (avatarCropSaveBtn) {
+        avatarCropSaveBtn.addEventListener('click', () => {
+            if (!avatarCropperInstance) return;
+
+            const canvas = avatarCropperInstance.getCroppedCanvas({ width: 512, height: 512 });
+            canvas.toBlob((blob) => {
+                if (!blob) return;
+
+                croppedAvatarBlob = blob;
+                if (croppedAvatarObjectUrl) {
+                    URL.revokeObjectURL(croppedAvatarObjectUrl);
+                }
+                croppedAvatarObjectUrl = URL.createObjectURL(blob);
+                profileAvatarPreview.src = croppedAvatarObjectUrl;
+                profileAvatarPreview.dataset.override = 'true';
+                closeAvatarCropper(true);
+            }, avatarSourceFileType || 'image/png');
         });
     }
 
@@ -4414,14 +4672,19 @@
                 return;
             }
 
-            const file = avatarInput.files[0];
+            const file = croppedAvatarBlob || avatarInput.files[0];
             if (!file) {
                 alert("Válassz ki egy képfájlt a feltöltéshez.");
                 return;
             }
 
             const formData = new FormData();
-            formData.append('avatar', file);
+            if (croppedAvatarBlob) {
+                const uploadFile = new File([croppedAvatarBlob], croppedAvatarFilename || 'avatar.png', { type: avatarSourceFileType || croppedAvatarBlob.type || 'image/png' });
+                formData.append('avatar', uploadFile);
+            } else {
+                formData.append('avatar', file);
+            }
 
             uploadAvatarBtn.disabled = true;
             avatarUploadStatus.textContent = "Feltöltés folyamatban...";
@@ -4441,11 +4704,13 @@
 
                 avatarUploadStatus.textContent = result.message;
                 avatarInput.value = '';
-                if (avatarPreviewObjectUrl) {
-                    URL.revokeObjectURL(avatarPreviewObjectUrl);
-                    avatarPreviewObjectUrl = null;
+                if (croppedAvatarObjectUrl) {
+                    URL.revokeObjectURL(croppedAvatarObjectUrl);
+                    croppedAvatarObjectUrl = null;
                 }
+                croppedAvatarBlob = null;
                 delete profileAvatarPreview.dataset.override;
+                closeAvatarCropper();
                 await ensureSessionOnLoad(); // Refresh session data to get new avatar filename
             } catch (error) {
                 console.error('Profilkép feltöltési hiba:', error);
