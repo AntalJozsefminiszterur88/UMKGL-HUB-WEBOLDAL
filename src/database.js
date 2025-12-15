@@ -58,6 +58,10 @@ async function initializeDatabase() {
       )
     `);
 
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS content_created_at TIMESTAMPTZ DEFAULT NOW()'
+    );
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS tags (
         id SERIAL PRIMARY KEY,

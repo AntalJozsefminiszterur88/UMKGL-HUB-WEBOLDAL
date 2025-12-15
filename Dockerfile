@@ -4,6 +4,8 @@ WORKDIR /usr/src/app
 
 COPY package*.json ./
 
+RUN apk add --no-cache ffmpeg
+
 RUN npm install
 
 COPY . .
