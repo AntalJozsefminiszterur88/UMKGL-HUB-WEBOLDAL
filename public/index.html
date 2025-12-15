@@ -1025,7 +1025,7 @@
       #video-grid-container {
         margin-top: 1rem;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 1rem;
       }
 
@@ -1047,10 +1047,15 @@
       }
 
       .video-card__title {
-        font-size: 1.05rem;
+        font-size: clamp(0.95rem, 0.65vw + 0.8rem, 1.05rem);
         font-weight: 700;
         margin: 0;
         color: #fff;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        line-height: 1.3;
       }
 
       .video-card__meta {
@@ -1076,6 +1081,12 @@
         border-radius: 999px;
         font-size: 0.8rem;
         font-weight: 600;
+      }
+
+      @media (max-width: 1100px) {
+        #video-grid-container {
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        }
       }
 
       .video-card--error {
@@ -2410,12 +2421,20 @@
             </select>
           </div>
           <div class="filter-group">
-            <label for="dateFromInput">Feltöltés ettől</label>
-            <input id="dateFromInput" type="date" />
+            <label for="sortOrderSelect">Rendezés</label>
+            <select id="sortOrderSelect">
+              <option value="newest">Legújabb elöl</option>
+              <option value="oldest">Legrégebbi elöl</option>
+            </select>
           </div>
           <div class="filter-group">
-            <label for="dateToInput">Feltöltés eddig</label>
-            <input id="dateToInput" type="date" />
+            <label for="pageSizeSelect">Videók száma / oldal</label>
+            <select id="pageSizeSelect">
+              <option value="12">12</option>
+              <option value="24" selected>24</option>
+              <option value="40">40</option>
+              <option value="80">80</option>
+            </select>
           </div>
           <div class="filter-group">
             <label>&nbsp;</label>
@@ -5191,8 +5210,8 @@
       const globalTagSelect = document.getElementById("globalTagSelect");
       const videoSearchInput = document.getElementById("videoSearchInput");
       const tagFilterSelect = document.getElementById("tagFilterSelect");
-      const dateFromInput = document.getElementById("dateFromInput");
-      const dateToInput = document.getElementById("dateToInput");
+      const sortOrderSelect = document.getElementById("sortOrderSelect");
+      const pageSizeSelect = document.getElementById("pageSizeSelect");
       const filterResetBtn = document.getElementById("filterResetBtn");
       const createTagWrapper = document.getElementById("createTagWrapper");
       const newTagNameInput = document.getElementById("newTagName");
@@ -5201,14 +5220,18 @@
       let uploadQueue = [];
       const fileSignatures = new Set();
       let availableTags = [];
+      const VIDEO_PAGE_SIZE_KEY = "videoPageSize";
+      const VIDEO_SORT_ORDER_KEY = "videoSortOrder";
+      const savedPageSize = Number.parseInt(localStorage.getItem(VIDEO_PAGE_SIZE_KEY), 10);
+      const savedSortOrder = localStorage.getItem(VIDEO_SORT_ORDER_KEY);
       const videoFilters = {
         page: 1,
-        limit: 9,
+        limit: [12, 24, 40, 80].includes(savedPageSize) ? savedPageSize : 24,
         search: "",
         tag: "",
-        dateFrom: "",
-        dateTo: "",
+        sort: savedSortOrder === "oldest" ? "oldest" : "newest",
       };
+      let videoSearchTimeout = null;
 
       if (summaryToggleBtn && summaryCard) {
         summaryToggleBtn.addEventListener("click", () => {
@@ -5231,6 +5254,14 @@
           summaryToggleBtn.classList.remove("is-hidden");
           summaryToggleBtn.focus();
         });
+      }
+
+      if (pageSizeSelect) {
+        pageSizeSelect.value = String(videoFilters.limit);
+      }
+
+      if (sortOrderSelect) {
+        sortOrderSelect.value = videoFilters.sort;
       }
 
       function isAdminUser() {
@@ -5742,6 +5773,11 @@
         }
       }
 
+      function cleanVideoTitle(rawTitle) {
+        if (!rawTitle) return "";
+        return rawTitle.replace(/\.mp4$/i, "").trim();
+      }
+
       function renderVideoGrid(videos) {
         videoGridContainer.innerHTML = "";
         videos.forEach((video) => {
@@ -5750,7 +5786,8 @@
 
           const title = document.createElement("p");
           title.className = "video-card__title";
-          title.textContent = video.original_name || video.filename;
+          const rawTitle = video.original_name || video.filename;
+          title.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
 
           const videoElement = document.createElement("video");
           videoElement.src = `/uploads/${video.filename}`;
@@ -5899,7 +5936,12 @@
         videoSearchInput.addEventListener("input", () => {
           videoFilters.search = videoSearchInput.value.trim();
           videoFilters.page = 1;
-          loadVideos();
+          if (videoSearchTimeout) {
+            clearTimeout(videoSearchTimeout);
+          }
+          videoSearchTimeout = setTimeout(() => {
+            loadVideos();
+          }, 2000);
         });
       }
 
@@ -5911,17 +5953,21 @@
         });
       }
 
-      if (dateFromInput) {
-        dateFromInput.addEventListener("change", () => {
-          videoFilters.dateFrom = dateFromInput.value;
+      if (sortOrderSelect) {
+        sortOrderSelect.addEventListener("change", () => {
+          videoFilters.sort = sortOrderSelect.value === "oldest" ? "oldest" : "newest";
+          localStorage.setItem(VIDEO_SORT_ORDER_KEY, videoFilters.sort);
           videoFilters.page = 1;
           loadVideos();
         });
       }
 
-      if (dateToInput) {
-        dateToInput.addEventListener("change", () => {
-          videoFilters.dateTo = dateToInput.value;
+      if (pageSizeSelect) {
+        pageSizeSelect.addEventListener("change", () => {
+          const selected = Number.parseInt(pageSizeSelect.value, 10);
+          const allowed = [12, 24, 40, 80];
+          videoFilters.limit = allowed.includes(selected) ? selected : videoFilters.limit;
+          localStorage.setItem(VIDEO_PAGE_SIZE_KEY, videoFilters.limit);
           videoFilters.page = 1;
           loadVideos();
         });
@@ -5932,12 +5978,17 @@
           videoFilters.page = 1;
           videoFilters.search = "";
           videoFilters.tag = "";
-          videoFilters.dateFrom = "";
-          videoFilters.dateTo = "";
+          videoFilters.sort = "newest";
+          if (videoSearchTimeout) {
+            clearTimeout(videoSearchTimeout);
+            videoSearchTimeout = null;
+          }
           if (videoSearchInput) videoSearchInput.value = "";
           if (tagFilterSelect) tagFilterSelect.value = "";
-          if (dateFromInput) dateFromInput.value = "";
-          if (dateToInput) dateToInput.value = "";
+          if (sortOrderSelect) {
+            sortOrderSelect.value = videoFilters.sort;
+            localStorage.setItem(VIDEO_SORT_ORDER_KEY, videoFilters.sort);
+          }
           loadVideos();
         });
       }
