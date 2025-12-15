@@ -61,6 +61,9 @@ async function initializeDatabase() {
     await client.query(
       'ALTER TABLE videos ADD COLUMN IF NOT EXISTS content_created_at TIMESTAMPTZ DEFAULT NOW()'
     );
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS file_hash TEXT UNIQUE'
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS tags (
