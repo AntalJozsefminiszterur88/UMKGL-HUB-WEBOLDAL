@@ -31,7 +31,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Fájlfeltöltés beállítása a videókhoz
-const uploadsDirectory = path.join(__dirname, '..', 'public', 'uploads');
+const uploadsRootDirectory = path.join(__dirname, '..', 'public', 'uploads');
+const clipsDirectory = path.join(uploadsRootDirectory, 'klippek');
 const ensureDirectoryExists = (dirPath) => {
     try {
         fs.mkdirSync(dirPath, { recursive: true });
@@ -42,7 +43,8 @@ const ensureDirectoryExists = (dirPath) => {
     }
 };
 
-ensureDirectoryExists(uploadsDirectory);
+ensureDirectoryExists(uploadsRootDirectory);
+ensureDirectoryExists(clipsDirectory);
 
 const programImagesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'images');
 const programFilesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'files');
@@ -90,10 +92,10 @@ function getVideoCreationDate(filePath) {
 }
 
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadsDirectory);
+    destination: (_req, _file, cb) => {
+        cb(null, clipsDirectory);
     },
-    filename: (req, file, cb) => {
+    filename: (_req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
         cb(null, uniqueName);
     }
@@ -235,52 +237,69 @@ function getVideoMimeType(filePath) {
     return VIDEO_MIME_TYPES[ext] || 'application/octet-stream';
 }
 
-app.get('/uploads/:filename', (req, res) => {
-    const requestedFile = req.params.filename;
-    const safeFilePath = path.normalize(path.join(uploadsDirectory, requestedFile));
+app.get('/uploads/*', (req, res) => {
+    const requestedFile = req.params[0] || '';
+    const safeFilePath = path.normalize(path.join(uploadsRootDirectory, requestedFile));
 
-    if (!safeFilePath.startsWith(uploadsDirectory)) {
+    if (!safeFilePath.startsWith(uploadsRootDirectory)) {
         return res.status(400).json({ message: 'Érvénytelen fájlnév.' });
     }
 
-    fs.stat(safeFilePath, (statErr, stats) => {
-        if (statErr || !stats.isFile()) {
-            return res.status(404).json({ message: 'A kért videó nem található.' });
-        }
+    const serveFromPath = (filePath) => {
+        fs.stat(filePath, (statErr, stats) => {
+            if (statErr || !stats.isFile()) {
+                return res.status(404).json({ message: 'A kért videó nem található.' });
+            }
 
-        const fileSize = stats.size;
-        const range = req.headers.range;
-        const mimeType = getVideoMimeType(safeFilePath);
+            const fileSize = stats.size;
+            const range = req.headers.range;
+            const mimeType = getVideoMimeType(filePath);
 
-        if (!range) {
-            res.writeHead(200, {
-                'Content-Length': fileSize,
-                'Content-Type': mimeType,
-                'Accept-Ranges': 'bytes'
+            if (!range) {
+                res.writeHead(200, {
+                    'Content-Length': fileSize,
+                    'Content-Type': mimeType,
+                    'Accept-Ranges': 'bytes'
+                });
+                return fs.createReadStream(filePath).pipe(res);
+            }
+
+            const rangeMatch = range.replace(/bytes=/, '').split('-');
+            const start = Number.parseInt(rangeMatch[0], 10);
+            const end = rangeMatch[1] ? Math.min(Number.parseInt(rangeMatch[1], 10), fileSize - 1) : fileSize - 1;
+
+            if (Number.isNaN(start) || Number.isNaN(end) || start >= fileSize || end >= fileSize) {
+                res.status(416).set('Content-Range', `bytes */${fileSize}`).end();
+                return;
+            }
+
+            const chunkSize = end - start + 1;
+            const stream = fs.createReadStream(filePath, { start, end });
+
+            res.writeHead(206, {
+                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunkSize,
+                'Content-Type': mimeType
             });
-            return fs.createReadStream(safeFilePath).pipe(res);
-        }
 
-        const rangeMatch = range.replace(/bytes=/, '').split('-');
-        const start = Number.parseInt(rangeMatch[0], 10);
-        const end = rangeMatch[1] ? Math.min(Number.parseInt(rangeMatch[1], 10), fileSize - 1) : fileSize - 1;
+            stream.pipe(res);
+        });
+    };
 
-        if (Number.isNaN(start) || Number.isNaN(end) || start >= fileSize || end >= fileSize) {
-            res.status(416).set('Content-Range', `bytes */${fileSize}`).end();
+    fs.stat(safeFilePath, (err, stats) => {
+        if (!err && stats.isFile()) {
+            serveFromPath(safeFilePath);
             return;
         }
 
-        const chunkSize = end - start + 1;
-        const stream = fs.createReadStream(safeFilePath, { start, end });
+        // Régi struktúrában tárolt fájlok támogatása
+        const legacyPath = path.normalize(path.join(clipsDirectory, requestedFile));
+        if (legacyPath.startsWith(uploadsRootDirectory)) {
+            return serveFromPath(legacyPath);
+        }
 
-        res.writeHead(206, {
-            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-            'Accept-Ranges': 'bytes',
-            'Content-Length': chunkSize,
-            'Content-Type': mimeType
-        });
-
-        stream.pipe(res);
+        return res.status(404).json({ message: 'A kért videó nem található.' });
     });
 });
 
@@ -858,6 +877,21 @@ function normalizeFilename(originalName) {
     return trimmedName;
 }
 
+function sanitizeFolderName(name) {
+    if (!name || typeof name !== 'string') {
+        return 'egyeb';
+    }
+
+    const normalized = name
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .toLowerCase()
+        .trim();
+
+    return normalized || 'egyeb';
+}
+
 app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) => {
     const limits = {};
     if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
@@ -939,7 +973,7 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
     const newFiles = filesWithNames.filter(({ sanitizedOriginalName }) => !existingNameSet.has(sanitizedOriginalName));
 
     for (const { file } of duplicateFiles) {
-        const filePath = path.join(uploadsDirectory, file.filename);
+        const filePath = path.join(clipsDirectory, file.filename);
         await safeUnlink(filePath);
     }
 
@@ -960,15 +994,49 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         });
     }
 
+    const tagIdSet = new Set();
+    newFiles.forEach(({ tags }) => {
+        tags.forEach((id) => tagIdSet.add(id));
+    });
+
+    const tagNamesById = new Map();
+    if (tagIdSet.size) {
+        try {
+            const { rows } = await db.query('SELECT id, name FROM tags WHERE id = ANY($1)', [Array.from(tagIdSet)]);
+            rows.forEach(({ id, name }) => {
+                tagNamesById.set(id, name);
+            });
+        } catch (err) {
+            console.error('Hiba a címkék beolvasása során:', err);
+        }
+    }
+
+    const resolveFolderName = (tags) => {
+        if (tags && tags.length) {
+            const tagName = tagNamesById.get(tags[0]);
+            if (tagName) {
+                return sanitizeFolderName(tagName);
+            }
+        }
+        return 'egyeb';
+    };
+
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
         for (const { file, sanitizedOriginalName, tags } of newFiles) {
             const { filename } = file;
-            const filePath = path.join(uploadsDirectory, filename);
-            const contentCreatedAt = await getVideoCreationDate(filePath);
+            const currentFilePath = path.join(clipsDirectory, filename);
+            const folderName = resolveFolderName(tags);
+            const targetDirectory = path.join(clipsDirectory, folderName);
+            await fs.promises.mkdir(targetDirectory, { recursive: true });
+            const targetFilePath = path.join(targetDirectory, filename);
+            await fs.promises.rename(currentFilePath, targetFilePath);
+
+            const storedFilename = path.posix.join('klippek', folderName, filename);
+            const contentCreatedAt = await getVideoCreationDate(targetFilePath);
             const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at) VALUES ($1, $2, $3, $4) RETURNING id`;
-            const { rows } = await client.query(insertVideoQuery, [filename, sanitizedOriginalName, uploaderId, contentCreatedAt]);
+            const { rows } = await client.query(insertVideoQuery, [storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt]);
             const videoId = rows[0]?.id;
 
             if (videoId && tags.length) {
@@ -1014,7 +1082,7 @@ app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
             return res.status(404).json({ message: 'A videó nem található.' });
         }
 
-        const filePath = path.join(uploadsDirectory, video.filename);
+        const filePath = path.join(uploadsRootDirectory, video.filename);
         try {
             await fs.promises.unlink(filePath);
         } catch (err) {
@@ -1256,7 +1324,7 @@ app.get('/api/programs/:id/download', async (req, res) => {
 });
 
 // Avatar feltöltés beállítása
-const avatarDirectory = path.join(uploadsDirectory, 'avatars');
+const avatarDirectory = path.join(uploadsRootDirectory, 'avatars');
 ensureDirectoryExists(avatarDirectory);
 
 const avatarStorage = multer.diskStorage({
