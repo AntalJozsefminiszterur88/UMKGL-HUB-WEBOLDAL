@@ -11,6 +11,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - "D:/weboldal fájlok:/usr/src/app/public/uploads"
     networks:
       - umgkl_net
       - shared_proxy_net
@@ -20,9 +22,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
     environment:
       - POSTGRES_USER=myuser
       - POSTGRES_PASSWORD=mypassword
@@ -31,9 +34,6 @@ services:
       - "D:/weboldal fájlok/adatbazis:/var/lib/postgresql/data"
     networks:
       - umgkl_net
-
-volumes:
-  postgres_data:
 
 networks:
   umgkl_net:
