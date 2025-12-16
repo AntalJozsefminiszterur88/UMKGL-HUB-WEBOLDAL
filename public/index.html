@@ -7006,16 +7006,6 @@
             return;
           }
 
-          const formData = new FormData();
-          const metadata = uploadQueue.map((item) => ({
-            name: item.displayName || item.file.name,
-            tags: item.tags || [],
-            signature: item.signature,
-          }));
-
-          uploadQueue.forEach((item) => formData.append("videos", item.file));
-          formData.append("metadata", JSON.stringify(metadata));
-
           uploadBtn.disabled = true;
           if (uploadStatus) {
             uploadStatus.textContent = "Feltöltés folyamatban...";
@@ -7024,9 +7014,30 @@
           const totalUploadBytes = uploadQueue.reduce((sum, item) => sum + (item.file?.size || 0), 0);
           const totalFiles = uploadQueue.length;
           const uploadStartTime = performance.now();
+          let uploadedBytesSoFar = 0;
 
-          const uploadPromise = () =>
+          updateUploadProgressUI({
+            uploadedBytes: 0,
+            totalBytes: totalUploadBytes,
+            completedFiles: 0,
+            totalFiles,
+            etaSeconds: Infinity,
+          });
+
+          const uploadSingleFile = (item, index) =>
             new Promise((resolve, reject) => {
+              const formData = new FormData();
+              const metadata = [
+                {
+                  name: item.displayName || item.file.name,
+                  tags: item.tags || [],
+                  signature: item.signature,
+                },
+              ];
+
+              formData.append("videos", item.file);
+              formData.append("metadata", JSON.stringify(metadata));
+
               const xhr = new XMLHttpRequest();
               xhr.open("POST", "/upload");
               xhr.responseType = "json";
@@ -7041,8 +7052,8 @@
               }
 
               xhr.upload.addEventListener("progress", (event) => {
-                const uploadedBytes = event.loaded || 0;
-                const totalBytes = event.total || totalUploadBytes;
+                const currentFileUploaded = event.loaded || 0;
+                const uploadedBytes = Math.min(uploadedBytesSoFar + currentFileUploaded, totalUploadBytes);
                 const elapsedSeconds = Math.max((performance.now() - uploadStartTime) / 1000, 0.001);
                 const speed = uploadedBytes / elapsedSeconds;
                 const remainingBytes = Math.max(totalUploadBytes - uploadedBytes, 0);
@@ -7050,8 +7061,8 @@
 
                 let completedFiles = 0;
                 let remainingForCount = uploadedBytes;
-                for (const item of uploadQueue) {
-                  const fileSize = item.file?.size || 0;
+                for (const queuedItem of uploadQueue) {
+                  const fileSize = queuedItem.file?.size || 0;
                   if (fileSize === 0) {
                     completedFiles += 1;
                     continue;
@@ -7064,9 +7075,15 @@
                   }
                 }
 
+                if (uploadStatus) {
+                  uploadStatus.textContent = `Feltöltés: ${index + 1} / ${totalFiles} - "${
+                    item.displayName || item.file.name
+                  }"...`;
+                }
+
                 updateUploadProgressUI({
                   uploadedBytes,
-                  totalBytes,
+                  totalBytes: totalUploadBytes,
                   completedFiles,
                   totalFiles,
                   etaSeconds,
@@ -7076,13 +7093,23 @@
               xhr.addEventListener("load", () => {
                 const result = xhr.response;
                 if (xhr.status >= 200 && xhr.status < 300) {
+                  const finishedBytes = uploadedBytesSoFar + (item.file?.size || 0);
+                  const uploadedBytes = Math.min(finishedBytes, totalUploadBytes);
+                  const elapsedSeconds = Math.max((performance.now() - uploadStartTime) / 1000, 0.001);
+                  const speed = uploadedBytes / elapsedSeconds;
+                  const remainingBytes = Math.max(totalUploadBytes - uploadedBytes, 0);
+                  const etaSeconds = speed > 0 ? remainingBytes / speed : Infinity;
+
+                  const completedFiles = index + 1;
+
                   updateUploadProgressUI({
-                    uploadedBytes: totalUploadBytes,
+                    uploadedBytes,
                     totalBytes: totalUploadBytes,
-                    completedFiles: totalFiles,
+                    completedFiles,
                     totalFiles,
-                    etaSeconds: 0,
+                    etaSeconds,
                   });
+                  uploadedBytesSoFar = uploadedBytes;
                   resolve(result);
                 } else {
                   const message = (result && result.message) || "Nem sikerült feltölteni a videót.";
@@ -7094,22 +7121,16 @@
                 reject(new Error("Hálózati hiba történt a feltöltés során."));
               });
 
-              updateUploadProgressUI({
-                uploadedBytes: 0,
-                totalBytes: totalUploadBytes,
-                completedFiles: 0,
-                totalFiles,
-                etaSeconds: Infinity,
-              });
-
               xhr.send(formData);
             });
 
           try {
-            const result = await uploadPromise();
+            for (const [index, item] of uploadQueue.entries()) {
+              await uploadSingleFile(item, index);
+            }
 
             if (uploadStatus) {
-              uploadStatus.textContent = (result && result.message) || "Videók sikeresen feltöltve.";
+              uploadStatus.textContent = "Videók sikeresen feltöltve.";
             }
             await loadVideos();
             setTimeout(() => {
