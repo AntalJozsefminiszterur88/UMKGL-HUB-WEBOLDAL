@@ -64,6 +64,9 @@ async function initializeDatabase() {
     await client.query(
       'ALTER TABLE videos ADD COLUMN IF NOT EXISTS file_hash TEXT UNIQUE'
     );
+    await client.query(
+      'ALTER TABLE videos DROP CONSTRAINT IF EXISTS videos_original_name_key'
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS tags (
