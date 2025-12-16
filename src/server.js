@@ -1070,14 +1070,8 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
             }
         }
 
-        await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [newFiles.length, uploaderId]);
+        await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [filesToProcess.length, uploaderId]);
         await client.query('COMMIT');
-        if (duplicateFiles.length) {
-            const duplicateList = duplicateFiles.map(({ sanitizedOriginalName }) => sanitizedOriginalName).join(', ');
-            return res.status(207).json({
-                message: `A videók feltöltése részben sikerült. A következő nevű klipeket kihagytuk, mert már léteznek: ${duplicateList}.`,
-            });
-        }
 
         res.status(201).json({ message: 'Videók sikeresen feltöltve.' });
     } catch (err) {
