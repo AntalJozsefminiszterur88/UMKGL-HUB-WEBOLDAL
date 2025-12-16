@@ -2383,6 +2383,156 @@
         border-radius: 4px;
         cursor: pointer;
       }
+
+      .video-modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 1400;
+        padding: 2rem;
+      }
+
+      .video-modal.open {
+        display: flex;
+      }
+
+      .video-modal__inner {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        width: 100%;
+        max-width: 1400px;
+      }
+
+      .video-modal__content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .video-modal__video {
+        width: 100%;
+        max-width: 90%;
+        max-height: 80vh;
+        background: #000;
+        border-radius: 8px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+      }
+
+      .video-modal__title {
+        color: #fff;
+        font-size: 1.1rem;
+        text-align: center;
+        margin: 0;
+      }
+
+      .video-modal__nav {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        border: none;
+        width: 56px;
+        height: 56px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        font-size: 2rem;
+        cursor: pointer;
+        transition: background 0.2s ease, transform 0.2s ease;
+      }
+
+      .video-modal__nav:hover,
+      .video-modal__nav:focus-visible {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.04);
+        outline: none;
+      }
+
+      .video-modal__nav--prev,
+      .video-modal__nav--next {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+
+      .video-modal__nav--prev {
+        left: -0.5rem;
+      }
+
+      .video-modal__nav--next {
+        right: -0.5rem;
+      }
+
+      .video-modal__close {
+        position: absolute;
+        top: -1rem;
+        right: -1rem;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        border: none;
+        width: 46px;
+        height: 46px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        font-size: 1.6rem;
+        cursor: pointer;
+        transition: background 0.2s ease, transform 0.2s ease;
+      }
+
+      .video-modal__close:hover,
+      .video-modal__close:focus-visible {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.05);
+        outline: none;
+      }
+
+      .video-modal__nav-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        width: 100%;
+      }
+
+      @media (max-width: 960px) {
+        .video-modal {
+          padding: 1rem;
+        }
+
+        .video-modal__inner {
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .video-modal__content {
+          width: 100%;
+        }
+
+        .video-modal__video {
+          max-width: 100%;
+          max-height: 60vh;
+        }
+
+        .video-modal__nav--prev,
+        .video-modal__nav--next,
+        .video-modal__close {
+          position: static;
+          transform: none;
+        }
+
+        .video-modal__nav-wrapper {
+          display: flex;
+          gap: 0.75rem;
+          width: 100%;
+          justify-content: center;
+        }
+      }
     </style>
   </head>
   <body>
@@ -2959,6 +3109,36 @@
     <footer>
       <p>© 2025 UMGKL HUB Minden jog fenntartva</p>
     </footer>
+
+    <div id="videoPlayerModal" class="video-modal" aria-hidden="true">
+      <div class="video-modal__inner" role="dialog" aria-modal="true" aria-label="Videólejátszó">
+        <button type="button" class="video-modal__close" id="closeVideoModalBtn" aria-label="Bezárás">
+          &times;
+        </button>
+        <div class="video-modal__content">
+          <video id="modalVideoPlayer" class="video-modal__video" controls autoplay></video>
+          <p id="modalVideoTitle" class="video-modal__title"></p>
+        </div>
+        <div class="video-modal__nav-wrapper">
+          <button
+            type="button"
+            class="video-modal__nav video-modal__nav--prev"
+            id="prevVideoBtn"
+            aria-label="Előző videó"
+          >
+            &#10094;
+          </button>
+          <button
+            type="button"
+            class="video-modal__nav video-modal__nav--next"
+            id="nextVideoBtn"
+            aria-label="Következő videó"
+          >
+            &#10095;
+          </button>
+        </div>
+      </div>
+    </div>
 
   <script>
     const ADMIN_SESSION_KEY = "isAdmin";
@@ -5489,6 +5669,12 @@
       const selectedFileName = document.getElementById("selectedFileName");
       const uploadSummary = document.getElementById("uploadSummary");
       const uploadToast = document.getElementById("uploadToast");
+      const videoPlayerModal = document.getElementById("videoPlayerModal");
+      const modalVideoPlayer = document.getElementById("modalVideoPlayer");
+      const modalVideoTitle = document.getElementById("modalVideoTitle");
+      const closeVideoModalBtn = document.getElementById("closeVideoModalBtn");
+      const prevVideoBtn = document.getElementById("prevVideoBtn");
+      const nextVideoBtn = document.getElementById("nextVideoBtn");
       const MAX_UPLOAD_FILES = 100;
       const globalTagSelect = document.getElementById("globalTagSelect");
       const videoSearchInput = document.getElementById("videoSearchInput");
@@ -5519,6 +5705,8 @@
         sort: savedSortOrder === "oldest" ? "oldest" : "newest",
       };
       let videoSearchTimeout = null;
+      let currentVideoList = [];
+      let currentVideoIndex = 0;
 
       if (summaryToggleBtn && summaryCard) {
         summaryToggleBtn.addEventListener("click", () => {
@@ -6202,6 +6390,8 @@
           const { data, pagination } = await response.json();
           videoFilters.page = pagination?.currentPage || videoFilters.page;
 
+          currentVideoList = Array.isArray(data) ? data : [];
+
           if (!Array.isArray(data) || data.length === 0) {
             videoGridContainer.innerHTML = "<p>Még senki nem töltött fel videót.</p>";
             return;
@@ -6211,6 +6401,7 @@
           renderPagination(pagination);
         } catch (error) {
           console.error("Videók betöltési hibája:", error);
+          currentVideoList = [];
           videoGridContainer.innerHTML = "<p>Nem sikerült betölteni a videókat.</p>";
         }
       }
@@ -6234,7 +6425,7 @@
 
       function renderVideoGrid(videos) {
         videoGridContainer.innerHTML = "";
-        videos.forEach((video) => {
+        videos.forEach((video, index) => {
           const card = document.createElement("div");
           card.className = "video-card";
 
@@ -6245,7 +6436,8 @@
 
           const videoElement = document.createElement("video");
           videoElement.src = `/uploads/${video.filename}`;
-          videoElement.controls = true;
+          videoElement.controls = false;
+          videoElement.removeAttribute("controls");
           videoElement.preload = "auto";
           videoElement.playsInline = true;
           videoElement.setAttribute("playsinline", "");
@@ -6253,14 +6445,8 @@
 
           let hasPlaybackError = false;
 
-          videoElement.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (videoElement.paused) {
-              videoElement.play().catch(() => {});
-            } else {
-              videoElement.pause();
-            }
+          videoElement.addEventListener("click", () => {
+            openVideoModal(index);
           });
 
           videoElement.addEventListener("error", () => {
@@ -6343,6 +6529,62 @@
         });
       }
 
+      function openVideoModal(index) {
+        if (!videoPlayerModal || !modalVideoPlayer || !Array.isArray(currentVideoList)) {
+          return;
+        }
+
+        if (!currentVideoList.length) {
+          return;
+        }
+
+        currentVideoIndex = ((index % currentVideoList.length) + currentVideoList.length) % currentVideoList.length;
+        const activeVideo = currentVideoList[currentVideoIndex];
+        if (!activeVideo) {
+          return;
+        }
+
+        const rawTitle = activeVideo.original_name || activeVideo.filename;
+        modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
+        modalVideoPlayer.src = `/uploads/${activeVideo.filename}`;
+        modalVideoPlayer.load();
+        modalVideoPlayer.play().catch(() => {});
+
+        videoPlayerModal.classList.add("open");
+        videoPlayerModal.setAttribute("aria-hidden", "false");
+        closeVideoModalBtn?.focus({ preventScroll: true });
+      }
+
+      function closeVideoModal() {
+        if (!videoPlayerModal || !modalVideoPlayer) {
+          return;
+        }
+
+        modalVideoPlayer.pause();
+        modalVideoPlayer.removeAttribute("src");
+        modalVideoPlayer.load();
+        videoPlayerModal.classList.remove("open");
+        videoPlayerModal.setAttribute("aria-hidden", "true");
+      }
+
+      function showNextVideo() {
+        if (!currentVideoList.length) {
+          return;
+        }
+
+        const nextIndex = (currentVideoIndex + 1) % currentVideoList.length;
+        openVideoModal(nextIndex);
+      }
+
+      function showPrevVideo() {
+        if (!currentVideoList.length) {
+          return;
+        }
+
+        const prevIndex = (currentVideoIndex - 1 + currentVideoList.length) % currentVideoList.length;
+        openVideoModal(prevIndex);
+      }
+
       function renderPagination(pagination) {
         if (!videoPagination || !pagination || pagination.totalPages <= 1) {
           return;
@@ -6389,6 +6631,42 @@
           videoPagination.appendChild(createButton(totalPages));
         }
       }
+
+      if (closeVideoModalBtn) {
+        closeVideoModalBtn.addEventListener("click", closeVideoModal);
+      }
+
+      if (prevVideoBtn) {
+        prevVideoBtn.addEventListener("click", showPrevVideo);
+      }
+
+      if (nextVideoBtn) {
+        nextVideoBtn.addEventListener("click", showNextVideo);
+      }
+
+      if (videoPlayerModal) {
+        videoPlayerModal.addEventListener("click", (event) => {
+          if (event.target === videoPlayerModal) {
+            closeVideoModal();
+          }
+        });
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (!videoPlayerModal?.classList.contains("open")) {
+          return;
+        }
+
+        if (event.key === "Escape") {
+          closeVideoModal();
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          showNextVideo();
+        } else if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          showPrevVideo();
+        }
+      });
 
       if (videoSearchInput) {
         videoSearchInput.addEventListener("input", () => {
