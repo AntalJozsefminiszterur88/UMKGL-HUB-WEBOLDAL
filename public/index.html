@@ -998,20 +998,22 @@
       }
 
       .clip-filters {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        display: flex;
+        flex-wrap: wrap;
         gap: 0.75rem;
         margin: 1rem 0;
         background: #1f2227;
         padding: 1rem;
         border-radius: 10px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+        align-items: flex-end;
       }
 
       .filter-group {
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
+        flex: 1 1 230px;
       }
 
       .filter-group label {
@@ -1026,6 +1028,26 @@
         color: #fff;
         padding: 0.6rem 0.75rem;
         border-radius: 8px;
+      }
+
+      .filter-group--actions {
+        flex: 0 0 auto;
+        align-self: center;
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
 
       #video-grid-container {
@@ -2793,8 +2815,8 @@
               <option value="80">80</option>
             </select>
           </div>
-          <div class="filter-group">
-            <label>&nbsp;</label>
+          <div class="filter-group filter-group--actions">
+            <label class="sr-only" for="filterResetBtn">Szűrők törlése</label>
             <button id="filterResetBtn" class="secondary-btn">Szűrők törlése</button>
           </div>
         </div>
