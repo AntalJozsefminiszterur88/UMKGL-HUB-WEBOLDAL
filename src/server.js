@@ -919,7 +919,7 @@ app.get('/api/videos/get-uploaded-titles', authenticateToken, ensureClipViewPerm
     }
 });
 
-app.get('/api/videos/get-uploaded-hashes', authenticateToken, ensureClipViewPermission, async (_req, res) => {
+app.get('/api/videos/get-uploaded-hashes', async (_req, res) => {
     try {
         const { rows } = await db.query('SELECT file_hash FROM videos WHERE file_hash IS NOT NULL');
         const hashes = (rows || []).map((row) => row.file_hash).filter(Boolean);
