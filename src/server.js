@@ -1009,7 +1009,7 @@ app.get('/api/videos/get-uploaded-hashes', async (_req, res) => {
     }
 });
 
-app.post('/api/admin/generate-missing-thumbnails', async (_req, res) => {
+app.get('/api/admin/generate-missing-thumbnails', async (_req, res) => {
     try {
         const { rows } = await db.query('SELECT id, filename FROM videos WHERE thumbnail_filename IS NULL');
         const results = [];
