@@ -131,6 +131,28 @@ function computeFileHash(filePath) {
     });
 }
 
+function extractEmbeddedHash(filePath) {
+    const HASH_PREFIX = 'UMKGL_HASH:';
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
+            if (err) {
+                return resolve(null);
+            }
+
+            const comment = metadata.format?.tags?.comment;
+            if (typeof comment === 'string') {
+                const normalized = comment.trim();
+                if (normalized.startsWith(HASH_PREFIX)) {
+                    const embeddedHash = normalized.slice(HASH_PREFIX.length).trim();
+                    return resolve(embeddedHash || null);
+                }
+            }
+
+            return resolve(null);
+        });
+    });
+}
+
 const storage = multer.diskStorage({
     destination: (_req, _file, cb) => {
         cb(null, clipsDirectory);
@@ -1054,7 +1076,8 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         const sanitizedOriginalName = parsedName || normalizedOriginalName;
         const tagsForFile = normalizeTagIds(metadata.tags);
         const filePath = path.join(clipsDirectory, file.filename);
-        const fileHash = await computeFileHash(filePath);
+        const embeddedHash = await extractEmbeddedHash(filePath);
+        const fileHash = embeddedHash || await computeFileHash(filePath);
         return { file, sanitizedOriginalName, tags: tagsForFile.length ? tagsForFile : fallbackTagIds, fileHash };
     }));
 
