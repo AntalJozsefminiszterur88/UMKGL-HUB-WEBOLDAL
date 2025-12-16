@@ -34,6 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 // Fájlfeltöltés beállítása a videókhoz
 const uploadsRootDirectory = path.join(__dirname, '..', 'public', 'uploads');
 const clipsDirectory = path.join(uploadsRootDirectory, 'klippek');
+const thumbnailsDirectory = path.join(uploadsRootDirectory, 'thumbnails');
 const ensureDirectoryExists = (dirPath) => {
     try {
         fs.mkdirSync(dirPath, { recursive: true });
@@ -46,6 +47,7 @@ const ensureDirectoryExists = (dirPath) => {
 
 ensureDirectoryExists(uploadsRootDirectory);
 ensureDirectoryExists(clipsDirectory);
+ensureDirectoryExists(thumbnailsDirectory);
 
 const programImagesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'images');
 const programFilesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'files');
@@ -150,6 +152,32 @@ function extractEmbeddedHash(filePath) {
 
             return resolve(null);
         });
+    });
+}
+
+function buildThumbnailFilename(baseName, videoId) {
+    const safeBaseName = (baseName || 'thumbnail')
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .trim() || 'thumbnail';
+    const suffix = Number.isFinite(videoId) ? `-${videoId}` : '';
+    return `${safeBaseName}${suffix}.jpg`;
+}
+
+async function generateThumbnailForVideo(videoPath, baseName, videoId) {
+    const outputFilename = buildThumbnailFilename(baseName, videoId);
+    await fs.promises.mkdir(thumbnailsDirectory, { recursive: true });
+    const outputPath = path.join(thumbnailsDirectory, outputFilename);
+
+    return new Promise((resolve, reject) => {
+        ffmpeg(videoPath)
+            .seekInput('00:00:01')
+            .frames(1)
+            .outputOptions('-q:v 2')
+            .on('end', () => resolve(path.posix.join('thumbnails', outputFilename)))
+            .on('error', reject)
+            .save(outputPath);
     });
 }
 
@@ -930,11 +958,12 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
                 OFFSET $${dataParams.length}
             )
             SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at,
+                   fv.thumbnail_filename,
                    COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id
-            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at
+            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename
             ORDER BY fv.content_created_at ${sortOrder};
         `;
 
@@ -977,6 +1006,34 @@ app.get('/api/videos/get-uploaded-hashes', async (_req, res) => {
     } catch (err) {
         console.error('Hiba a videók hash értékeinek lekérdezésekor:', err);
         res.status(500).json({ message: 'Nem sikerült lekérdezni a videók hash értékeit.' });
+    }
+});
+
+app.post('/api/admin/generate-missing-thumbnails', async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, filename FROM videos WHERE thumbnail_filename IS NULL');
+        const results = [];
+
+        for (const video of rows) {
+            const videoPath = path.join(uploadsRootDirectory, video.filename);
+            try {
+                const thumbnailFilename = await generateThumbnailForVideo(
+                    videoPath,
+                    path.parse(video.filename).name,
+                    video.id
+                );
+                await db.query('UPDATE videos SET thumbnail_filename = $1 WHERE id = $2', [thumbnailFilename, video.id]);
+                results.push({ videoId: video.id, thumbnail: thumbnailFilename, status: 'generated' });
+            } catch (err) {
+                console.error(`Hiba az előnézeti kép generálásakor (video ID: ${video.id}):`, err);
+                results.push({ videoId: video.id, status: 'error', message: err.message });
+            }
+        }
+
+        res.status(200).json({ processed: results.length, results });
+    } catch (err) {
+        console.error('Hiba a hiányzó előnézeti képek generálásakor:', err);
+        res.status(500).json({ message: 'Nem sikerült előállítani a hiányzó előnézeti képeket.' });
     }
 });
 
@@ -1155,6 +1212,13 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
                     );
                 }
             }
+
+            const thumbnailFilename = await generateThumbnailForVideo(
+                targetFilePath,
+                path.parse(filename).name,
+                videoId
+            );
+            await client.query('UPDATE videos SET thumbnail_filename = $1 WHERE id = $2', [thumbnailFilename, videoId]);
         }
 
         await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [filesToProcess.length, uploaderId]);
