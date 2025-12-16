@@ -95,11 +95,39 @@ function getVideoCreationDate(filePath) {
 function computeFileHash(filePath) {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash('sha1');
-        const stream = fs.createReadStream(filePath);
+        const maxBytesToHash = 5 * 1024 * 1024; // 5MB
+        const bufferSize = 64 * 1024;
+        const buffer = Buffer.alloc(bufferSize);
 
-        stream.on('data', (chunk) => hash.update(chunk));
-        stream.on('error', reject);
-        stream.on('end', () => resolve(hash.digest('hex')));
+        let fd;
+        try {
+            fd = fs.openSync(filePath, 'r');
+            let totalRead = 0;
+
+            while (totalRead < maxBytesToHash) {
+                const bytesToRead = Math.min(bufferSize, maxBytesToHash - totalRead);
+                const bytesRead = fs.readSync(fd, buffer, 0, bytesToRead, totalRead);
+
+                if (bytesRead <= 0) {
+                    break;
+                }
+
+                hash.update(buffer.subarray(0, bytesRead));
+                totalRead += bytesRead;
+            }
+        } catch (err) {
+            return reject(err);
+        } finally {
+            if (fd !== undefined) {
+                try {
+                    fs.closeSync(fd);
+                } catch (closeErr) {
+                    return reject(closeErr);
+                }
+            }
+        }
+
+        return resolve(hash.digest('hex'));
     });
 }
 
