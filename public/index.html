@@ -6608,7 +6608,7 @@
 
           const videoElement = document.createElement("video");
           videoElement.poster = video.thumbnail_filename
-            ? `/uploads/thumbnails/${video.thumbnail_filename}`
+            ? `/uploads/${video.thumbnail_filename}`
             : "";
           videoElement.dataset.src = `/uploads/${video.filename}`;
           videoElement.controls = false;
