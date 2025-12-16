@@ -994,48 +994,18 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
         return { file, sanitizedOriginalName, tags: tagsForFile.length ? tagsForFile : fallbackTagIds, fileHash };
     }));
 
-    const originalNames = filesWithNames.map(({ sanitizedOriginalName }) => sanitizedOriginalName);
-
-    let existingNames = [];
-    try {
-        const { rows } = await db.query(
-            'SELECT original_name FROM videos WHERE original_name = ANY($1)',
-            [originalNames]
-        );
-        existingNames = rows.map((row) => row.original_name);
-    } catch (err) {
-        console.error('Hiba a meglévő videók lekérdezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a meglévő videókat.' });
-    }
-
-    const existingNameSet = new Set(existingNames);
-    const duplicateFiles = filesWithNames.filter(({ sanitizedOriginalName }) => existingNameSet.has(sanitizedOriginalName));
-    const newFiles = filesWithNames.filter(({ sanitizedOriginalName }) => !existingNameSet.has(sanitizedOriginalName));
-
-    for (const { file } of duplicateFiles) {
-        const filePath = path.join(clipsDirectory, file.filename);
-        await safeUnlink(filePath);
-    }
+    const filesToProcess = filesWithNames;
 
     const projectedUploadCount = req.uploadSettings
-        ? req.uploadSettings.uploadCount + newFiles.length
+        ? req.uploadSettings.uploadCount + filesToProcess.length
         : null;
 
     if (req.uploadSettings && req.uploadSettings.maxVideos > 0 && projectedUploadCount > req.uploadSettings.maxVideos) {
         return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
     }
 
-    if (!newFiles.length) {
-        const duplicateList = duplicateFiles.map(({ sanitizedOriginalName }) => sanitizedOriginalName).join(', ');
-        return res.status(409).json({
-            message: duplicateFiles.length > 1
-                ? `A következő nevű klipek már léteznek: ${duplicateList}.`
-                : `Már létezik ilyen nevű klip: ${duplicateList}.`,
-        });
-    }
-
     const tagIdSet = new Set();
-    newFiles.forEach(({ tags }) => {
+    filesToProcess.forEach(({ tags }) => {
         tags.forEach((id) => tagIdSet.add(id));
     });
 
@@ -1064,7 +1034,7 @@ app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) 
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
-        for (const { file, sanitizedOriginalName, tags, fileHash } of newFiles) {
+        for (const { file, sanitizedOriginalName, tags, fileHash } of filesToProcess) {
             const { filename } = file;
             const currentFilePath = path.join(clipsDirectory, filename);
             const folderName = resolveFolderName(tags);
