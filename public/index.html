@@ -6607,10 +6607,13 @@
           title.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
 
           const videoElement = document.createElement("video");
-          videoElement.src = `/uploads/${video.filename}`;
+          videoElement.poster = video.thumbnail_filename
+            ? `/uploads/thumbnails/${video.thumbnail_filename}`
+            : "";
+          videoElement.dataset.src = `/uploads/${video.filename}`;
           videoElement.controls = false;
           videoElement.removeAttribute("controls");
-          videoElement.preload = "auto";
+          videoElement.preload = "none";
           videoElement.playsInline = true;
           videoElement.setAttribute("playsinline", "");
           videoElement.setAttribute("webkit-playsinline", "");
@@ -6718,7 +6721,9 @@
 
         const rawTitle = activeVideo.original_name || activeVideo.filename;
         modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
-        modalVideoPlayer.src = `/uploads/${activeVideo.filename}`;
+        const videoElements = videoGridContainer.querySelectorAll(".video-card video");
+        const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src;
+        modalVideoPlayer.src = sourceFromGrid || `/uploads/${activeVideo.filename}`;
         modalVideoPlayer.load();
         modalVideoPlayer.play().catch(() => {});
 
