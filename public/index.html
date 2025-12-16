@@ -988,6 +988,57 @@
         max-width: 1800px;
         width: min(96vw, 1800px);
         margin: 0 auto;
+        position: relative;
+      }
+
+      .clips-content {
+        position: relative;
+        z-index: 1;
+        transition: filter 0.2s ease, opacity 0.2s ease;
+      }
+
+      #klipek.permission-blocked .clips-content {
+        filter: grayscale(1) blur(4px);
+        opacity: 0.35;
+        pointer-events: none;
+        user-select: none;
+      }
+
+      .permission-overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 2rem;
+        background: radial-gradient(circle, rgba(17, 20, 27, 0.8) 0%, rgba(12, 14, 18, 0.95) 100%);
+        backdrop-filter: blur(6px);
+        z-index: 2;
+      }
+
+      #klipek.permission-blocked .permission-overlay {
+        display: flex;
+      }
+
+      .permission-overlay__content {
+        max-width: 560px;
+        background: rgba(22, 25, 31, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 2rem;
+        color: #e6e9f0;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      }
+
+      .permission-overlay__content h3 {
+        margin-bottom: 0.5rem;
+        font-size: 1.4rem;
+      }
+
+      .permission-overlay__content p {
+        color: #c6cad4;
+        margin: 0;
       }
 
       .clips-header {
@@ -2780,114 +2831,122 @@
       </section>
 
       <section id="klipek">
-        <div class="clips-header">
-          <div>
-            <h2>Klipek</h2>
-            <p>Fedezd fel a legújabb videókat, szűrj címkék és dátum szerint.</p>
-          </div>
-          <button id="showUploadModalBtn" class="primary-button">Feltöltés</button>
-        </div>
-
-        <div class="clip-filters">
-          <div class="filter-group">
-            <label for="videoSearchInput">Keresés cím vagy fájlnév alapján</label>
-            <input id="videoSearchInput" type="search" placeholder="Pl. epikus csata" />
-          </div>
-          <div class="filter-group">
-            <label for="tagFilterSelect">Címke</label>
-            <select id="tagFilterSelect">
-              <option value="">Összes címke</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label for="sortOrderSelect">Rendezés</label>
-            <select id="sortOrderSelect">
-              <option value="newest">Legújabb elöl</option>
-              <option value="oldest">Legrégebbi elöl</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label for="pageSizeSelect">Videók száma / oldal</label>
-            <select id="pageSizeSelect">
-              <option value="12">12</option>
-              <option value="24" selected>24</option>
-              <option value="40">40</option>
-              <option value="80">80</option>
-            </select>
-          </div>
-          <div class="filter-group filter-group--actions">
-            <label class="sr-only" for="filterResetBtn">Szűrők törlése</label>
-            <button id="filterResetBtn" class="secondary-btn">Szűrők törlése</button>
+        <div id="clipsPermissionOverlay" class="permission-overlay" aria-hidden="true">
+          <div class="permission-overlay__content">
+            <h3>Klipek csak jogosultsággal elérhetők</h3>
+            <p>Jelentkezz be, és kérj engedélyt egy admintól a megtekintéshez.</p>
           </div>
         </div>
-
-        <div id="video-grid-container"></div>
-        <div id="video-pagination" class="pagination"></div>
-
-        <div id="uploadModal" class="modal-overlay" style="display: none;">
-          <div class="upload-modal-content">
-            <div class="upload-modal-header">
-              <h3 class="upload-modal-title">Videó feltöltése</h3>
-              <button class="close-btn" id="closeUploadModal" aria-label="Bezárás">&times;</button>
+        <div class="clips-content">
+          <div class="clips-header">
+            <div>
+              <h2>Klipek</h2>
+              <p>Fedezd fel a legújabb videókat, szűrj címkék és dátum szerint.</p>
             </div>
+            <button id="showUploadModalBtn" class="primary-button">Feltöltés</button>
+          </div>
 
-            <div class="upload-modal-toolbar">
-              <button class="primary-btn" id="addFilesBtn">Fájlok hozzáadása</button>
-              <div class="toolbar-tags">
-                <label for="globalTagSelect">Címkék mindhez</label>
-                <select id="globalTagSelect" multiple size="5"></select>
+          <div class="clip-filters">
+            <div class="filter-group">
+              <label for="videoSearchInput">Keresés cím vagy fájlnév alapján</label>
+              <input id="videoSearchInput" type="search" placeholder="Pl. epikus csata" />
+            </div>
+            <div class="filter-group">
+              <label for="tagFilterSelect">Címke</label>
+              <select id="tagFilterSelect">
+                <option value="">Összes címke</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="sortOrderSelect">Rendezés</label>
+              <select id="sortOrderSelect">
+                <option value="newest">Legújabb elöl</option>
+                <option value="oldest">Legrégebbi elöl</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="pageSizeSelect">Videók száma / oldal</label>
+              <select id="pageSizeSelect">
+                <option value="12">12</option>
+                <option value="24" selected>24</option>
+                <option value="40">40</option>
+                <option value="80">80</option>
+              </select>
+            </div>
+            <div class="filter-group filter-group--actions">
+              <label class="sr-only" for="filterResetBtn">Szűrők törlése</label>
+              <button id="filterResetBtn" class="secondary-btn">Szűrők törlése</button>
+            </div>
+          </div>
+
+          <div id="video-grid-container"></div>
+          <div id="video-pagination" class="pagination"></div>
+
+          <div id="uploadModal" class="modal-overlay" style="display: none;">
+            <div class="upload-modal-content">
+              <div class="upload-modal-header">
+                <h3 class="upload-modal-title">Videó feltöltése</h3>
+                <button class="close-btn" id="closeUploadModal" aria-label="Bezárás">&times;</button>
               </div>
-              <div id="createTagWrapper" style="display: none;">
-                <div class="create-tag-row">
-                  <div class="tag-field-group">
-                    <input
-                      type="text"
-                      id="newTagName"
-                      placeholder="Új címke neve"
-                      class="new-tag-input"
-                    />
-                    <button id="tagColorButton" type="button" class="tag-color-button">
-                      <span class="tag-color-swatch"></span>
-                      Szín
-                    </button>
-                  </div>
-                  <div class="tag-action-group">
-                    <button id="deleteTagButton" type="button" class="danger-btn">Törlés</button>
-                    <button id="createTagButton" type="button">Hozzáadás</button>
-                  </div>
-                  <input type="color" id="newTagColor" class="tag-color-input" value="#5865f2" />
+
+              <div class="upload-modal-toolbar">
+                <button class="primary-btn" id="addFilesBtn">Fájlok hozzáadása</button>
+                <div class="toolbar-tags">
+                  <label for="globalTagSelect">Címkék mindhez</label>
+                  <select id="globalTagSelect" multiple size="5"></select>
                 </div>
-                <small id="createTagStatus"></small>
-              </div>
-            </div>
-
-            <input type="file" id="fileInput" accept="video/*" style="display: none;" multiple />
-
-            <div id="uploadQueueContainer" class="upload-queue-container">
-              <div id="drop-zone" class="drop-zone">
-                <p>Húzd ide a videóidat vagy kattints a tallózáshoz</p>
-                <p id="selectedFileName">Nincs kiválasztott fájl.</p>
-              </div>
-            </div>
-
-            <div id="uploadToast" class="upload-toast" aria-live="polite"></div>
-
-            <div class="upload-modal-footer">
-              <div>
-                <div id="uploadSummary" class="upload-summary">Nincs kiválasztott fájl.</div>
-                <p id="uploadStatus" class="upload-status"></p>
-                <div id="uploadProgress" class="upload-progress" style="display: none">
-                  <div class="upload-progress__bar">
-                    <div id="uploadProgressFill" class="upload-progress__fill"></div>
+                <div id="createTagWrapper" style="display: none;">
+                  <div class="create-tag-row">
+                    <div class="tag-field-group">
+                      <input
+                        type="text"
+                        id="newTagName"
+                        placeholder="Új címke neve"
+                        class="new-tag-input"
+                      />
+                      <button id="tagColorButton" type="button" class="tag-color-button">
+                        <span class="tag-color-swatch"></span>
+                        Szín
+                      </button>
+                    </div>
+                    <div class="tag-action-group">
+                      <button id="deleteTagButton" type="button" class="danger-btn">Törlés</button>
+                      <button id="createTagButton" type="button">Hozzáadás</button>
+                    </div>
+                    <input type="color" id="newTagColor" class="tag-color-input" value="#5865f2" />
                   </div>
-                  <div class="upload-progress__meta">
-                    <span id="uploadProgressCount">0 / 0 klip</span>
-                    <span id="uploadProgressEta">Hátralévő idő: --</span>
-                  </div>
-                  <div id="uploadProgressDetails" class="upload-progress__details"></div>
+                  <small id="createTagStatus"></small>
                 </div>
               </div>
-              <button id="uploadBtn" class="primary-btn large" disabled>FELTÖLTÉS</button>
+
+              <input type="file" id="fileInput" accept="video/*" style="display: none;" multiple />
+
+              <div id="uploadQueueContainer" class="upload-queue-container">
+                <div id="drop-zone" class="drop-zone">
+                  <p>Húzd ide a videóidat vagy kattints a tallózáshoz</p>
+                  <p id="selectedFileName">Nincs kiválasztott fájl.</p>
+                </div>
+              </div>
+
+              <div id="uploadToast" class="upload-toast" aria-live="polite"></div>
+
+              <div class="upload-modal-footer">
+                <div>
+                  <div id="uploadSummary" class="upload-summary">Nincs kiválasztott fájl.</div>
+                  <p id="uploadStatus" class="upload-status"></p>
+                  <div id="uploadProgress" class="upload-progress" style="display: none">
+                    <div class="upload-progress__bar">
+                      <div id="uploadProgressFill" class="upload-progress__fill"></div>
+                    </div>
+                    <div class="upload-progress__meta">
+                      <span id="uploadProgressCount">0 / 0 klip</span>
+                      <span id="uploadProgressEta">Hátralévő idő: --</span>
+                    </div>
+                    <div id="uploadProgressDetails" class="upload-progress__details"></div>
+                  </div>
+                </div>
+                <button id="uploadBtn" class="primary-btn large" disabled>FELTÖLTÉS</button>
+              </div>
             </div>
           </div>
         </div>
@@ -3231,6 +3290,7 @@
       username: "username",
       isAdmin: ADMIN_SESSION_KEY,
       canTransfer: "canTransfer",
+      canViewClips: "canViewClips",
       profilePictureFilename: "profilePictureFilename",
     };
     const POLL_MIN_OPTIONS = 2;
@@ -4988,6 +5048,7 @@
       updateAdminNavVisibility();
       updateProgramAdminControls();
       updateFileTransferNavVisibility();
+      updateClipAccessUI();
       updatePollCreatorState(true);
       markPollsForRefresh();
       loadPrograms();
@@ -5007,6 +5068,7 @@
       localStorage.removeItem(SESSION_KEYS.username);
       localStorage.removeItem(SESSION_KEYS.isAdmin);
       localStorage.removeItem(SESSION_KEYS.canTransfer);
+      localStorage.removeItem(SESSION_KEYS.canViewClips);
       localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
 
       if (authLoggedOut) {
@@ -5038,6 +5100,7 @@
       updateAdminNavVisibility();
       updateProgramAdminControls();
       updateFileTransferNavVisibility();
+      updateClipAccessUI();
       updatePollCreatorState(false);
       markPollsForRefresh();
       loadPrograms();
@@ -5073,17 +5136,18 @@
       const table = document.createElement("table");
       table.className = "user-table";
 
-      const thead = document.createElement("thead");
-      thead.innerHTML = `
-        <tr>
-          <th>Felhasználónév</th>
-          <th>Feltöltési jogosultság</th>
-          <th>P2P Jog</th>
-          <th>Max fájlméret (MB)</th>
-          <th>Videó limit</th>
-          <th>Feltöltött videók</th>
-        </tr>
-      `;
+        const thead = document.createElement("thead");
+        thead.innerHTML = `
+          <tr>
+            <th>Felhasználónév</th>
+            <th>Feltöltési jogosultság</th>
+            <th>P2P Jog</th>
+          <th>Klip nézési jog</th>
+            <th>Max fájlméret (MB)</th>
+            <th>Videó limit</th>
+            <th>Feltöltött videók</th>
+          </tr>
+        `;
       table.appendChild(thead);
 
       const tbody = document.createElement("tbody");
@@ -5119,6 +5183,18 @@
         transferLabel.append(" P2P");
         transferCell.appendChild(transferLabel);
         row.appendChild(transferCell);
+
+        const viewClipsCell = document.createElement("td");
+        const viewClipsLabel = document.createElement("label");
+        viewClipsLabel.className = "permission-toggle";
+        const viewClipsCheckbox = document.createElement("input");
+        viewClipsCheckbox.type = "checkbox";
+        viewClipsCheckbox.name = "canViewClips";
+        viewClipsCheckbox.checked = Number(user.can_view_clips) === 1;
+        viewClipsLabel.appendChild(viewClipsCheckbox);
+        viewClipsLabel.append(" Klipek");
+        viewClipsCell.appendChild(viewClipsLabel);
+        row.appendChild(viewClipsCell);
 
         const maxFileSizeCell = document.createElement("td");
         const maxFileInput = document.createElement("input");
@@ -5210,11 +5286,12 @@
           .map((row) => {
             const uploadCheckbox = row.querySelector('input[name="canUpload"]');
             const transferCheckbox = row.querySelector('input[name="canTransfer"]');
+            const viewClipsCheckbox = row.querySelector('input[name="canViewClips"]');
             const maxFileSizeInput = row.querySelector('input[name="maxFileSizeMb"]');
             const maxVideosInput = row.querySelector('input[name="maxVideos"]');
             const userIdAttr = row.dataset.userId;
 
-            if (!uploadCheckbox || !transferCheckbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
+            if (!uploadCheckbox || !transferCheckbox || !viewClipsCheckbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
               return null;
             }
 
@@ -5237,6 +5314,7 @@
               userId,
               canUpload: uploadCheckbox.checked,
               canTransfer: transferCheckbox.checked,
+              canViewClips: viewClipsCheckbox.checked,
               maxFileSizeMb: maxFileSizeValue,
               maxVideos: maxVideosValue,
             };
@@ -5361,10 +5439,12 @@
 
         if (res.ok) {
           const canTransfer = data.canTransfer === true || data.canTransfer === 1;
+          const canViewClips = data.canViewClips === true || data.canViewClips === 1;
           localStorage.setItem(SESSION_KEYS.token, data.token);
           localStorage.setItem(SESSION_KEYS.username, data.username);
           localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
           localStorage.setItem(SESSION_KEYS.canTransfer, canTransfer ? "true" : "false");
+          localStorage.setItem(SESSION_KEYS.canViewClips, canViewClips ? "true" : "false");
           if (data.profile_picture_filename) {
             localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
           } else {
@@ -5433,6 +5513,8 @@
             localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
             const canTransfer = data.canTransfer === true || data.canTransfer === 1;
             localStorage.setItem(SESSION_KEYS.canTransfer, canTransfer ? "true" : "false");
+            const canViewClips = data.canViewClips === true || data.canViewClips === 1;
+            localStorage.setItem(SESSION_KEYS.canViewClips, canViewClips ? "true" : "false");
             if (data.profile_picture_filename) {
                 localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
             } else {
@@ -5685,6 +5767,8 @@
       const summaryCloseBtn = document.getElementById("summaryCloseBtn");
       const videoGridContainer = document.getElementById("video-grid-container");
       const videoPagination = document.getElementById("video-pagination");
+      const clipSection = document.getElementById("klipek");
+      const clipsPermissionOverlay = document.getElementById("clipsPermissionOverlay");
       const showUploadModalBtn = document.getElementById("showUploadModalBtn");
       const uploadModal = document.getElementById("uploadModal");
       const closeUploadModalBtn = document.getElementById("closeUploadModal");
@@ -5778,6 +5862,37 @@
 
       function hasFileTransferPermission() {
         return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canTransfer) === "true";
+      }
+
+      function hasClipAccess() {
+        return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canViewClips) === "true";
+      }
+
+      function updateClipAccessUI() {
+        const allowed = hasClipAccess();
+
+        if (clipSection) {
+          clipSection.classList.toggle("permission-blocked", !allowed);
+        }
+
+        if (clipsPermissionOverlay) {
+          clipsPermissionOverlay.style.display = allowed ? "none" : "flex";
+          clipsPermissionOverlay.setAttribute("aria-hidden", allowed ? "true" : "false");
+        }
+
+        if (!allowed) {
+          if (videoGridContainer) {
+            videoGridContainer.innerHTML = "";
+          }
+          if (videoPagination) {
+            videoPagination.innerHTML = "";
+          }
+        }
+
+        if (showUploadModalBtn) {
+          showUploadModalBtn.disabled = !allowed;
+          showUploadModalBtn.title = allowed ? "" : "Jogosultság szükséges a klipek eléréséhez.";
+        }
       }
 
       function getAccessibleNavLinks() {
@@ -6174,6 +6289,12 @@
       }
 
       async function fetchTags() {
+        if (!hasClipAccess()) {
+          availableTags = [];
+          populateTagSelect();
+          renderGlobalTagSelect();
+          return;
+        }
         try {
           const response = await fetch("/api/tags");
           if (!response.ok) throw new Error("Nem sikerült lekérni a címkéket.");
@@ -6405,6 +6526,11 @@
           return;
         }
 
+        if (!hasClipAccess()) {
+          updateClipAccessUI();
+          return;
+        }
+
         videoGridContainer.innerHTML = "";
         if (videoPagination) videoPagination.innerHTML = "";
 
@@ -6414,7 +6540,20 @@
         });
 
         try {
-          const response = await fetch(`/api/videos?${params.toString()}`);
+          const response = await fetch(`/api/videos?${params.toString()}`, {
+            headers: buildAuthHeaders(),
+          });
+
+          if (response.status === 401) {
+            updateUIForLoggedOut();
+            throw new Error("Be kell jelentkezned a klipek megtekintéséhez.");
+          }
+
+          if (response.status === 403) {
+            localStorage.setItem(SESSION_KEYS.canViewClips, "false");
+            updateClipAccessUI();
+            throw new Error("Nincs jogosultságod a klipek megtekintéséhez.");
+          }
 
           if (!response.ok) {
             throw new Error("Nem sikerült betölteni a videókat.");
@@ -6963,6 +7102,11 @@
             alert("A feltöltéshez be kell jelentkezned.");
             return;
           }
+          if (!hasClipAccess()) {
+            alert("A klipekhez való hozzáféréshez külön engedély szükséges.");
+            updateClipAccessUI();
+            return;
+          }
           openUploadModal();
         });
       }
@@ -7220,8 +7364,11 @@
         });
 
         if (target === "klipek") {
-          fetchTags();
-          loadVideos();
+          updateClipAccessUI();
+          if (hasClipAccess()) {
+            fetchTags();
+            loadVideos();
+          }
         }
 
         if (target === "szavazas") {

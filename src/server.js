@@ -194,6 +194,36 @@ function isAdmin(req, res, next) {
     next();
 }
 
+async function ensureClipViewPermission(req, res, next) {
+    const userId = req.user && req.user.id;
+
+    if (!userId) {
+        return res.status(401).json({ message: 'Bejelentkezés szükséges.' });
+    }
+
+    if (req.user.isAdmin) {
+        return next();
+    }
+
+    try {
+        const { rows } = await db.query('SELECT can_view_clips FROM users WHERE id = $1', [userId]);
+        const user = rows[0];
+
+        if (!user) {
+            return res.status(404).json({ message: 'A felhasználó nem található.' });
+        }
+
+        if (Number(user.can_view_clips) !== 1) {
+            return res.status(403).json({ message: 'Nincs jogosultság a klipek megtekintésére.' });
+        }
+
+        return next();
+    } catch (err) {
+        console.error('Hiba a klipekhez való jogosultság ellenőrzésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jogosultságot.' });
+    }
+}
+
 async function loadUserUploadSettings(req, res, next) {
     const userId = req.user && req.user.id;
 
@@ -412,7 +442,7 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, profile_picture_filename FROM users WHERE username = $1', [username]);
+        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, profile_picture_filename FROM users WHERE username = $1', [username]);
         const user = rows[0];
 
         if (!user) {
@@ -428,12 +458,15 @@ app.post('/login', async (req, res) => {
         const payload = { id: user.id, username: user.username, isAdmin };
         const token = generateAuthToken(payload);
 
+        const canViewClips = isAdmin || Number(user.can_view_clips) === 1;
+
         res.status(200).json({
             message: 'Sikeres bejelentkezés.',
             token,
             username: user.username,
             isAdmin,
             canTransfer: Number(user.can_transfer) === 1,
+            canViewClips,
             profile_picture_filename: user.profile_picture_filename
         });
     } catch (err) {
@@ -448,18 +481,20 @@ app.post('/logout', (req, res) => {
 
 app.get('/api/profile', authenticateToken, async (req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, profile_picture_filename FROM users WHERE id = $1', [req.user.id]);
+        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, can_view_clips, profile_picture_filename FROM users WHERE id = $1', [req.user.id]);
         const user = rows[0];
 
         if (!user) {
             return res.status(404).json({ message: 'A felhasználó nem található.' });
         }
 
+        const isAdminUser = user.is_admin === 1;
         res.status(200).json({
             id: user.id,
             username: user.username,
-            isAdmin: user.is_admin === 1,
+            isAdmin: isAdminUser,
             canTransfer: Number(user.can_transfer) === 1,
+            canViewClips: isAdminUser || Number(user.can_view_clips) === 1,
             profile_picture_filename: user.profile_picture_filename
         });
     } catch (err) {
@@ -470,7 +505,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
 
 app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
     try {
-        const query = 'SELECT id, username, can_upload, can_transfer, max_file_size_mb, max_videos, upload_count FROM users';
+        const query = 'SELECT id, username, can_upload, can_transfer, can_view_clips, max_file_size_mb, max_videos, upload_count FROM users';
         const { rows } = await db.query(query);
         res.status(200).json(rows);
     } catch (err) {
@@ -491,6 +526,7 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
         userId: Number.parseInt(item.userId, 10),
         canUpload: item.canUpload ? 1 : 0,
         canTransfer: item.canTransfer ? 1 : 0,
+        canViewClips: item.canViewClips ? 1 : 0,
         maxFileSizeMb: Number(item.maxFileSizeMb),
         maxVideos: Number(item.maxVideos)
     }));
@@ -505,8 +541,8 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
         await client.query('BEGIN');
         for (const update of updates) {
             const result = await client.query(
-                'UPDATE users SET can_upload = $1, can_transfer = $2, max_file_size_mb = $3, max_videos = $4 WHERE id = $5',
-                [update.canUpload, update.canTransfer, Math.round(update.maxFileSizeMb), Math.round(update.maxVideos), update.userId]
+                'UPDATE users SET can_upload = $1, can_transfer = $2, can_view_clips = $3, max_file_size_mb = $4, max_videos = $5 WHERE id = $6',
+                [update.canUpload, update.canTransfer, update.canViewClips, Math.round(update.maxFileSizeMb), Math.round(update.maxVideos), update.userId]
             );
             if (result.rowCount === 0) {
                 throw new Error(`A ${update.userId} azonosítójú felhasználó nem található.`);
@@ -798,7 +834,7 @@ app.delete('/api/tags/:tagId', authenticateToken, isAdmin, async (req, res) => {
     }
 });
 
-app.get('/api/videos', async (req, res) => {
+app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, res) => {
     try {
         const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
         const allowedLimits = [12, 24, 40, 80];
@@ -868,7 +904,7 @@ app.get('/api/videos', async (req, res) => {
     }
 });
 
-app.get('/api/videos/get-uploaded-titles', async (_req, res) => {
+app.get('/api/videos/get-uploaded-titles', authenticateToken, ensureClipViewPermission, async (_req, res) => {
     try {
         const { rows } = await db.query('SELECT original_name FROM videos');
         const titles = (rows || []).map((row) => {
@@ -883,7 +919,7 @@ app.get('/api/videos/get-uploaded-titles', async (_req, res) => {
     }
 });
 
-app.get('/api/videos/get-uploaded-hashes', async (_req, res) => {
+app.get('/api/videos/get-uploaded-hashes', authenticateToken, ensureClipViewPermission, async (_req, res) => {
     try {
         const { rows } = await db.query('SELECT file_hash FROM videos WHERE file_hash IS NOT NULL');
         const hashes = (rows || []).map((row) => row.file_hash).filter(Boolean);
@@ -930,7 +966,7 @@ function sanitizeFolderName(name) {
     return normalized || 'egyeb';
 }
 
-app.post('/upload', authenticateToken, loadUserUploadSettings, (req, res, next) => {
+app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadSettings, (req, res, next) => {
     const limits = { files: 100 };
     if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
         limits.fileSize = req.uploadSettings.maxFileSizeBytes;
