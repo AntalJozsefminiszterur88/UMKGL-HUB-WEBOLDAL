@@ -284,6 +284,37 @@ async function safeUnlink(filePath) {
     }
 }
 
+async function deleteVideoRecord(video) {
+    if (!video || !video.id) {
+        return;
+    }
+
+    const targets = [];
+
+    if (video.filename) {
+        targets.push(path.join(uploadsRootDirectory, video.filename));
+
+        const folderName = path.posix.basename(path.posix.dirname(video.filename));
+        const extension = path.extname(video.filename) || '.mp4';
+        const baseNameFor720 = path.parse(video.original_name || '').name || path.parse(video.filename).name;
+
+        if (folderName && folderName !== '.' && baseNameFor720) {
+            const path720 = path.join(clips720pDirectory, folderName, `${baseNameFor720}_720p${extension}`);
+            targets.push(path720);
+        }
+    }
+
+    if (video.thumbnail_filename) {
+        targets.push(path.join(uploadsRootDirectory, video.thumbnail_filename));
+    }
+
+    for (const target of targets) {
+        await safeUnlink(target);
+    }
+
+    await db.query('DELETE FROM videos WHERE id = $1', [video.id]);
+}
+
 const programStorage = multer.diskStorage({
     destination: (_req, file, cb) => {
         if (file.fieldname === 'image') {
@@ -1785,6 +1816,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
     };
 
     const videosForTranscode = [];
+    const createdVideos = [];
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
@@ -1831,6 +1863,15 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
             await client.query('UPDATE videos SET thumbnail_filename = $1 WHERE id = $2', [thumbnailFilename, videoId]);
 
             if (videoId) {
+                createdVideos.push({
+                    id: videoId,
+                    filename: storedFilename,
+                    original_name: sanitizedOriginalName,
+                    thumbnail_filename: thumbnailFilename,
+                });
+            }
+
+            if (videoId) {
                 const originalExtension = path.extname(file.originalname) || path.extname(filename) || '.mp4';
                 const originalFilenameForOutput = `${sanitizedOriginalName || path.parse(filename).name}${originalExtension}`;
                 videosForTranscode.push({
@@ -1845,7 +1886,10 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [filesToProcess.length, uploaderId]);
         await client.query('COMMIT');
 
-        res.status(201).json({ message: 'Videók sikeresen feltöltve.' });
+        res.status(201).json({
+            message: 'Videók sikeresen feltöltve.',
+            videoIds: createdVideos.map((video) => video.id),
+        });
 
         if (videosForTranscode.length) {
             setImmediate(() => {
@@ -1879,6 +1923,45 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
     }
 });
 
+app.post('/api/videos/cancel', authenticateToken, async (req, res) => {
+    const rawIds = Array.isArray(req.body?.videoIds) ? req.body.videoIds : [];
+    const videoIds = Array.from(new Set(rawIds.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)));
+
+    if (!videoIds.length) {
+        return res.status(400).json({ message: 'Nincs törlendő videó.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT id, filename, original_name, thumbnail_filename, uploader_id FROM videos WHERE id = ANY($1)',
+            [videoIds]
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({ message: 'A megadott videók nem találhatók.' });
+        }
+
+        const deletable = rows.filter((video) => video.uploader_id === req.user.id || req.user.isAdmin);
+        if (!deletable.length) {
+            return res.status(403).json({ message: 'Nincs jogosultság a videók törléséhez.' });
+        }
+
+        const deletedVideoIds = [];
+        for (const video of deletable) {
+            await deleteVideoRecord(video);
+            deletedVideoIds.push(video.id);
+        }
+
+        return res.status(200).json({
+            message: 'Feltöltés megszakítva, videók törölve.',
+            deletedVideoIds,
+        });
+    } catch (err) {
+        console.error('Hiba a feltöltés megszakítása során:', err);
+        return res.status(500).json({ message: 'Nem sikerült törölni a videókat.' });
+    }
+});
+
 app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
     const videoId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(videoId)) {
@@ -1886,24 +1969,17 @@ app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
     }
 
     try {
-        const { rows } = await db.query('SELECT filename FROM videos WHERE id = $1', [videoId]);
+        const { rows } = await db.query(
+            'SELECT id, filename, original_name, thumbnail_filename FROM videos WHERE id = $1',
+            [videoId]
+        );
         const video = rows[0];
 
         if (!video) {
             return res.status(404).json({ message: 'A videó nem található.' });
         }
 
-        const filePath = path.join(uploadsRootDirectory, video.filename);
-        try {
-            await fs.promises.unlink(filePath);
-        } catch (err) {
-            if (err.code !== 'ENOENT') {
-                console.error('Hiba a videófájl törlésekor:', err);
-                return res.status(500).json({ message: 'Nem sikerült törölni a videófájlt.' });
-            }
-        }
-
-        await db.query('DELETE FROM videos WHERE id = $1', [videoId]);
+        await deleteVideoRecord(video);
         res.status(200).json({ message: 'Videó sikeresen törölve.' });
     } catch (err) {
         console.error('Hiba a videó törlésekor:', err);
