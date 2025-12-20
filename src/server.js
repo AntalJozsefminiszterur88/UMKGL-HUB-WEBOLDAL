@@ -53,6 +53,23 @@ ensureDirectoryExists(clipsOriginalDirectory);
 ensureDirectoryExists(clips720pDirectory);
 ensureDirectoryExists(thumbnailsDirectory);
 
+async function getVideoFileSize(filename) {
+    if (!filename) {
+        return null;
+    }
+
+    try {
+        const stats = await fs.promises.stat(path.join(uploadsRootDirectory, filename));
+        return stats.size;
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error(`Hiba a fájlméret olvasásakor (${filename}):`, err);
+        }
+
+        return null;
+    }
+}
+
 const programImagesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'images');
 const programFilesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'files');
 
@@ -1061,6 +1078,31 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
     } catch (err) {
         console.error('Hiba a videók lekérdezésekor:', err);
         res.status(500).json({ message: 'Nem sikerült lekérdezni a videókat.' });
+    }
+});
+
+app.get('/api/admin/clips', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const { rows } = await db.query(`
+            SELECT videos.id, videos.original_name, videos.filename, videos.uploaded_at, users.username
+            FROM videos
+            LEFT JOIN users ON videos.uploader_id = users.id
+            ORDER BY videos.uploaded_at DESC
+        `);
+
+        const clips = await Promise.all((rows || []).map(async (video) => ({
+            id: video.id,
+            original_name: video.original_name,
+            filename: video.filename,
+            uploaded_at: video.uploaded_at,
+            uploader: video.username || 'Ismeretlen',
+            sizeBytes: await getVideoFileSize(video.filename),
+        })));
+
+        res.status(200).json(clips);
+    } catch (err) {
+        console.error('Hiba az admin klip lista lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni a klipeket.' });
     }
 });
 
