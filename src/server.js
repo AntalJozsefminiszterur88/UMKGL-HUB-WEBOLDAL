@@ -1195,8 +1195,21 @@ async function removeEmptyDirectories(rootDir, protectedDirs = []) {
 }
 
 app.post('/api/admin/rescue-720p-files', authenticateToken, isAdmin, async (_req, res) => {
+    const normalizeForComparison = (value) => {
+        if (!value) {
+            return null;
+        }
+
+        return value
+            .normalize('NFD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/\s+/g, '_')
+            .replace(/[^a-zA-Z0-9._-]/g, '')
+            .toLowerCase();
+    };
+
     try {
-        const { rows } = await db.query('SELECT id, filename FROM videos WHERE has_720p = 1');
+        const { rows } = await db.query('SELECT id, filename, original_name FROM videos WHERE has_720p = 1');
         const directoryEntries = await fs.promises.readdir(clipsDirectory, { withFileTypes: true });
         const legacyDirectories = directoryEntries
             .filter((entry) => entry.isDirectory())
@@ -1209,6 +1222,8 @@ app.post('/api/admin/rescue-720p-files', authenticateToken, isAdmin, async (_req
             const parsed = path.parse(video.filename || '');
             const baseName = parsed.name;
             const extension = parsed.ext || '.mp4';
+            const originalParsed = path.parse(video.original_name || '');
+            const originalBaseName = originalParsed.name;
 
             if (!baseName) {
                 results.push({ videoId: video.id, status: 'skipped', reason: 'invalid_filename' });
@@ -1224,19 +1239,47 @@ app.post('/api/admin/rescue-720p-files', authenticateToken, isAdmin, async (_req
                 continue;
             }
 
+            const searchCandidates = [`${baseName}_720p`];
+            if (originalBaseName) {
+                searchCandidates.push(`${originalBaseName}_720p`);
+            }
+
+            const normalizedCandidates = searchCandidates
+                .map((candidate) => normalizeForComparison(candidate))
+                .filter(Boolean);
+
             let relocatedFrom = null;
 
             for (const legacyFolder of legacyDirectories) {
-                const candidatePath = path.join(clipsDirectory, legacyFolder, `${baseName}_720p${extension}`);
-                if (await fileExists(candidatePath)) {
-                    await fs.promises.mkdir(targetDir, { recursive: true });
-                    await fs.promises.rename(candidatePath, targetPath);
-                    relocatedFrom = candidatePath;
+                const legacyPath = path.join(clipsDirectory, legacyFolder);
+                const legacyEntries = await fs.promises.readdir(legacyPath, { withFileTypes: true });
+
+                for (const entry of legacyEntries) {
+                    if (!entry.isFile()) {
+                        continue;
+                    }
+
+                    const parsedEntry = path.parse(entry.name);
+                    const comparableName = normalizeForComparison(parsedEntry.name);
+                    const comparableExtension = (parsedEntry.ext || '').toLowerCase();
+                    const extensionMatches = !extension
+                        || comparableExtension === extension.toLowerCase()
+                        || comparableExtension === '.mp4';
+
+                    if (extensionMatches && comparableName && normalizedCandidates.includes(comparableName)) {
+                        relocatedFrom = path.join(legacyPath, entry.name);
+                        break;
+                    }
+                }
+
+                if (relocatedFrom) {
                     break;
                 }
             }
 
             if (relocatedFrom) {
+                await fs.promises.mkdir(targetDir, { recursive: true });
+                await fs.promises.rename(relocatedFrom, targetPath);
                 results.push({
                     videoId: video.id,
                     status: 'moved',
