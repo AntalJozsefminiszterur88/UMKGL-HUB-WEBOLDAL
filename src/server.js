@@ -34,6 +34,8 @@ app.use(express.urlencoded({ extended: true }));
 // Fájlfeltöltés beállítása a videókhoz
 const uploadsRootDirectory = path.join(__dirname, '..', 'public', 'uploads');
 const clipsDirectory = path.join(uploadsRootDirectory, 'klippek');
+const clipsOriginalDirectory = path.join(clipsDirectory, 'eredeti');
+const clips720pDirectory = path.join(clipsDirectory, '720p');
 const thumbnailsDirectory = path.join(uploadsRootDirectory, 'thumbnails');
 const ensureDirectoryExists = (dirPath) => {
     try {
@@ -47,6 +49,8 @@ const ensureDirectoryExists = (dirPath) => {
 
 ensureDirectoryExists(uploadsRootDirectory);
 ensureDirectoryExists(clipsDirectory);
+ensureDirectoryExists(clipsOriginalDirectory);
+ensureDirectoryExists(clips720pDirectory);
 ensureDirectoryExists(thumbnailsDirectory);
 
 const programImagesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'images');
@@ -113,20 +117,20 @@ function getVideoHeight(filePath) {
     });
 }
 
-async function transcodeVideoTo720p(inputPath, originalFilename) {
+async function transcodeVideoTo720p(inputPath, outputDir, originalFilename) {
     const currentHeight = await getVideoHeight(inputPath);
     if (!currentHeight || currentHeight <= 720) {
         return { skipped: true, reason: 'Source height is 720p or lower' };
     }
 
+    const targetOutputDir = outputDir || path.dirname(inputPath);
     const parsedOriginal = path.parse(originalFilename || inputPath);
-    const outputDir = path.dirname(inputPath);
     const extension = parsedOriginal.ext || path.extname(inputPath) || '.mp4';
     const baseName = parsedOriginal.name || path.parse(inputPath).name;
     const outputFilename = `${baseName}_720p${extension}`;
-    const outputPath = path.join(outputDir, outputFilename);
+    const outputPath = path.join(targetOutputDir, outputFilename);
 
-    await fs.promises.mkdir(outputDir, { recursive: true });
+    await fs.promises.mkdir(targetOutputDir, { recursive: true });
 
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
@@ -141,8 +145,8 @@ async function transcodeVideoTo720p(inputPath, originalFilename) {
     });
 }
 
-async function processVideoFor720p(videoId, inputPath, originalFilename) {
-    const result = await transcodeVideoTo720p(inputPath, originalFilename);
+async function processVideoFor720p(videoId, inputPath, outputDir, originalFilename) {
+    const result = await transcodeVideoTo720p(inputPath, outputDir, originalFilename);
 
     await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [videoId]);
 
@@ -241,7 +245,7 @@ async function generateThumbnailForVideo(videoPath, baseName, videoId) {
 
 const storage = multer.diskStorage({
     destination: (_req, _file, cb) => {
-        cb(null, clipsDirectory);
+        cb(null, clipsOriginalDirectory);
     },
     filename: (_req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
@@ -1122,7 +1126,9 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
         for (const video of rows) {
             const videoPath = path.join(uploadsRootDirectory, video.filename);
             try {
-                const outcome = await processVideoFor720p(video.id, videoPath, video.original_name);
+                const folderName = resolveFolderNameFromFilename(video.filename);
+                const outputDir = path.join(clips720pDirectory, folderName);
+                const outcome = await processVideoFor720p(video.id, videoPath, outputDir, video.original_name);
                 results.push({
                     videoId: video.id,
                     status: outcome.converted ? 'converted' : 'skipped',
@@ -1138,6 +1144,131 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
     } catch (err) {
         console.error('Hiba a hiányzó 720p videók konvertálása során:', err);
         res.status(500).json({ message: 'Nem sikerült elvégezni a 720p konvertálást.' });
+    }
+});
+
+async function fileExists(filePath) {
+    try {
+        await fs.promises.access(filePath, fs.constants.F_OK);
+        return true;
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return false;
+        }
+        throw err;
+    }
+}
+
+async function removeEmptyDirectories(rootDir, protectedDirs = []) {
+    const protectedSet = new Set([rootDir, ...protectedDirs]);
+
+    const walk = async (dir) => {
+        let entries;
+        try {
+            entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return;
+            }
+            throw err;
+        }
+
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                const fullPath = path.join(dir, entry.name);
+                await walk(fullPath);
+                try {
+                    const childEntries = await fs.promises.readdir(fullPath);
+                    if (childEntries.length === 0 && !protectedSet.has(fullPath)) {
+                        await fs.promises.rmdir(fullPath);
+                    }
+                } catch (err) {
+                    if (err.code !== 'ENOENT') {
+                        throw err;
+                    }
+                }
+            }
+        }
+    };
+
+    await walk(rootDir);
+}
+
+app.post('/api/admin/reorganize-files', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const { rows } = await db.query(`
+            SELECT v.id, v.filename, v.original_name,
+                   COALESCE(json_agg(t.name) FILTER (WHERE t.id IS NOT NULL), '[]') AS tags
+            FROM videos v
+            LEFT JOIN video_tags vt ON vt.video_id = v.id
+            LEFT JOIN tags t ON t.id = vt.tag_id
+            GROUP BY v.id, v.filename, v.original_name
+        `);
+
+        const results = [];
+
+        for (const video of rows) {
+            const tagNames = (() => {
+                if (Array.isArray(video.tags)) {
+                    return video.tags;
+                }
+                if (typeof video.tags === 'string') {
+                    try {
+                        const parsed = JSON.parse(video.tags);
+                        return Array.isArray(parsed) ? parsed : [];
+                    } catch (err) {
+                        return [];
+                    }
+                }
+                return [];
+            })();
+            const folderName = resolveFolderNameFromTagNames(tagNames);
+            const sourcePath = path.join(uploadsRootDirectory, video.filename);
+            const filename = path.basename(sourcePath);
+            const targetOriginalDir = path.join(clipsOriginalDirectory, folderName);
+            const targetOriginalPath = path.join(targetOriginalDir, filename);
+            const target720Dir = path.join(clips720pDirectory, folderName);
+
+            try {
+                if (!(await fileExists(sourcePath))) {
+                    results.push({ videoId: video.id, status: 'missing_source' });
+                    continue;
+                }
+
+                await fs.promises.mkdir(targetOriginalDir, { recursive: true });
+                await fs.promises.mkdir(target720Dir, { recursive: true });
+
+                if (sourcePath !== targetOriginalPath) {
+                    await fs.promises.rename(sourcePath, targetOriginalPath);
+                }
+
+                const parsed = path.parse(filename);
+                const extension = parsed.ext || '.mp4';
+                const source720Path = path.join(path.dirname(sourcePath), `${parsed.name}_720p${extension}`);
+
+                if (await fileExists(source720Path)) {
+                    const target720Path = path.join(target720Dir, `${parsed.name}_720p${extension}`);
+                    if (source720Path !== target720Path) {
+                        await fs.promises.rename(source720Path, target720Path);
+                    }
+                }
+
+                const newRelativePath = path.posix.join('klippek', 'eredeti', folderName, filename);
+                await db.query('UPDATE videos SET filename = $1 WHERE id = $2', [newRelativePath, video.id]);
+
+                results.push({ videoId: video.id, status: 'moved', folder: folderName });
+            } catch (err) {
+                console.error(`Hiba a(z) ${video.id} videó átszervezésekor:`, err);
+                results.push({ videoId: video.id, status: 'failed', error: err.message });
+            }
+        }
+
+        await removeEmptyDirectories(clipsDirectory, [clipsOriginalDirectory, clips720pDirectory]);
+
+        res.status(200).json({ processed: results.length, results });
+    } catch (err) {
+        console.error('Hiba a fájlok átszervezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült átszervezni a fájlokat.' });
     }
 });
 
@@ -1175,6 +1306,31 @@ function sanitizeFolderName(name) {
         .trim();
 
     return normalized || 'egyeb';
+}
+
+const BLACKLISTED_FOLDER_NAMES = new Set([
+    'balazs',
+    'balázs',
+    'david',
+    'dávid'
+].map((name) => sanitizeFolderName(name)));
+
+function resolveFolderNameFromTagNames(tagNames = []) {
+    for (const tagName of tagNames) {
+        const sanitized = sanitizeFolderName(tagName);
+        if (sanitized && !BLACKLISTED_FOLDER_NAMES.has(sanitized)) {
+            return sanitized;
+        }
+    }
+
+    return 'egyeb';
+}
+
+function resolveFolderNameFromFilename(filename) {
+    const directory = path.posix.dirname(filename || '');
+    const segments = directory.split('/').filter(Boolean);
+    const possibleFolder = segments.pop();
+    return possibleFolder ? sanitizeFolderName(possibleFolder) : 'egyeb';
 }
 
 app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadSettings, (req, res, next) => {
@@ -1236,7 +1392,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         const parsedName = path.parse(customName || normalizedOriginalName).name.trim();
         const sanitizedOriginalName = parsedName || normalizedOriginalName;
         const tagsForFile = normalizeTagIds(metadata.tags);
-        const filePath = path.join(clipsDirectory, file.filename);
+        const filePath = path.join(clipsOriginalDirectory, file.filename);
         const embeddedHash = await extractEmbeddedHash(filePath);
         const fileHash = embeddedHash || await computeFileHash(filePath);
         return { file, sanitizedOriginalName, tags: tagsForFile.length ? tagsForFile : fallbackTagIds, fileHash };
@@ -1270,13 +1426,8 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
     }
 
     const resolveFolderName = (tags) => {
-        if (tags && tags.length) {
-            const tagName = tagNamesById.get(tags[0]);
-            if (tagName) {
-                return sanitizeFolderName(tagName);
-            }
-        }
-        return 'egyeb';
+        const tagNames = (tags || []).map((id) => tagNamesById.get(id)).filter(Boolean);
+        return resolveFolderNameFromTagNames(tagNames);
     };
 
     const videosForTranscode = [];
@@ -1285,14 +1436,14 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         await client.query('BEGIN');
         for (const { file, sanitizedOriginalName, tags, fileHash } of filesToProcess) {
             const { filename } = file;
-            const currentFilePath = path.join(clipsDirectory, filename);
+            const currentFilePath = path.join(clipsOriginalDirectory, filename);
             const folderName = resolveFolderName(tags);
-            const targetDirectory = path.join(clipsDirectory, folderName);
+            const targetDirectory = path.join(clipsOriginalDirectory, folderName);
             await fs.promises.mkdir(targetDirectory, { recursive: true });
             const targetFilePath = path.join(targetDirectory, filename);
             await fs.promises.rename(currentFilePath, targetFilePath);
 
-            const storedFilename = path.posix.join('klippek', folderName, filename);
+            const storedFilename = path.posix.join('klippek', 'eredeti', folderName, filename);
             const contentCreatedAt = await getVideoCreationDate(targetFilePath);
             const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at, file_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id`;
             let insertResult;
@@ -1331,6 +1482,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
                 videosForTranscode.push({
                     videoId,
                     filePath: targetFilePath,
+                    outputDir: path.join(clips720pDirectory, folderName),
                     originalFilename: originalFilenameForOutput,
                 });
             }
@@ -1343,8 +1495,8 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
 
         if (videosForTranscode.length) {
             setImmediate(() => {
-                videosForTranscode.forEach(({ videoId, filePath, originalFilename }) => {
-                    processVideoFor720p(videoId, filePath, originalFilename)
+                videosForTranscode.forEach(({ videoId, filePath, outputDir, originalFilename }) => {
+                    processVideoFor720p(videoId, filePath, outputDir, originalFilename)
                         .catch((err) => {
                             console.error(`Hiba a(z) ${videoId} videó 720p konvertálása során:`, err);
                         });
