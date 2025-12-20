@@ -1850,10 +1850,23 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         if (videosForTranscode.length) {
             setImmediate(() => {
                 videosForTranscode.forEach(({ videoId, filePath, outputDir, originalFilename }) => {
-                    processVideoFor720p(videoId, filePath, outputDir, originalFilename)
-                        .catch((err) => {
+                    (async () => {
+                        try {
+                            try {
+                                const optimized = await optimizeVideoForFaststart(filePath);
+
+                                if (!optimized) {
+                                    console.warn(`Nem sikerült optimalizálni a(z) ${videoId} videót faststart-tal.`);
+                                }
+                            } catch (optimizeErr) {
+                                console.error(`Hiba a(z) ${videoId} videó faststart optimalizálása során:`, optimizeErr);
+                            }
+
+                            await processVideoFor720p(videoId, filePath, outputDir, originalFilename);
+                        } catch (err) {
                             console.error(`Hiba a(z) ${videoId} videó 720p konvertálása során:`, err);
-                        });
+                        }
+                    })();
                 });
             });
         }
