@@ -578,7 +578,7 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, profile_picture_filename FROM users WHERE username = $1', [username]);
+        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, profile_picture_filename, preferred_quality FROM users WHERE username = $1', [username]);
         const user = rows[0];
 
         if (!user) {
@@ -603,7 +603,8 @@ app.post('/login', async (req, res) => {
             isAdmin,
             canTransfer: Number(user.can_transfer) === 1,
             canViewClips,
-            profile_picture_filename: user.profile_picture_filename
+            profile_picture_filename: user.profile_picture_filename,
+            preferred_quality: user.preferred_quality || '1080p'
         });
     } catch (err) {
         console.error('Hiba a bejelentkezés során:', err);
@@ -617,7 +618,7 @@ app.post('/logout', (req, res) => {
 
 app.get('/api/profile', authenticateToken, async (req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, can_view_clips, profile_picture_filename FROM users WHERE id = $1', [req.user.id]);
+        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, can_view_clips, profile_picture_filename, preferred_quality FROM users WHERE id = $1', [req.user.id]);
         const user = rows[0];
 
         if (!user) {
@@ -631,11 +632,29 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
             isAdmin: isAdminUser,
             canTransfer: Number(user.can_transfer) === 1,
             canViewClips: isAdminUser || Number(user.can_view_clips) === 1,
-            profile_picture_filename: user.profile_picture_filename
+            profile_picture_filename: user.profile_picture_filename,
+            preferred_quality: user.preferred_quality || '1080p'
         });
     } catch (err) {
         console.error('Hiba a profiladatok lekérdezésekor:', err);
         res.status(500).json({ message: 'Nem sikerült lekérdezni a profiladatokat.' });
+    }
+});
+
+app.post('/api/profile/update-quality', authenticateToken, async (req, res) => {
+    const { quality } = req.body || {};
+    const allowedQualities = ['720p', '1080p'];
+
+    if (!allowedQualities.includes(quality)) {
+        return res.status(400).json({ message: 'Érvénytelen minőség érték.' });
+    }
+
+    try {
+        await db.query('UPDATE users SET preferred_quality = $1 WHERE id = $2', [quality, req.user.id]);
+        res.status(200).json({ message: 'A minőségi beállítás frissítve.', preferred_quality: quality });
+    } catch (err) {
+        console.error('Hiba a minőségi beállítás frissítésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült frissíteni a minőségi beállítást.' });
     }
 });
 
@@ -1016,7 +1035,7 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
                 OFFSET $${dataParams.length}
             )
             SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at,
-                   fv.thumbnail_filename,
+                   fv.thumbnail_filename, fv.has_720p,
                    COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
