@@ -22,7 +22,8 @@ async function initializeDatabase() {
         upload_count INTEGER DEFAULT 0,
         max_file_size_mb INTEGER DEFAULT 50,
         max_videos INTEGER DEFAULT 10,
-        profile_picture_filename TEXT
+        profile_picture_filename TEXT,
+        preferred_quality TEXT DEFAULT '1080p'
       )
     `);
 
@@ -50,6 +51,9 @@ async function initializeDatabase() {
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_filename TEXT'
     );
+    await client.query(
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_quality TEXT DEFAULT '1080p'"
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS videos (
@@ -58,6 +62,7 @@ async function initializeDatabase() {
         original_name TEXT NOT NULL,
         uploader_id INTEGER NOT NULL,
         uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+        has_720p INTEGER DEFAULT 0,
         FOREIGN KEY (uploader_id) REFERENCES users(id)
       )
     `);
@@ -73,6 +78,9 @@ async function initializeDatabase() {
     );
     await client.query(
       'ALTER TABLE videos DROP CONSTRAINT IF EXISTS videos_original_name_key'
+    );
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS has_720p INTEGER DEFAULT 0'
     );
 
     await client.query(`

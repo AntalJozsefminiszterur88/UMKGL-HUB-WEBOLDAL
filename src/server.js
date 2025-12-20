@@ -94,6 +94,64 @@ function getVideoCreationDate(filePath) {
     });
 }
 
+function getVideoHeight(filePath) {
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
+            if (err) {
+                return resolve(null);
+            }
+
+            const videoStream = (metadata.streams || []).find((stream) => Number.isFinite(stream.height));
+            const height = Number.parseInt(videoStream?.height, 10);
+
+            if (!Number.isFinite(height)) {
+                return resolve(null);
+            }
+
+            return resolve(height);
+        });
+    });
+}
+
+async function transcodeVideoTo720p(inputPath, originalFilename) {
+    const currentHeight = await getVideoHeight(inputPath);
+    if (!currentHeight || currentHeight <= 720) {
+        return { skipped: true, reason: 'Source height is 720p or lower' };
+    }
+
+    const parsedOriginal = path.parse(originalFilename || inputPath);
+    const outputDir = path.dirname(inputPath);
+    const extension = parsedOriginal.ext || path.extname(inputPath) || '.mp4';
+    const baseName = parsedOriginal.name || path.parse(inputPath).name;
+    const outputFilename = `${baseName}_720p${extension}`;
+    const outputPath = path.join(outputDir, outputFilename);
+
+    await fs.promises.mkdir(outputDir, { recursive: true });
+
+    return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+            .outputOptions(['-map_metadata 0'])
+            .videoFilters('scale=-2:720:flags=lanczos')
+            .videoCodec('libx264')
+            .audioCodec('aac')
+            .output(outputPath)
+            .on('end', () => resolve({ skipped: false, outputPath }))
+            .on('error', (err) => reject(err))
+            .run();
+    });
+}
+
+async function processVideoFor720p(videoId, inputPath, originalFilename) {
+    const result = await transcodeVideoTo720p(inputPath, originalFilename);
+
+    await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [videoId]);
+
+    return {
+        converted: !result.skipped,
+        skippedReason: result.skipped ? result.reason : null,
+    };
+}
+
 function computeFileHash(filePath) {
     return new Promise((resolve, reject) => {
         const hash = crypto.createHash('sha1');
@@ -1037,6 +1095,33 @@ app.get('/api/admin/generate-missing-thumbnails', async (_req, res) => {
     }
 });
 
+app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, filename, original_name FROM videos WHERE has_720p = 0');
+        const results = [];
+
+        for (const video of rows) {
+            const videoPath = path.join(uploadsRootDirectory, video.filename);
+            try {
+                const outcome = await processVideoFor720p(video.id, videoPath, video.original_name);
+                results.push({
+                    videoId: video.id,
+                    status: outcome.converted ? 'converted' : 'skipped',
+                    reason: outcome.skippedReason || null,
+                });
+            } catch (err) {
+                console.error(`Hiba a(z) ${video.id} videó 720p konvertálása során:`, err);
+                results.push({ videoId: video.id, status: 'failed', error: err.message });
+            }
+        }
+
+        res.status(200).json({ message: 'A 720p konvertálás befejeződött.', results });
+    } catch (err) {
+        console.error('Hiba a hiányzó 720p videók konvertálása során:', err);
+        res.status(500).json({ message: 'Nem sikerült elvégezni a 720p konvertálást.' });
+    }
+});
+
 function normalizeFilename(originalName) {
     if (!originalName) {
         return '';
@@ -1175,6 +1260,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         return 'egyeb';
     };
 
+    const videosForTranscode = [];
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
@@ -1219,12 +1305,33 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
                 videoId
             );
             await client.query('UPDATE videos SET thumbnail_filename = $1 WHERE id = $2', [thumbnailFilename, videoId]);
+
+            if (videoId) {
+                const originalExtension = path.extname(file.originalname) || path.extname(filename) || '.mp4';
+                const originalFilenameForOutput = `${sanitizedOriginalName || path.parse(filename).name}${originalExtension}`;
+                videosForTranscode.push({
+                    videoId,
+                    filePath: targetFilePath,
+                    originalFilename: originalFilenameForOutput,
+                });
+            }
         }
 
         await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [filesToProcess.length, uploaderId]);
         await client.query('COMMIT');
 
         res.status(201).json({ message: 'Videók sikeresen feltöltve.' });
+
+        if (videosForTranscode.length) {
+            setImmediate(() => {
+                videosForTranscode.forEach(({ videoId, filePath, originalFilename }) => {
+                    processVideoFor720p(videoId, filePath, originalFilename)
+                        .catch((err) => {
+                            console.error(`Hiba a(z) ${videoId} videó 720p konvertálása során:`, err);
+                        });
+                });
+            });
+        }
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Hiba a videó feltöltésekor:', err);
