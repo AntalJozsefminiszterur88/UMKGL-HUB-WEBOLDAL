@@ -1314,16 +1314,16 @@ app.get('/api/admin/generate-missing-thumbnails', async (_req, res) => {
 
 app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, filename, original_name FROM videos');
-        const pendingVideos = [];
+        const { rows: videos } = await db.query('SELECT id, filename, original_name FROM videos');
+        const queuedVideos = [];
 
-        for (const video of rows) {
+        for (const video of videos) {
             const { outputPath } = build720pOutputPaths(video);
 
             let needsProcessing = false;
             try {
                 const stats = await fs.promises.stat(outputPath);
-                needsProcessing = !stats.isFile() || stats.size === 0;
+                needsProcessing = !stats.isFile() || stats.size <= 0;
             } catch (err) {
                 if (err.code === 'ENOENT') {
                     needsProcessing = true;
@@ -1337,15 +1337,13 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
                     "UPDATE videos SET has_720p = 0, processing_status = 'pending' WHERE id = $1",
                     [video.id]
                 );
-                pendingVideos.push(video.id);
+                queuedVideos.push(video.id);
             }
         }
 
-        setImmediate(() => {
-            processVideoQueue();
-        });
+        await processVideoQueue();
 
-        res.status(200).json({ message: 'A hiányzó vagy hibás 720p fájlok újra ütemezve.', queued: pendingVideos });
+        res.status(200).json({ message: 'A hiányzó vagy hibás 720p fájlok újra ütemezve.', queued: queuedVideos });
     } catch (err) {
         console.error('Hiba a hiányzó 720p videók újraütemezése során:', err);
         res.status(500).json({ message: 'Nem sikerült elvégezni a 720p feldolgozás ütemezését.' });
