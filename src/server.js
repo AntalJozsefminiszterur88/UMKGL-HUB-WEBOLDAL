@@ -1215,31 +1215,44 @@ async function optimizeVideoForFaststart(filePath) {
     });
 }
 
-app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, async (_req, res) => {
-    try {
-        const targetDirectories = [clipsOriginalDirectory, clips720pDirectory];
-        let optimizedCount = 0;
+app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, (_req, res) => {
+    res.json({
+        message: 'Az optimalizálás elindult a háttérben. Figyeld a szerver konzolt a részletekért.',
+    });
 
-        for (const directory of targetDirectories) {
-            const mp4Files = await collectMp4FilesRecursively(directory);
+    (async () => {
+        try {
+            const targetDirectories = [clipsOriginalDirectory, clips720pDirectory];
+            const allMp4Files = [];
 
-            for (const filePath of mp4Files) {
+            for (const directory of targetDirectories) {
+                const mp4Files = await collectMp4FilesRecursively(directory);
+                allMp4Files.push(...mp4Files);
+            }
+
+            console.log(`Összesen ${allMp4Files.length} fájlt találtam.`);
+
+            let optimizedCount = 0;
+
+            for (const filePath of allMp4Files) {
                 try {
                     const optimized = await optimizeVideoForFaststart(filePath);
+
                     if (optimized) {
                         optimizedCount += 1;
+                        console.log(`[OK] ${path.basename(filePath)}`);
                     }
                 } catch (err) {
                     console.error(`Hiba a(z) ${filePath} videó optimalizálása során:`, err);
                 }
             }
-        }
 
-        res.status(200).json({ optimized: optimizedCount });
-    } catch (err) {
-        console.error('Hiba a videók optimalizálása során:', err);
-        res.status(500).json({ message: 'Nem sikerült optimalizálni a videókat.' });
-    }
+            console.log('Optimalizálás befejezve.');
+            console.log(`Sikeresen optimalizált fájlok száma: ${optimizedCount}`);
+        } catch (err) {
+            console.error('Hiba a videók optimalizálása során:', err);
+        }
+    })();
 });
 
 async function fileExists(filePath) {
