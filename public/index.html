@@ -3253,6 +3253,7 @@
 
         <div class="admin-clips-actions">
           <button id="loadClipsBtn" class="secondary-btn" type="button">Klip lista megnyitása</button>
+          <button id="processingStatusBtn" class="secondary-btn" type="button">Feldolgozási állapot</button>
         </div>
       </section>
 
@@ -3378,6 +3379,7 @@
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
     const loadClipsBtn = document.getElementById("loadClipsBtn");
+    const processingStatusBtn = document.getElementById("processingStatusBtn");
     const pollCreator = document.getElementById("pollCreator");
     const pollCreatorNotice = document.getElementById("pollCreatorNotice");
     const createPollForm = document.getElementById("createPollForm");
@@ -5423,6 +5425,22 @@
       return { items, total };
     }
 
+    async function fetchProcessingStatus() {
+      const response = await fetch("/api/admin/processing-status", { headers: buildAuthHeaders() });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const message = data && data.message ? data.message : "Nem sikerült lekérdezni a feldolgozási állapotot.";
+        throw new Error(message);
+      }
+
+      return {
+        isProcessing: Boolean(data?.isProcessing),
+        currentTask: data?.currentTask || null,
+        pending: Array.isArray(data?.pending) ? data.pending : [],
+      };
+    }
+
     function createClipListWindowLayout(clipWindow) {
       const doc = clipWindow.document;
 
@@ -5742,6 +5760,261 @@
       await loadVariant(selectedVariant);
     }
 
+    function formatHungarianDate(value) {
+      const parsedDate = value ? new Date(value) : null;
+      if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+        return "Ismeretlen időpont";
+      }
+
+      return parsedDate.toLocaleString("hu-HU", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    function createProcessingStatusWindowLayout(processWindow) {
+      const doc = processWindow.document;
+
+      doc.title = "Feldolgozási állapot";
+      doc.body.innerHTML = `
+        <style>
+          body {
+            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #f3f4f6;
+            color: #111827;
+            margin: 0;
+            padding: 20px;
+          }
+
+          .process-window {
+            max-width: 960px;
+            margin: 0 auto;
+          }
+
+          .process-window h1 {
+            margin-bottom: 4px;
+          }
+
+          .process-window__subtitle {
+            color: #4b5563;
+            margin-top: 0;
+          }
+
+          .process-window__status {
+            background: #e5e7eb;
+            color: #1f2937;
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin: 16px 0;
+            font-weight: 600;
+          }
+
+          .process-window__card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 14px 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            margin-bottom: 16px;
+          }
+
+          .process-window__card h3 {
+            margin: 0 0 6px 0;
+            font-size: 16px;
+          }
+
+          .process-window__meta {
+            color: #4b5563;
+            margin: 2px 0;
+            font-size: 13px;
+          }
+
+          .process-window__queue-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
+          .process-window__badge {
+            background: #2563eb;
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 12px;
+          }
+
+          .process-window__list {
+            list-style: none;
+            padding: 0;
+            margin: 12px 0 20px 0;
+          }
+
+          .process-window__list li + li {
+            margin-top: 10px;
+          }
+
+          .process-window__empty {
+            color: #6b7280;
+            font-style: italic;
+          }
+
+          .process-window__refresh {
+            background: #111827;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-weight: 600;
+            cursor: pointer;
+          }
+
+          .process-window__refresh:hover {
+            background: #1f2937;
+          }
+        </style>
+        <div class="process-window">
+          <h1>Feldolgozási állapot</h1>
+          <p class="process-window__subtitle">Aktuális feladat és várakozó fájlok áttekintése.</p>
+          <div id="processStatusText" class="process-window__status">Állapot betöltése...</div>
+          <div id="processCurrentTask"></div>
+          <div class="process-window__queue-header">
+            <h2>Várakozó fájlok</h2>
+            <span id="processQueueCount" class="process-window__badge"></span>
+          </div>
+          <ul id="processQueueList" class="process-window__list"></ul>
+          <button id="processRefreshBtn" type="button" class="process-window__refresh">Frissítés</button>
+        </div>
+      `;
+
+      return {
+        doc,
+        statusEl: doc.getElementById("processStatusText"),
+        currentTaskEl: doc.getElementById("processCurrentTask"),
+        queueListEl: doc.getElementById("processQueueList"),
+        queueCountEl: doc.getElementById("processQueueCount"),
+        refreshBtn: doc.getElementById("processRefreshBtn"),
+      };
+    }
+
+    function renderProcessingCard(doc, container, item, titlePrefix) {
+      if (!container) {
+        return;
+      }
+
+      container.innerHTML = "";
+
+      if (!item) {
+        const empty = doc.createElement("p");
+        empty.className = "process-window__empty";
+        empty.textContent = "Jelenleg nincs aktív feldolgozási feladat.";
+        container.appendChild(empty);
+        return;
+      }
+
+      const card = doc.createElement("div");
+      card.className = "process-window__card";
+
+      const title = doc.createElement("h3");
+      title.textContent = `${titlePrefix || "Fájl"}: ${item.original_name || item.filename || "Ismeretlen"}`;
+      card.appendChild(title);
+
+      const fileMeta = doc.createElement("p");
+      fileMeta.className = "process-window__meta";
+      fileMeta.textContent = `Elérési út: ${item.filename || "-"}`;
+      card.appendChild(fileMeta);
+
+      const timeMeta = doc.createElement("p");
+      timeMeta.className = "process-window__meta";
+      timeMeta.textContent = `Feltöltve: ${formatHungarianDate(item.uploaded_at)}`;
+      card.appendChild(timeMeta);
+
+      const statusMeta = doc.createElement("p");
+      statusMeta.className = "process-window__meta";
+      statusMeta.textContent = `Státusz: ${item.processing_status || "ismeretlen"}`;
+      card.appendChild(statusMeta);
+
+      container.appendChild(card);
+    }
+
+    async function openProcessingStatusWindow() {
+      if (!isUserLoggedIn()) {
+        alert("Nincs érvényes hitelesítés.");
+        return;
+      }
+
+      const processWindow = window.open("", "_blank");
+      if (!processWindow || processWindow.closed) {
+        alert("Nem sikerült megnyitni az új ablakot.");
+        return;
+      }
+
+      const { doc, statusEl, currentTaskEl, queueListEl, queueCountEl, refreshBtn } = createProcessingStatusWindowLayout(processWindow);
+
+      const renderQueue = (items) => {
+        if (!queueListEl) {
+          return;
+        }
+
+        queueListEl.innerHTML = "";
+
+        if (!items || !items.length) {
+          const empty = doc.createElement("li");
+          empty.className = "process-window__empty";
+          empty.textContent = "Nincs várakozó fájl a sorban.";
+          queueListEl.appendChild(empty);
+          return;
+        }
+
+        items.forEach((item, index) => {
+          const li = doc.createElement("li");
+          renderProcessingCard(doc, li, item, `#${index + 1}`);
+          queueListEl.appendChild(li);
+        });
+      };
+
+      const loadStatus = async () => {
+        if (statusEl) {
+          statusEl.textContent = "Állapot betöltése folyamatban...";
+        }
+        renderProcessingCard(doc, currentTaskEl, null);
+        renderQueue([]);
+        if (queueCountEl) {
+          queueCountEl.textContent = "";
+        }
+
+        try {
+          const data = await fetchProcessingStatus();
+
+          if (statusEl) {
+            statusEl.textContent = data.isProcessing
+              ? "A szerver jelenleg feldolgoz egy fájlt."
+              : "Jelenleg nincs aktív feldolgozási feladat.";
+          }
+
+          renderProcessingCard(doc, currentTaskEl, data.currentTask, "Aktív");
+          renderQueue(data.pending);
+
+          if (queueCountEl) {
+            queueCountEl.textContent = `${data.pending.length} elem`; 
+          }
+        } catch (error) {
+          console.error("Feldolgozási állapot betöltési hiba:", error);
+          if (statusEl) {
+            statusEl.textContent = error.message || "Nem sikerült lekérdezni az állapotot.";
+          }
+        }
+      };
+
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", loadStatus);
+      }
+
+      await loadStatus();
+    }
+
     if (savePermissionsBtn) {
       const originalButtonText = savePermissionsBtn.textContent;
 
@@ -5858,6 +6131,12 @@
     if (loadClipsBtn) {
       loadClipsBtn.addEventListener("click", () => {
         openClipListWindow();
+      });
+    }
+
+    if (processingStatusBtn) {
+      processingStatusBtn.addEventListener("click", () => {
+        openProcessingStatusWindow();
       });
     }
 
