@@ -53,6 +53,8 @@ ensureDirectoryExists(clipsOriginalDirectory);
 ensureDirectoryExists(clips720pDirectory);
 ensureDirectoryExists(thumbnailsDirectory);
 
+let isProcessing = false;
+
 async function getUploadFileSize(filename) {
     if (!filename) {
         return null;
@@ -1291,30 +1293,90 @@ app.get('/api/admin/generate-missing-thumbnails', async (_req, res) => {
 
 app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, filename, original_name FROM videos WHERE has_720p = 0');
-        const results = [];
+        const { rows } = await db.query('SELECT id, filename, original_name FROM videos');
+        const pendingVideos = [];
 
         for (const video of rows) {
-            const videoPath = path.join(uploadsRootDirectory, video.filename);
+            const { outputPath } = build720pOutputPaths(video);
+
+            let needsProcessing = false;
             try {
-                const folderName = resolveFolderNameFromFilename(video.filename);
-                const outputDir = path.join(clips720pDirectory, folderName);
-                const outcome = await processVideoFor720p(video.id, videoPath, outputDir, video.original_name);
-                results.push({
-                    videoId: video.id,
-                    status: outcome.converted ? 'converted' : 'skipped',
-                    reason: outcome.skippedReason || null,
-                });
+                const stats = await fs.promises.stat(outputPath);
+                needsProcessing = !stats.isFile() || stats.size === 0;
             } catch (err) {
-                console.error(`Hiba a(z) ${video.id} videó 720p konvertálása során:`, err);
-                results.push({ videoId: video.id, status: 'failed', error: err.message });
+                if (err.code === 'ENOENT') {
+                    needsProcessing = true;
+                } else {
+                    throw err;
+                }
+            }
+
+            if (needsProcessing) {
+                await db.query(
+                    "UPDATE videos SET has_720p = 0, processing_status = 'pending' WHERE id = $1",
+                    [video.id]
+                );
+                pendingVideos.push(video.id);
             }
         }
 
-        res.status(200).json({ message: 'A 720p konvertálás befejeződött.', results });
+        setImmediate(() => {
+            processVideoQueue();
+        });
+
+        res.status(200).json({ message: 'A hiányzó vagy hibás 720p fájlok újra ütemezve.', queued: pendingVideos });
     } catch (err) {
-        console.error('Hiba a hiányzó 720p videók konvertálása során:', err);
-        res.status(500).json({ message: 'Nem sikerült elvégezni a 720p konvertálást.' });
+        console.error('Hiba a hiányzó 720p videók újraütemezése során:', err);
+        res.status(500).json({ message: 'Nem sikerült elvégezni a 720p feldolgozás ütemezését.' });
+    }
+});
+
+async function deleteZeroByteMp4Files(rootDir) {
+    const deletedFiles = [];
+
+    const walk = async (dir) => {
+        let entries;
+        try {
+            entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return;
+            }
+            throw err;
+        }
+
+        for (const entry of entries) {
+            const entryPath = path.join(dir, entry.name);
+
+            if (entry.isDirectory()) {
+                await walk(entryPath);
+            } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.mp4') {
+                try {
+                    const stats = await fs.promises.stat(entryPath);
+                    if (stats.size === 0) {
+                        await fs.promises.rm(entryPath, { force: true });
+                        deletedFiles.push(path.relative(uploadsRootDirectory, entryPath));
+                    }
+                } catch (err) {
+                    if (err.code !== 'ENOENT') {
+                        throw err;
+                    }
+                }
+            }
+        }
+    };
+
+    await walk(rootDir);
+    return deletedFiles;
+}
+
+app.post('/api/admin/cleanup-bad-files', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const deletedFiles = await deleteZeroByteMp4Files(uploadsRootDirectory);
+        res.status(200).json({ message: '0 byte-os fájlok törölve.', deleted: deletedFiles.length, files: deletedFiles });
+    } catch (err) {
+        console.error('Hiba a hibás fájlok takarítása során:', err);
+        res.status(500).json({ message: 'Nem sikerült eltávolítani a hibás fájlokat.' });
     }
 });
 
@@ -1718,6 +1780,99 @@ function resolveFolderNameFromFilename(filename) {
     return possibleFolder ? sanitizeFolderName(possibleFolder) : 'egyeb';
 }
 
+function build720pOutputPaths(video) {
+    const extension = path.extname(video.original_name || video.filename) || '.mp4';
+    const baseName = path.parse(video.original_name || video.filename).name || path.parse(video.filename).name;
+    const folderName = resolveFolderNameFromFilename(video.filename);
+    const outputDir = path.join(clips720pDirectory, folderName);
+    const outputFilename = `${baseName}_720p${extension}`;
+    const outputPath = path.join(outputDir, outputFilename);
+
+    return { outputDir, outputPath, outputFilename };
+}
+
+async function processVideoQueue() {
+    if (isProcessing) {
+        return;
+    }
+
+    isProcessing = true;
+    let currentVideo = null;
+
+    try {
+        const { rows } = await db.query(
+            "SELECT id, filename, original_name, thumbnail_filename FROM videos WHERE processing_status = 'pending' ORDER BY id ASC LIMIT 1"
+        );
+
+        currentVideo = rows[0];
+
+        if (!currentVideo) {
+            return;
+        }
+
+        await db.query("UPDATE videos SET processing_status = 'processing' WHERE id = $1", [currentVideo.id]);
+
+        try {
+            const videoPath = path.join(uploadsRootDirectory, currentVideo.filename);
+            let thumbnailFilename = currentVideo.thumbnail_filename;
+            const thumbnailPath = thumbnailFilename ? path.join(uploadsRootDirectory, thumbnailFilename) : null;
+
+            if (!thumbnailPath || !(await fileExists(thumbnailPath))) {
+                thumbnailFilename = await generateThumbnailForVideo(
+                    videoPath,
+                    path.parse(currentVideo.filename).name,
+                    currentVideo.id
+                );
+                await db.query('UPDATE videos SET thumbnail_filename = $1 WHERE id = $2', [thumbnailFilename, currentVideo.id]);
+            }
+
+            try {
+                await optimizeVideoForFaststart(videoPath);
+            } catch (optErr) {
+                console.error(`Hiba a(z) ${currentVideo.id} videó faststart optimalizálása során:`, optErr);
+            }
+
+            const { outputDir, outputPath } = build720pOutputPaths(currentVideo);
+            await fs.promises.mkdir(outputDir, { recursive: true });
+
+            let hasValid720p = false;
+
+            try {
+                const stats = await fs.promises.stat(outputPath);
+                hasValid720p = stats.isFile() && stats.size > 0;
+            } catch (statErr) {
+                if (statErr.code !== 'ENOENT') {
+                    throw statErr;
+                }
+            }
+
+            if (!hasValid720p) {
+                await processVideoFor720p(
+                    currentVideo.id,
+                    videoPath,
+                    outputDir,
+                    currentVideo.original_name || currentVideo.filename
+                );
+            } else {
+                await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [currentVideo.id]);
+            }
+
+            await db.query("UPDATE videos SET processing_status = 'done' WHERE id = $1", [currentVideo.id]);
+        } catch (processErr) {
+            console.error(`Hiba a(z) ${currentVideo?.id} videó feldolgozása során:`, processErr);
+            await db.query("UPDATE videos SET processing_status = 'error' WHERE id = $1", [currentVideo.id]);
+        }
+    } catch (err) {
+        console.error('Hiba a feldolgozási sor kezelése során:', err);
+    } finally {
+        isProcessing = false;
+    }
+
+    if (currentVideo) {
+        await processVideoQueue();
+    }
+}
+
 app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadSettings, (req, res, next) => {
     const limits = { files: 100 };
     if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
@@ -1815,7 +1970,6 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         return resolveFolderNameFromTagNames(tagNames);
     };
 
-    const videosForTranscode = [];
     const createdVideos = [];
     const client = await db.pool.connect();
     try {
@@ -1831,10 +1985,10 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
 
             const storedFilename = path.posix.join('klippek', 'eredeti', folderName, filename);
             const contentCreatedAt = await getVideoCreationDate(targetFilePath);
-            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at, file_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id`;
+            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at, file_hash, processing_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`;
             let insertResult;
             try {
-                insertResult = await client.query(insertVideoQuery, [storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt, fileHash]);
+                insertResult = await client.query(insertVideoQuery, [storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt, fileHash, 'pending']);
             } catch (err) {
                 if (err.code === '23505') {
                     await safeUnlink(targetFilePath);
@@ -1870,17 +2024,6 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
                     thumbnail_filename: thumbnailFilename,
                 });
             }
-
-            if (videoId) {
-                const originalExtension = path.extname(file.originalname) || path.extname(filename) || '.mp4';
-                const originalFilenameForOutput = `${sanitizedOriginalName || path.parse(filename).name}${originalExtension}`;
-                videosForTranscode.push({
-                    videoId,
-                    filePath: targetFilePath,
-                    outputDir: path.join(clips720pDirectory, folderName),
-                    originalFilename: originalFilenameForOutput,
-                });
-            }
         }
 
         await client.query('UPDATE users SET upload_count = upload_count + $1 WHERE id = $2', [filesToProcess.length, uploaderId]);
@@ -1890,30 +2033,9 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
             message: 'Videók sikeresen feltöltve.',
             videoIds: createdVideos.map((video) => video.id),
         });
-
-        if (videosForTranscode.length) {
-            setImmediate(() => {
-                videosForTranscode.forEach(({ videoId, filePath, outputDir, originalFilename }) => {
-                    (async () => {
-                        try {
-                            try {
-                                const optimized = await optimizeVideoForFaststart(filePath);
-
-                                if (!optimized) {
-                                    console.warn(`Nem sikerült optimalizálni a(z) ${videoId} videót faststart-tal.`);
-                                }
-                            } catch (optimizeErr) {
-                                console.error(`Hiba a(z) ${videoId} videó faststart optimalizálása során:`, optimizeErr);
-                            }
-
-                            await processVideoFor720p(videoId, filePath, outputDir, originalFilename);
-                        } catch (err) {
-                            console.error(`Hiba a(z) ${videoId} videó 720p konvertálása során:`, err);
-                        }
-                    })();
-                });
-            });
-        }
+        setImmediate(() => {
+            processVideoQueue();
+        });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Hiba a videó feltöltésekor:', err);
