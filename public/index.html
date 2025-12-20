@@ -1918,6 +1918,90 @@
         max-width: 600px;
       }
 
+      .admin-clips-actions {
+        margin-top: 1rem;
+      }
+
+      #loadClipsBtn {
+        padding: 0.65rem 1.25rem;
+      }
+
+      .admin-clips {
+        margin-top: 1rem;
+        background: #fff;
+        color: #111827;
+        border-radius: 12px;
+        padding: 1.25rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+        display: none;
+      }
+
+      .admin-clips__header {
+        margin-bottom: 0.75rem;
+      }
+
+      .admin-clips__header h3 {
+        margin: 0 0 0.25rem 0;
+      }
+
+      .admin-clips__status {
+        margin: 0.5rem 0;
+        color: #374151;
+      }
+
+      .admin-clips__list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .admin-clip-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.85rem 0;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .admin-clip-item:last-child {
+        border-bottom: none;
+      }
+
+      .admin-clip-meta {
+        flex: 1;
+      }
+
+      .admin-clip-title {
+        font-weight: 700;
+        margin: 0 0 0.35rem 0;
+      }
+
+      .admin-clip-details {
+        margin: 0;
+        color: #4b5563;
+        line-height: 1.5;
+      }
+
+      .admin-clip-delete {
+        background: #dc2626;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 0.9rem;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .admin-clip-delete:hover:not(:disabled) {
+        background: #b91c1c;
+      }
+
+      .admin-clip-delete:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+
       #savePermissionsBtn {
         margin-top: 1.5rem;
         padding: 0.75rem 1.5rem;
@@ -3193,6 +3277,19 @@
         </p>
         <div id="userListContainer"></div>
         <button id="savePermissionsBtn">Változtatások Mentése</button>
+
+        <div class="admin-clips-actions">
+          <button id="loadClipsBtn" class="secondary-btn" type="button">Klip lista megnyitása</button>
+        </div>
+
+        <div id="adminClipsPanel" class="admin-clips">
+          <div class="admin-clips__header">
+            <h3>Feltöltött klipek</h3>
+            <p>Az összes jelenleg kezelt klip egymás alatt, adminisztrációs nézetben.</p>
+          </div>
+          <p id="clipListStatus" class="admin-clips__status">Nincs betöltött adat.</p>
+          <ul id="adminClipList" class="admin-clips__list"></ul>
+        </div>
       </section>
 
       <section id="profile">
@@ -3316,6 +3413,10 @@
     const fileTransferNavBtn = document.getElementById("fileTransferNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+    const loadClipsBtn = document.getElementById("loadClipsBtn");
+    const adminClipsPanel = document.getElementById("adminClipsPanel");
+    const adminClipList = document.getElementById("adminClipList");
+    const clipListStatus = document.getElementById("clipListStatus");
     const pollCreator = document.getElementById("pollCreator");
     const pollCreatorNotice = document.getElementById("pollCreatorNotice");
     const createPollForm = document.getElementById("createPollForm");
@@ -3528,6 +3629,19 @@
         return `${(size / 1024).toFixed(2)} KB`;
       }
       return `${size} B`;
+    }
+
+    function formatDateTime(value) {
+      if (!value) {
+        return "Ismeretlen dátum";
+      }
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "Ismeretlen dátum";
+      }
+
+      return date.toLocaleString("hu-HU");
     }
 
     function formatSpeed(bytesPerSecond) {
@@ -5327,6 +5441,126 @@
       }
     }
 
+    function setClipListMessage(message) {
+      if (clipListStatus) {
+        clipListStatus.textContent = message;
+      }
+    }
+
+    function renderAdminClipList(clips) {
+      if (!adminClipList) {
+        return;
+      }
+
+      adminClipList.innerHTML = "";
+
+      if (!Array.isArray(clips) || clips.length === 0) {
+        setClipListMessage("Nincs feltöltött klip.");
+        return;
+      }
+
+      setClipListMessage("");
+
+      clips.forEach((clip) => {
+        const item = document.createElement("li");
+        item.className = "admin-clip-item";
+        item.dataset.clipId = clip.id;
+
+        const meta = document.createElement("div");
+        meta.className = "admin-clip-meta";
+
+        const title = document.createElement("p");
+        title.className = "admin-clip-title";
+        title.textContent = clip.original_name || "Ismeretlen név";
+        meta.appendChild(title);
+
+        const details = document.createElement("p");
+        details.className = "admin-clip-details";
+        const sizeText = formatFileSize(Number(clip.sizeBytes));
+        const uploadedText = formatDateTime(clip.uploaded_at);
+        const uploaderText = clip.uploader || "Ismeretlen";
+        details.textContent = `Méret: ${sizeText} • Feltöltés: ${uploadedText} • Admin: ${uploaderText}`;
+        meta.appendChild(details);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "admin-clip-delete";
+        deleteBtn.textContent = "Törlés";
+        deleteBtn.addEventListener("click", () => {
+          handleClipDelete(clip.id, item, deleteBtn, clip.original_name);
+        });
+
+        item.appendChild(meta);
+        item.appendChild(deleteBtn);
+        adminClipList.appendChild(item);
+      });
+    }
+
+    async function loadAdminClips() {
+      setClipListMessage("Klipek betöltése folyamatban...");
+      if (adminClipList) {
+        adminClipList.innerHTML = "";
+      }
+
+      try {
+        const response = await fetch("/api/admin/clips", { headers: buildAuthHeaders() });
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          const message = data && data.message ? data.message : "Nem sikerült lekérdezni a klipeket.";
+          throw new Error(message);
+        }
+
+        renderAdminClipList(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Klip lista betöltési hiba:", error);
+        setClipListMessage(error.message || "Nem sikerült betölteni a klipeket.");
+      }
+    }
+
+    async function handleClipDelete(clipId, listItem, button, clipName) {
+      if (!Number.isFinite(clipId)) {
+        return;
+      }
+
+      const confirmed = window.confirm(`Biztosan törlöd a(z) "${clipName || "klip"}" elemet? A törlés végleges.`);
+      if (!confirmed) {
+        return;
+      }
+
+      if (button) {
+        button.disabled = true;
+      }
+
+      try {
+        const response = await fetch(`/api/videos/${clipId}`, {
+          method: "DELETE",
+          headers: buildAuthHeaders(),
+        });
+
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message = data && data.message ? data.message : "Nem sikerült törölni a klipet.";
+          throw new Error(message);
+        }
+
+        if (listItem && listItem.parentElement) {
+          listItem.parentElement.removeChild(listItem);
+        }
+
+        if (!adminClipList || !adminClipList.children.length) {
+          setClipListMessage("Nincs feltöltött klip.");
+        }
+      } catch (error) {
+        console.error("Klip törlési hiba:", error);
+        alert(error.message || "Nem sikerült törölni a klipet.");
+      } finally {
+        if (button) {
+          button.disabled = false;
+        }
+      }
+    }
+
     if (savePermissionsBtn) {
       const originalButtonText = savePermissionsBtn.textContent;
 
@@ -5438,6 +5672,22 @@
 
     if (adminNavBtn) {
       adminNavBtn.addEventListener("click", loadAdminPanel);
+    }
+
+    if (loadClipsBtn) {
+      loadClipsBtn.addEventListener("click", () => {
+        if (!adminClipsPanel) {
+          return;
+        }
+
+        const shouldShow = adminClipsPanel.style.display === "none" || adminClipsPanel.style.display === "";
+        adminClipsPanel.style.display = shouldShow ? "block" : "none";
+        loadClipsBtn.textContent = shouldShow ? "Lista frissítése" : "Klip lista megnyitása";
+
+        if (shouldShow) {
+          loadAdminClips();
+        }
+      });
     }
 
     const feedbackModal = document.getElementById("feedbackModal");
