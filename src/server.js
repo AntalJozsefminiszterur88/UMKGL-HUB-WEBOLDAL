@@ -134,7 +134,7 @@ async function transcodeVideoTo720p(inputPath, outputDir, originalFilename) {
 
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
-            .outputOptions(['-map_metadata 0'])
+            .outputOptions(['-map_metadata 0', '-movflags +faststart'])
             .videoFilters('scale=-2:720:flags=lanczos')
             .videoCodec('libx264')
             .audioCodec('aac')
@@ -443,7 +443,7 @@ app.get('/uploads/*', (req, res) => {
                     'Content-Type': mimeType,
                     'Accept-Ranges': 'bytes'
                 });
-                return fs.createReadStream(filePath).pipe(res);
+                return fs.createReadStream(filePath, { highWaterMark: 1024 * 1024 }).pipe(res);
             }
 
             const rangeMatch = range.replace(/bytes=/, '').split('-');
@@ -456,7 +456,7 @@ app.get('/uploads/*', (req, res) => {
             }
 
             const chunkSize = end - start + 1;
-            const stream = fs.createReadStream(filePath, { start, end });
+            const stream = fs.createReadStream(filePath, { start, end, highWaterMark: 1024 * 1024 });
 
             res.writeHead(206, {
                 'Content-Range': `bytes ${start}-${end}/${fileSize}`,
@@ -1144,6 +1144,101 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
     } catch (err) {
         console.error('Hiba a hiányzó 720p videók konvertálása során:', err);
         res.status(500).json({ message: 'Nem sikerült elvégezni a 720p konvertálást.' });
+    }
+});
+
+async function collectMp4FilesRecursively(rootDir) {
+    const files = [];
+
+    const walk = async (dir) => {
+        let entries;
+        try {
+            entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return;
+            }
+            throw err;
+        }
+
+        for (const entry of entries) {
+            const entryPath = path.join(dir, entry.name);
+
+            if (entry.isDirectory()) {
+                await walk(entryPath);
+            } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.mp4') {
+                files.push(entryPath);
+            }
+        }
+    };
+
+    await walk(rootDir);
+    return files;
+}
+
+async function optimizeVideoForFaststart(filePath) {
+    const parsed = path.parse(filePath);
+    const tempOutputPath = path.join(parsed.dir, `${parsed.name}_temp_faststart${parsed.ext || '.mp4'}`);
+
+    return new Promise((resolve) => {
+        ffmpeg(filePath)
+            .outputOptions(['-c copy', '-movflags +faststart'])
+            .output(tempOutputPath)
+            .on('end', async () => {
+                try {
+                    await fs.promises.rename(tempOutputPath, filePath);
+                    resolve(true);
+                } catch (renameErr) {
+                    console.error(`Hiba az optimalizált fájl átnevezésekor (${filePath}):`, renameErr);
+                    try {
+                        await fs.promises.rm(tempOutputPath, { force: true });
+                    } catch (cleanupErr) {
+                        if (cleanupErr.code !== 'ENOENT') {
+                            console.error('Hiba az ideiglenes fájl törlésekor:', cleanupErr);
+                        }
+                    }
+                    resolve(false);
+                }
+            })
+            .on('error', async (err) => {
+                console.error(`Hiba a videó optimalizálása során (${filePath}):`, err);
+                try {
+                    await fs.promises.rm(tempOutputPath, { force: true });
+                } catch (cleanupErr) {
+                    if (cleanupErr.code !== 'ENOENT') {
+                        console.error('Hiba az ideiglenes fájl törlésekor:', cleanupErr);
+                    }
+                }
+                resolve(false);
+            })
+            .run();
+    });
+}
+
+app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const targetDirectories = [clipsOriginalDirectory, clips720pDirectory];
+        let optimizedCount = 0;
+
+        for (const directory of targetDirectories) {
+            const mp4Files = await collectMp4FilesRecursively(directory);
+
+            for (const filePath of mp4Files) {
+                try {
+                    const optimized = await optimizeVideoForFaststart(filePath);
+                    if (optimized) {
+                        optimizedCount += 1;
+                    }
+                } catch (err) {
+                    console.error(`Hiba a(z) ${filePath} videó optimalizálása során:`, err);
+                }
+            }
+        }
+
+        res.status(200).json({ optimized: optimizedCount });
+    } catch (err) {
+        console.error('Hiba a videók optimalizálása során:', err);
+        res.status(500).json({ message: 'Nem sikerült optimalizálni a videókat.' });
     }
 });
 
