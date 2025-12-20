@@ -1940,6 +1940,28 @@
         margin-bottom: 0.75rem;
       }
 
+      .admin-clips__controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+
+      .admin-clips__select {
+        padding: 0.45rem 0.6rem;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        background: #f9fafb;
+        min-width: 220px;
+        color: #111827;
+      }
+
+      .admin-clips__count {
+        color: #4b5563;
+        font-size: 0.95rem;
+      }
+
       .admin-clips__header h3 {
         margin: 0 0 0.25rem 0;
       }
@@ -3287,6 +3309,15 @@
             <h3>Feltöltött klipek</h3>
             <p>Az összes jelenleg kezelt klip egymás alatt, adminisztrációs nézetben.</p>
           </div>
+          <div class="admin-clips__controls">
+            <label for="clipVariantSelect">Megjelenített fájlok</label>
+            <select id="clipVariantSelect" class="admin-clips__select">
+              <option value="original">Eredeti videók</option>
+              <option value="720p">720p videók</option>
+              <option value="other">Egyéb fájlok</option>
+            </select>
+            <span id="clipListCount" class="admin-clips__count"></span>
+          </div>
           <p id="clipListStatus" class="admin-clips__status">Nincs betöltött adat.</p>
           <ul id="adminClipList" class="admin-clips__list"></ul>
         </div>
@@ -3417,6 +3448,8 @@
     const adminClipsPanel = document.getElementById("adminClipsPanel");
     const adminClipList = document.getElementById("adminClipList");
     const clipListStatus = document.getElementById("clipListStatus");
+    const clipVariantSelect = document.getElementById("clipVariantSelect");
+    const clipListCount = document.getElementById("clipListCount");
     const pollCreator = document.getElementById("pollCreator");
     const pollCreatorNotice = document.getElementById("pollCreatorNotice");
     const createPollForm = document.getElementById("createPollForm");
@@ -5432,6 +5465,7 @@
         }
 
         renderUserList(Array.isArray(data) ? data : []);
+        loadAdminClips();
       } catch (error) {
         console.error("Admin panel betöltési hiba:", error);
         alert(error.message || "Nem sikerült betölteni az admin panel adatait.");
@@ -5447,6 +5481,39 @@
       }
     }
 
+    function setClipListCount(count) {
+      if (clipListCount) {
+        const parsed = Number.isFinite(count) ? count : 0;
+        clipListCount.textContent = parsed > 0 ? `Megjelenített elemek: ${parsed}` : "";
+      }
+    }
+
+    function formatAdminClipDetails(clip) {
+      const details = [];
+
+      if (Number.isFinite(clip?.sizeBytes)) {
+        details.push(`Méret: ${formatFileSize(Number(clip.sizeBytes))}`);
+      }
+
+      if (clip?.uploaded_at) {
+        details.push(`Feltöltés: ${formatDateTime(clip.uploaded_at)}`);
+      }
+
+      if (clip?.uploader) {
+        details.push(`Admin: ${clip.uploader}`);
+      }
+
+      if (clip?.category === "720p") {
+        details.push("Verzió: 720p");
+      } else if (clip?.category === "other") {
+        details.push("Típus: Egyéb fájl");
+      } else {
+        details.push("Verzió: Eredeti");
+      }
+
+      return details.join(" • ");
+    }
+
     function renderAdminClipList(clips) {
       if (!adminClipList) {
         return;
@@ -5456,10 +5523,12 @@
 
       if (!Array.isArray(clips) || clips.length === 0) {
         setClipListMessage("Nincs feltöltött klip.");
+        setClipListCount(0);
         return;
       }
 
       setClipListMessage("");
+      setClipListCount(clips.length);
 
       clips.forEach((clip) => {
         const item = document.createElement("li");
@@ -5476,10 +5545,7 @@
 
         const details = document.createElement("p");
         details.className = "admin-clip-details";
-        const sizeText = formatFileSize(Number(clip.sizeBytes));
-        const uploadedText = formatDateTime(clip.uploaded_at);
-        const uploaderText = clip.uploader || "Ismeretlen";
-        details.textContent = `Méret: ${sizeText} • Feltöltés: ${uploadedText} • Admin: ${uploaderText}`;
+        details.textContent = formatAdminClipDetails(clip);
         meta.appendChild(details);
 
         const deleteBtn = document.createElement("button");
@@ -5496,8 +5562,14 @@
       });
     }
 
-    async function fetchAdminClips() {
-      const response = await fetch("/api/admin/clips", { headers: buildAuthHeaders() });
+    async function fetchAdminClips(variant) {
+      const params = new URLSearchParams();
+      if (variant) {
+        params.set("type", variant);
+      }
+
+      const url = params.toString() ? `/api/admin/clips?${params.toString()}` : "/api/admin/clips";
+      const response = await fetch(url, { headers: buildAuthHeaders() });
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -5505,18 +5577,26 @@
         throw new Error(message);
       }
 
-      return Array.isArray(data) ? data : [];
+      const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      const total = Number.isFinite(data?.total) ? data.total : items.length;
+
+      return { items, total };
     }
 
     async function loadAdminClips() {
       setClipListMessage("Klipek betöltése folyamatban...");
+      if (adminClipsPanel) {
+        adminClipsPanel.style.display = "block";
+      }
+      setClipListCount(0);
       if (adminClipList) {
         adminClipList.innerHTML = "";
       }
 
       try {
-        const clips = await fetchAdminClips();
-        renderAdminClipList(clips);
+        const variant = clipVariantSelect?.value || "original";
+        const { items } = await fetchAdminClips(variant);
+        renderAdminClipList(items);
       } catch (error) {
         console.error("Klip lista betöltési hiba:", error);
         setClipListMessage(error.message || "Nem sikerült betölteni a klipeket.");
@@ -5596,6 +5676,28 @@
             color: #4b5563;
           }
 
+          .clip-window__controls {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+          }
+
+          .clip-window__select {
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            min-width: 220px;
+            font-size: 14px;
+          }
+
+          .clip-window__count {
+            color: #4b5563;
+            font-size: 13px;
+          }
+
           .clip-window__status {
             margin-bottom: 10px;
             color: #374151;
@@ -5653,6 +5755,15 @@
         <div class="clip-window">
           <h1>Feltöltött klipek</h1>
           <p class="clip-window__subtitle">Egyszerű, áttekinthető lista a klipjeidről.</p>
+          <div class="clip-window__controls">
+            <label for="clipWindowVariant">Megjelenített fájlok</label>
+            <select id="clipWindowVariant" class="clip-window__select">
+              <option value="original">Eredeti videók</option>
+              <option value="720p">720p videók</option>
+              <option value="other">Egyéb fájlok</option>
+            </select>
+            <span id="clipWindowCount" class="clip-window__count"></span>
+          </div>
           <div id="clipWindowStatus" class="clip-window__status">Klipek betöltése folyamatban...</div>
           <div id="clipWindowTable"></div>
         </div>
@@ -5662,6 +5773,8 @@
         doc,
         statusEl: doc.getElementById("clipWindowStatus"),
         tableContainer: doc.getElementById("clipWindowTable"),
+        variantSelect: doc.getElementById("clipWindowVariant"),
+        countEl: doc.getElementById("clipWindowCount"),
       };
     }
 
@@ -5709,7 +5822,7 @@
       }
     }
 
-    function renderClipTableInWindow(doc, tableContainer, statusEl, clips) {
+    function renderClipTableInWindow(doc, tableContainer, statusEl, clips, countEl) {
       if (!tableContainer) {
         return;
       }
@@ -5720,11 +5833,18 @@
         if (statusEl) {
           statusEl.textContent = "Nincs feltöltött klip.";
         }
+        if (countEl) {
+          countEl.textContent = "";
+        }
         return;
       }
 
       if (statusEl) {
         statusEl.textContent = "";
+      }
+
+      if (countEl) {
+        countEl.textContent = `Megjelenített elemek: ${clips.length}`;
       }
 
       const table = doc.createElement("table");
@@ -5762,7 +5882,18 @@
         row.appendChild(uploadedCell);
 
         const extraCell = doc.createElement("td");
-        extraCell.textContent = clip.uploader ? `Feltöltő: ${clip.uploader}` : "-";
+        const extraParts = [];
+        if (clip.uploader) {
+          extraParts.push(`Feltöltő: ${clip.uploader}`);
+        }
+        if (clip.category === "720p") {
+          extraParts.push("Verzió: 720p");
+        } else if (clip.category === "other") {
+          extraParts.push("Típus: Egyéb fájl");
+        } else {
+          extraParts.push("Verzió: Eredeti");
+        }
+        extraCell.textContent = extraParts.length ? extraParts.join(" • ") : "-";
         row.appendChild(extraCell);
 
         const actionCell = doc.createElement("td");
@@ -5795,17 +5926,43 @@
         return;
       }
 
-      const { doc, statusEl, tableContainer } = createClipListWindowLayout(clipWindow);
+      const { doc, statusEl, tableContainer, variantSelect, countEl } = createClipListWindowLayout(clipWindow);
 
-      try {
-        const clips = await fetchAdminClips();
-        renderClipTableInWindow(doc, tableContainer, statusEl, clips);
-      } catch (error) {
-        console.error("Klip lista betöltési hiba:", error);
-        if (statusEl) {
-          statusEl.textContent = error.message || "Nem sikerült betölteni a klipeket.";
-        }
+      const selectedVariant = clipVariantSelect?.value || "original";
+      if (variantSelect) {
+        variantSelect.value = selectedVariant;
       }
+
+      const loadVariant = async (variant) => {
+        if (statusEl) {
+          statusEl.textContent = "Klipek betöltése folyamatban...";
+        }
+        if (countEl) {
+          countEl.textContent = "";
+        }
+        if (tableContainer) {
+          tableContainer.innerHTML = "";
+        }
+
+        try {
+          const { items } = await fetchAdminClips(variant);
+          renderClipTableInWindow(doc, tableContainer, statusEl, items, countEl);
+        } catch (error) {
+          console.error("Klip lista betöltési hiba:", error);
+          if (statusEl) {
+            statusEl.textContent = error.message || "Nem sikerült betölteni a klipeket.";
+          }
+        }
+      };
+
+      if (variantSelect) {
+        variantSelect.addEventListener("change", (event) => {
+          const value = event.target?.value || "original";
+          loadVariant(value);
+        });
+      }
+
+      await loadVariant(selectedVariant);
     }
 
     if (savePermissionsBtn) {
@@ -5919,6 +6076,12 @@
 
     if (adminNavBtn) {
       adminNavBtn.addEventListener("click", loadAdminPanel);
+    }
+
+    if (clipVariantSelect) {
+      clipVariantSelect.addEventListener("change", () => {
+        loadAdminClips();
+      });
     }
 
     if (loadClipsBtn) {

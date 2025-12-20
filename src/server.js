@@ -53,7 +53,7 @@ ensureDirectoryExists(clipsOriginalDirectory);
 ensureDirectoryExists(clips720pDirectory);
 ensureDirectoryExists(thumbnailsDirectory);
 
-async function getVideoFileSize(filename) {
+async function getUploadFileSize(filename) {
     if (!filename) {
         return null;
     }
@@ -68,6 +68,10 @@ async function getVideoFileSize(filename) {
 
         return null;
     }
+}
+
+async function getVideoFileSize(filename) {
+    return getUploadFileSize(filename);
 }
 
 const programImagesDirectory = path.join(__dirname, '..', 'public', 'uploads', 'programs', 'images');
@@ -1081,8 +1085,101 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
     }
 });
 
-app.get('/api/admin/clips', authenticateToken, isAdmin, async (_req, res) => {
+app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
+    const type = (req.query.type || 'original').toString().toLowerCase();
+
+    const buildResponse = (items) => res.status(200).json({
+        items: items || [],
+        total: Array.isArray(items) ? items.length : 0,
+    });
+
     try {
+        if (type === '720p') {
+            const { rows } = await db.query(`
+                SELECT videos.id, videos.original_name, videos.filename, videos.uploaded_at, users.username
+                FROM videos
+                LEFT JOIN users ON videos.uploader_id = users.id
+                WHERE videos.has_720p = 1
+                ORDER BY videos.uploaded_at DESC
+            `);
+
+            const clips = await Promise.all((rows || []).map(async (video) => {
+                const parsed = path.parse(video.filename || '');
+                const folderName = resolveFolderNameFromFilename(video.filename);
+                const extension = parsed.ext || '.mp4';
+                const baseName = parsed.name || 'video';
+                const filename720p = path.posix.join('klippek', '720p', folderName, `${baseName}_720p${extension}`);
+
+                return {
+                    id: video.id,
+                    original_name: video.original_name,
+                    filename: filename720p,
+                    uploaded_at: video.uploaded_at,
+                    uploader: video.username || 'Ismeretlen',
+                    sizeBytes: await getUploadFileSize(filename720p),
+                    category: '720p',
+                };
+            }));
+
+            return buildResponse(clips);
+        }
+
+        if (type === 'other') {
+            const clips = [];
+
+            const { rows: thumbnailRows } = await db.query(`
+                SELECT id, thumbnail_filename, uploaded_at
+                FROM videos
+                WHERE thumbnail_filename IS NOT NULL
+            `);
+
+            (thumbnailRows || []).forEach((thumb) => {
+                if (!thumb.thumbnail_filename) {
+                    return;
+                }
+                clips.push({
+                    id: thumb.id,
+                    original_name: 'Videó előnézet',
+                    filename: thumb.thumbnail_filename,
+                    uploaded_at: thumb.uploaded_at,
+                    uploader: 'Rendszer',
+                    category: 'other',
+                });
+            });
+
+            const { rows: programRows } = await db.query('SELECT id, name, image_filename, file_filename, created_at FROM programs');
+            (programRows || []).forEach((program) => {
+                if (program.image_filename) {
+                    clips.push({
+                        id: program.id,
+                        original_name: `${program.name || 'Program'} - Borítókép`,
+                        filename: program.image_filename,
+                        uploaded_at: program.created_at,
+                        uploader: 'Program',
+                        category: 'other',
+                    });
+                }
+
+                if (program.file_filename) {
+                    clips.push({
+                        id: program.id,
+                        original_name: `${program.name || 'Program'} - Fájl`,
+                        filename: program.file_filename,
+                        uploaded_at: program.created_at,
+                        uploader: 'Program',
+                        category: 'other',
+                    });
+                }
+            });
+
+            const clipsWithSize = await Promise.all(clips.map(async (clip) => ({
+                ...clip,
+                sizeBytes: await getUploadFileSize(clip.filename),
+            })));
+
+            return buildResponse(clipsWithSize);
+        }
+
         const { rows } = await db.query(`
             SELECT videos.id, videos.original_name, videos.filename, videos.uploaded_at, users.username
             FROM videos
@@ -1096,13 +1193,14 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (_req, res) => {
             filename: video.filename,
             uploaded_at: video.uploaded_at,
             uploader: video.username || 'Ismeretlen',
-            sizeBytes: await getVideoFileSize(video.filename),
+            sizeBytes: await getUploadFileSize(video.filename),
+            category: 'original',
         })));
 
-        res.status(200).json(clips);
+        return buildResponse(clips);
     } catch (err) {
         console.error('Hiba az admin klip lista lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a klipeket.' });
+        return res.status(500).json({ message: 'Nem sikerült lekérdezni a klipeket.' });
     }
 });
 
