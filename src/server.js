@@ -1040,7 +1040,7 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id
-            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename
+            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p
             ORDER BY fv.content_created_at ${sortOrder};
         `;
 
