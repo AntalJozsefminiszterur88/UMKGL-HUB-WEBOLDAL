@@ -1194,6 +1194,69 @@ async function removeEmptyDirectories(rootDir, protectedDirs = []) {
     await walk(rootDir);
 }
 
+app.post('/api/admin/rescue-720p-files', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, filename FROM videos WHERE has_720p = 1');
+        const directoryEntries = await fs.promises.readdir(clipsDirectory, { withFileTypes: true });
+        const legacyDirectories = directoryEntries
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name)
+            .filter((name) => name !== 'eredeti' && name !== '720p');
+
+        const results = [];
+
+        for (const video of rows) {
+            const parsed = path.parse(video.filename || '');
+            const baseName = parsed.name;
+            const extension = parsed.ext || '.mp4';
+
+            if (!baseName) {
+                results.push({ videoId: video.id, status: 'skipped', reason: 'invalid_filename' });
+                continue;
+            }
+
+            const folderName = resolveFolderNameFromFilename(video.filename);
+            const targetDir = path.join(clips720pDirectory, folderName);
+            const targetPath = path.join(targetDir, `${baseName}_720p${extension}`);
+
+            if (await fileExists(targetPath)) {
+                results.push({ videoId: video.id, status: 'exists' });
+                continue;
+            }
+
+            let relocatedFrom = null;
+
+            for (const legacyFolder of legacyDirectories) {
+                const candidatePath = path.join(clipsDirectory, legacyFolder, `${baseName}_720p${extension}`);
+                if (await fileExists(candidatePath)) {
+                    await fs.promises.mkdir(targetDir, { recursive: true });
+                    await fs.promises.rename(candidatePath, targetPath);
+                    relocatedFrom = candidatePath;
+                    break;
+                }
+            }
+
+            if (relocatedFrom) {
+                results.push({
+                    videoId: video.id,
+                    status: 'moved',
+                    from: path.relative(uploadsRootDirectory, relocatedFrom),
+                    to: path.relative(uploadsRootDirectory, targetPath),
+                });
+            } else {
+                results.push({ videoId: video.id, status: 'missing' });
+            }
+        }
+
+        await removeEmptyDirectories(clipsDirectory, [clipsOriginalDirectory, clips720pDirectory]);
+
+        res.status(200).json({ processed: rows.length, results });
+    } catch (err) {
+        console.error('Hiba az árva 720p fájlok áthelyezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült áthelyezni az árva 720p fájlokat.' });
+    }
+});
+
 app.post('/api/admin/reorganize-files', authenticateToken, isAdmin, async (_req, res) => {
     try {
         const { rows } = await db.query(`
