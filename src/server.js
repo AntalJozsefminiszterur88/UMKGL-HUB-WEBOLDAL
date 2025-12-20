@@ -1237,6 +1237,27 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/admin/processing-status', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const { rows: processingRows } = await db.query(
+            "SELECT id, filename, original_name, uploaded_at, processing_status FROM videos WHERE processing_status = 'processing' ORDER BY uploaded_at ASC LIMIT 1"
+        );
+
+        const { rows: pendingRows } = await db.query(
+            "SELECT id, filename, original_name, uploaded_at, processing_status FROM videos WHERE processing_status = 'pending' ORDER BY uploaded_at ASC"
+        );
+
+        res.status(200).json({
+            isProcessing,
+            currentTask: processingRows[0] || null,
+            pending: pendingRows,
+        });
+    } catch (err) {
+        console.error('Hiba a feldolgozási állapot lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni a feldolgozási állapotot.' });
+    }
+});
+
 app.get('/api/videos/get-uploaded-titles', authenticateToken, ensureClipViewPermission, async (_req, res) => {
     try {
         const { rows } = await db.query('SELECT original_name FROM videos');
