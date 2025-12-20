@@ -1154,19 +1154,21 @@
       .tag-list {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.35rem;
+        align-items: center;
+        gap: 0.25rem 0.35rem;
       }
 
       .tag-chip {
         --tag-color: #5865f2;
         background: var(--tag-color);
         color: #fff;
-        padding: 0.25rem 0.6rem;
-        border-radius: 999px;
-        font-size: 0.8rem;
+        padding: 0.18rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.75rem;
+        line-height: 1.2;
         font-weight: 600;
         border: 1px solid var(--tag-color);
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
       }
 
       @media (max-width: 1200px) {
@@ -2207,35 +2209,42 @@
       }
 
       .tag-pill-list {
-        display: flex;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         gap: 0.35rem;
-        flex-wrap: wrap;
         background: rgba(255, 255, 255, 0.02);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 10px;
-        padding: 0.45rem;
+        padding: 0.35rem;
+        max-height: 180px;
+        overflow-y: auto;
+        align-content: start;
       }
 
       .tag-pill {
         --tag-color: #5865f2;
         display: inline-flex;
         align-items: center;
-        gap: 0.45rem;
+        justify-content: flex-start;
+        gap: 0.35rem;
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.04));
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: #fff;
-        padding: 0.4rem 0.7rem;
-        border-radius: 999px;
+        padding: 0.35rem 0.6rem;
+        border-radius: 12px;
         cursor: pointer;
         transition: transform 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        font-size: 0.9rem;
+        line-height: 1.25;
+        min-width: 0;
       }
 
       .tag-pill__dot {
-        width: 10px;
-        height: 10px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
         background: var(--tag-color);
-        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
       }
 
       .tag-pill--selected {
@@ -2329,7 +2338,7 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 0.45rem;
+        gap: 0.35rem;
       }
 
       .queue-details input[type="text"] {
@@ -2374,6 +2383,17 @@
         flex-wrap: wrap;
       }
 
+      .upload-modal-footer > div:first-child {
+        flex: 1;
+        min-width: 240px;
+      }
+
+      .upload-action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
       .upload-summary {
         color: rgba(255, 255, 255, 0.72);
         font-weight: 600;
@@ -2405,6 +2425,32 @@
 
       .primary-btn:hover:not(:disabled) {
         background: #5b6dad;
+      }
+
+      .secondary-btn {
+        background: rgba(255, 255, 255, 0.06);
+        color: #e4e6eb;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 10px;
+        padding: 0.75rem 1.2rem;
+        cursor: pointer;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        transition: background 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+      }
+
+      .secondary-btn.large {
+        padding: 0.9rem 1.55rem;
+      }
+
+      .secondary-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .secondary-btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.24);
       }
 
       .upload-toast {
@@ -3118,7 +3164,10 @@
                     <div id="uploadProgressDetails" class="upload-progress__details"></div>
                   </div>
                 </div>
-                <button id="uploadBtn" class="primary-btn large" disabled>FELTÖLTÉS</button>
+                <div class="upload-action-buttons">
+                  <button id="cancelUploadBtn" class="secondary-btn large" type="button">Mégse</button>
+                  <button id="uploadBtn" class="primary-btn large" disabled>FELTÖLTÉS</button>
+                </div>
               </div>
             </div>
           </div>
@@ -6497,6 +6546,7 @@
       const uploadQueueContainer = document.getElementById("uploadQueueContainer");
       const fileInput = document.getElementById("fileInput");
       const addFilesBtn = document.getElementById("addFilesBtn");
+      const cancelUploadBtn = document.getElementById("cancelUploadBtn");
       const uploadBtn = document.getElementById("uploadBtn");
       const uploadStatus = document.getElementById("uploadStatus");
       const uploadProgress = document.getElementById("uploadProgress");
@@ -6532,6 +6582,11 @@
       const DEFAULT_TAG_COLOR = "#5865f2";
       let uploadQueue = [];
       const fileSignatures = new Set();
+      const UPLOAD_ABORT_MESSAGE = "UPLOAD_ABORTED";
+      let isUploadCancelled = false;
+      let isUploading = false;
+      let currentUploadXhr = null;
+      let uploadedVideoIds = [];
       let clipToastTimeout = null;
       let availableTags = [];
       const VIDEO_QUALITY_KEY = "videoQualityPreference";
@@ -7095,6 +7150,29 @@
         if (uploadProgressDetails) {
           uploadProgressDetails.textContent = "";
         }
+      }
+
+      async function rollbackUploadedVideos(videoIds) {
+        const normalizedIds = Array.isArray(videoIds)
+          ? Array.from(new Set(videoIds.map((id) => Number(id)).filter(Number.isFinite)))
+          : [];
+
+        if (!normalizedIds.length) {
+          return { deletedVideoIds: [] };
+        }
+
+        const response = await fetch("/api/videos/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...buildAuthHeaders() },
+          body: JSON.stringify({ videoIds: normalizedIds }),
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.message || "Nem sikerült visszavonni a feltöltött videókat.");
+        }
+
+        return result;
       }
 
       function updateUploadProgressUI({
@@ -7834,10 +7912,17 @@
       function resetUploadModal() {
         uploadQueue = [];
         fileSignatures.clear();
+        uploadedVideoIds = [];
+        isUploadCancelled = false;
+        isUploading = false;
+        currentUploadXhr = null;
         renderUploadQueue();
         updateUploadSummary();
         if (uploadBtn) {
           uploadBtn.disabled = true;
+        }
+        if (cancelUploadBtn) {
+          cancelUploadBtn.disabled = false;
         }
         if (uploadStatus) {
           uploadStatus.textContent = "";
@@ -8014,6 +8099,25 @@
         });
       }
 
+      if (cancelUploadBtn) {
+        cancelUploadBtn.addEventListener("click", () => {
+          if (!isUploading) {
+            closeUploadModal();
+            return;
+          }
+
+          isUploadCancelled = true;
+          cancelUploadBtn.disabled = true;
+          if (uploadStatus) {
+            uploadStatus.textContent = "Feltöltés megszakítása folyamatban...";
+          }
+
+          if (currentUploadXhr) {
+            currentUploadXhr.abort();
+          }
+        });
+      }
+
       if (uploadBtn) {
         uploadBtn.addEventListener("click", async () => {
           if (!isUserLoggedIn()) {
@@ -8026,7 +8130,17 @@
             return;
           }
 
+          if (isUploading) {
+            return;
+          }
+
+          isUploading = true;
+          isUploadCancelled = false;
+          uploadedVideoIds = [];
           uploadBtn.disabled = true;
+          if (cancelUploadBtn) {
+            cancelUploadBtn.disabled = false;
+          }
           if (uploadStatus) {
             uploadStatus.textContent = "Feltöltés folyamatban...";
           }
@@ -8061,6 +8175,7 @@
               const xhr = new XMLHttpRequest();
               xhr.open("POST", "/upload");
               xhr.responseType = "json";
+              currentUploadXhr = xhr;
 
               const headers = buildAuthHeaders();
               if (headers && typeof headers === "object") {
@@ -8070,6 +8185,16 @@
                   }
                 });
               }
+
+              xhr.addEventListener("abort", () => {
+                reject(new Error(UPLOAD_ABORT_MESSAGE));
+              });
+
+              xhr.addEventListener("loadend", () => {
+                if (currentUploadXhr === xhr) {
+                  currentUploadXhr = null;
+                }
+              });
 
               xhr.upload.addEventListener("progress", (event) => {
                 const currentFileUploaded = event.loaded || 0;
@@ -8130,6 +8255,12 @@
                     etaSeconds,
                   });
                   uploadedBytesSoFar = uploadedBytes;
+                  const idsFromResponse = Array.isArray(result?.videoIds)
+                    ? result.videoIds.filter((id) => Number.isFinite(Number(id)))
+                    : [];
+                  if (idsFromResponse.length) {
+                    uploadedVideoIds.push(...idsFromResponse);
+                  }
                   resolve(result);
                 } else {
                   const message = (result && result.message) || "Nem sikerült feltölteni a videót.";
@@ -8158,13 +8289,49 @@
             }, 800);
           } catch (error) {
             console.error("Videó feltöltési hiba:", error);
-            if (uploadStatus) {
+            if (isUploadCancelled || error?.message === UPLOAD_ABORT_MESSAGE) {
+              if (uploadStatus) {
+                uploadStatus.textContent = "Feltöltés megszakítva, videók törlése...";
+              }
+              try {
+                if (uploadedVideoIds.length) {
+                  await rollbackUploadedVideos([...new Set(uploadedVideoIds)]);
+                  if (uploadStatus) {
+                    uploadStatus.textContent = "Feltöltés megszakítva, már feltöltött videók törölve.";
+                  }
+                } else if (uploadStatus) {
+                  uploadStatus.textContent = "Feltöltés megszakítva.";
+                }
+              } catch (rollbackError) {
+                console.error("Visszavonási hiba:", rollbackError);
+                if (uploadStatus) {
+                  uploadStatus.textContent =
+                    rollbackError.message || "Nem sikerült törölni a feltöltött videókat.";
+                }
+              } finally {
+                uploadQueue = [];
+                fileSignatures.clear();
+                renderUploadQueue();
+                updateUploadSummary();
+                if (fileInput) {
+                  fileInput.value = "";
+                }
+                resetUploadProgress();
+              }
+            } else if (uploadStatus) {
               uploadStatus.textContent = error.message || "Nem sikerült feltölteni a videót.";
             }
           } finally {
             if (uploadBtn) {
-              uploadBtn.disabled = false;
+              uploadBtn.disabled = uploadQueue.length === 0;
             }
+            if (cancelUploadBtn) {
+              cancelUploadBtn.disabled = false;
+            }
+            isUploading = false;
+            isUploadCancelled = false;
+            currentUploadXhr = null;
+            uploadedVideoIds = [];
           }
         });
       }
