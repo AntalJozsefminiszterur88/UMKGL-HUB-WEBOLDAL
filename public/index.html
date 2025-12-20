@@ -2037,12 +2037,32 @@
         padding: 0.45rem 0.75rem;
         min-width: 260px;
         min-height: 54px;
+        max-height: 264px;
+        overflow-y: auto;
       }
 
       #globalTagSelect option,
       .queue-tag-select option {
         background: #1f2126;
         padding: 0.35rem 0.6rem;
+      }
+
+      #globalTagSelect::-webkit-scrollbar,
+      .queue-tag-select::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      #globalTagSelect::-webkit-scrollbar-thumb,
+      .queue-tag-select::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.22);
+        border-radius: 8px;
+        border: 2px solid rgba(0, 0, 0, 0.15);
+      }
+
+      #globalTagSelect::-webkit-scrollbar-track,
+      .queue-tag-select::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
       }
 
       #globalTagSelect option:checked,
@@ -2913,7 +2933,7 @@
                 <button class="primary-btn" id="addFilesBtn">Fájlok hozzáadása</button>
                 <div class="toolbar-tags">
                   <label for="globalTagSelect">Címkék mindhez</label>
-                  <select id="globalTagSelect" multiple size="5"></select>
+                  <select id="globalTagSelect" multiple size="8"></select>
                 </div>
                 <div id="createTagWrapper" style="display: none;">
                   <div class="create-tag-row">
