@@ -1216,16 +1216,18 @@
         justify-content: center;
         gap: 0.4rem;
         margin: 1.25rem 0 0.5rem;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding: 0.25rem;
       }
 
       .pagination button {
         background: #2f3136;
         color: #fff;
         border: 1px solid rgba(255, 255, 255, 0.05);
-        padding: 0.5rem 0.7rem;
-        min-width: 42px;
-        border-radius: 6px;
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
@@ -1250,11 +1252,11 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 42px;
-        padding: 0.5rem 0.7rem;
+        width: 42px;
+        height: 42px;
         background: #2f3136;
         color: #e5e7eb;
-        border-radius: 6px;
+        border-radius: 8px;
       }
 
       .modal-grid {
