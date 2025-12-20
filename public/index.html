@@ -2271,6 +2271,17 @@
         transform: translateY(0);
       }
 
+      .clip-toast {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        background: rgba(56, 189, 248, 0.16);
+        border-color: rgba(56, 189, 248, 0.4);
+        color: #e6f7ff;
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+        z-index: 1100;
+      }
+
       .upload-status {
         margin: 0;
         color: rgba(255, 255, 255, 0.7);
@@ -2865,6 +2876,13 @@
               </select>
             </div>
             <div class="filter-group">
+              <label for="videoQualitySelect">Minőség</label>
+              <select id="videoQualitySelect">
+                <option value="1080p">Eredeti (1080p)</option>
+                <option value="720p">HD (720p)</option>
+              </select>
+            </div>
+            <div class="filter-group">
               <label for="pageSizeSelect">Videók száma / oldal</label>
               <select id="pageSizeSelect">
                 <option value="12">12</option>
@@ -2881,6 +2899,8 @@
 
           <div id="video-grid-container"></div>
           <div id="video-pagination" class="pagination"></div>
+
+          <div id="clipToast" class="upload-toast clip-toast" aria-live="polite"></div>
 
           <div id="uploadModal" class="modal-overlay" style="display: none;">
             <div class="upload-modal-content">
@@ -5451,6 +5471,8 @@
             localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
           }
 
+          applyQualityPreference(data.preferred_quality || DEFAULT_VIDEO_QUALITY);
+
           updateUIForLoggedIn(data.username, data.profile_picture_filename);
           loginModal.style.display = "none";
           showFeedbackModal({
@@ -5520,6 +5542,8 @@
             } else {
                 localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
             }
+
+            applyQualityPreference(data.preferred_quality || DEFAULT_VIDEO_QUALITY);
 
             updateUIForLoggedIn(data.username, data.profile_picture_filename);
         } catch (error) {
@@ -5786,6 +5810,7 @@
       const selectedFileName = document.getElementById("selectedFileName");
       const uploadSummary = document.getElementById("uploadSummary");
       const uploadToast = document.getElementById("uploadToast");
+      const clipToast = document.getElementById("clipToast");
       const videoPlayerModal = document.getElementById("videoPlayerModal");
       const modalVideoPlayer = document.getElementById("modalVideoPlayer");
       const modalVideoTitle = document.getElementById("modalVideoTitle");
@@ -5797,6 +5822,7 @@
       const videoSearchInput = document.getElementById("videoSearchInput");
       const tagFilterSelect = document.getElementById("tagFilterSelect");
       const sortOrderSelect = document.getElementById("sortOrderSelect");
+      const videoQualitySelect = document.getElementById("videoQualitySelect");
       const pageSizeSelect = document.getElementById("pageSizeSelect");
       const filterResetBtn = document.getElementById("filterResetBtn");
       const createTagWrapper = document.getElementById("createTagWrapper");
@@ -5809,11 +5835,16 @@
       const DEFAULT_TAG_COLOR = "#5865f2";
       let uploadQueue = [];
       const fileSignatures = new Set();
+      let clipToastTimeout = null;
       let availableTags = [];
+      const VIDEO_QUALITY_KEY = "videoQualityPreference";
+      const DEFAULT_VIDEO_QUALITY = "1080p";
+      const ALLOWED_VIDEO_QUALITIES = ["1080p", "720p"];
       const VIDEO_PAGE_SIZE_KEY = "videoPageSize";
       const VIDEO_SORT_ORDER_KEY = "videoSortOrder";
       const savedPageSize = Number.parseInt(localStorage.getItem(VIDEO_PAGE_SIZE_KEY), 10);
       const savedSortOrder = localStorage.getItem(VIDEO_SORT_ORDER_KEY);
+      const savedQuality = localStorage.getItem(VIDEO_QUALITY_KEY);
       const videoFilters = {
         page: 1,
         limit: [12, 24, 40, 80].includes(savedPageSize) ? savedPageSize : 24,
@@ -5821,6 +5852,9 @@
         tag: "",
         sort: savedSortOrder === "oldest" ? "oldest" : "newest",
       };
+      let currentVideoQuality = ALLOWED_VIDEO_QUALITIES.includes(savedQuality)
+        ? savedQuality
+        : DEFAULT_VIDEO_QUALITY;
       let videoSearchTimeout = null;
       let currentVideoList = [];
       let currentVideoIndex = 0;
@@ -5855,6 +5889,8 @@
       if (sortOrderSelect) {
         sortOrderSelect.value = videoFilters.sort;
       }
+
+      applyQualityPreference(currentVideoQuality);
 
       function isAdminUser() {
         return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
@@ -6521,6 +6557,75 @@
         });
       }
 
+      function normalizeQualityPreference(quality) {
+        if (!quality) return DEFAULT_VIDEO_QUALITY;
+        return ALLOWED_VIDEO_QUALITIES.includes(quality) ? quality : DEFAULT_VIDEO_QUALITY;
+      }
+
+      function applyQualityPreference(quality, { persistLocally = true } = {}) {
+        const normalizedQuality = normalizeQualityPreference(quality);
+        currentVideoQuality = normalizedQuality;
+
+        if (persistLocally) {
+          localStorage.setItem(VIDEO_QUALITY_KEY, normalizedQuality);
+        }
+
+        if (videoQualitySelect) {
+          videoQualitySelect.value = normalizedQuality;
+        }
+
+        return normalizedQuality;
+      }
+
+      function appendQualitySuffix(filename, suffix) {
+        if (typeof filename !== "string") return "";
+        const dotIndex = filename.lastIndexOf(".");
+        if (dotIndex === -1) {
+          return `${filename}${suffix}`;
+        }
+        return `${filename.slice(0, dotIndex)}${suffix}${filename.slice(dotIndex)}`;
+      }
+
+      function getPreferredVideoSource(video, qualityPreference) {
+        const normalizedQuality = normalizeQualityPreference(qualityPreference);
+        const baseSource = video?.filename ? `/uploads/${video.filename}` : "";
+        const has720pAvailable = Number(video?.has_720p) === 1 || video?.has_720p === true || video?.has_720p === "1";
+
+        if (normalizedQuality === "720p" && has720pAvailable && video?.filename) {
+          return { src: `/uploads/${appendQualitySuffix(video.filename, "_720p")}`, has720pAvailable, prefers720p: true };
+        }
+
+        return { src: baseSource, has720pAvailable, prefers720p: normalizedQuality === "720p" };
+      }
+
+      function showClipToast(message) {
+        if (!clipToast) return;
+        clipToast.textContent = message;
+        clipToast.classList.add("upload-toast--visible");
+        if (clipToastTimeout) {
+          clearTimeout(clipToastTimeout);
+        }
+        clipToastTimeout = setTimeout(() => clipToast.classList.remove("upload-toast--visible"), 2200);
+      }
+
+      async function saveQualityPreferenceToServer(quality) {
+        const response = await fetch("/api/profile/update-quality", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...buildAuthHeaders(),
+          },
+          body: JSON.stringify({ quality: normalizeQualityPreference(quality) }),
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.message || "Nem sikerült menteni a minőségi beállítást.");
+        }
+
+        return result;
+      }
+
       async function loadVideos() {
         if (!videoGridContainer) {
           return;
@@ -6722,8 +6827,18 @@
         const rawTitle = activeVideo.original_name || activeVideo.filename;
         modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
         const videoElements = videoGridContainer.querySelectorAll(".video-card video");
-        const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src;
-        modalVideoPlayer.src = sourceFromGrid || `/uploads/${activeVideo.filename}`;
+        const { src, has720pAvailable, prefers720p } = getPreferredVideoSource(
+          activeVideo,
+          currentVideoQuality
+        );
+        const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src || "";
+        const resolvedSource = src || sourceFromGrid;
+
+        if (prefers720p && !has720pAvailable) {
+          showClipToast("Ehhez a videóhoz nem érhető el 720p verzió.");
+        }
+
+        modalVideoPlayer.src = resolvedSource || `/uploads/${activeVideo.filename}`;
         modalVideoPlayer.load();
         modalVideoPlayer.play().catch(() => {});
 
@@ -6872,6 +6987,27 @@
           localStorage.setItem(VIDEO_SORT_ORDER_KEY, videoFilters.sort);
           videoFilters.page = 1;
           loadVideos();
+        });
+      }
+
+      if (videoQualitySelect) {
+        videoQualitySelect.addEventListener("change", async () => {
+          const selectedQuality = normalizeQualityPreference(videoQualitySelect.value);
+          const previousQuality = currentVideoQuality;
+
+          applyQualityPreference(selectedQuality);
+
+          if (!isUserLoggedIn()) {
+            return;
+          }
+
+          try {
+            await saveQualityPreferenceToServer(selectedQuality);
+          } catch (error) {
+            console.error("Minőségi beállítás mentése sikertelen:", error);
+            showClipToast(error.message || "Nem sikerült menteni a minőségi beállítást.");
+            applyQualityPreference(previousQuality);
+          }
         });
       }
 
