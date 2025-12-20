@@ -149,7 +149,7 @@ async function transcodeVideoTo720p(inputPath, outputDir, originalFilename) {
     const targetOutputDir = outputDir || path.dirname(inputPath);
     const parsedOriginal = path.parse(originalFilename || inputPath);
     const extension = parsedOriginal.ext || path.extname(inputPath) || '.mp4';
-    const baseName = parsedOriginal.name || path.parse(inputPath).name;
+    const baseName = path.parse(inputPath).name;
     const outputFilename = `${baseName}_720p${extension}`;
     const outputPath = path.join(targetOutputDir, outputFilename);
 
@@ -1553,6 +1553,45 @@ async function removeEmptyDirectories(rootDir, protectedDirs = []) {
 
     await walk(rootDir);
 }
+
+app.post('/api/admin/fix-720p-filenames', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const { rows } = await db.query('SELECT id, filename, original_name FROM videos WHERE has_720p = 1');
+        const renamedFiles = [];
+
+        for (const video of rows) {
+            const parsedFilename = path.parse(video.filename || '');
+            const technicalBaseName = parsedFilename.name;
+            const originalBaseName = path.parse(video.original_name || '').name;
+            const extension = path.extname(video.original_name || video.filename) || '.mp4';
+            const folderName = resolveFolderNameFromFilename(video.filename);
+            const targetDir = path.join(clips720pDirectory, folderName);
+
+            if (!technicalBaseName || !originalBaseName || technicalBaseName === originalBaseName) {
+                continue;
+            }
+
+            const correctPath = path.join(targetDir, `${technicalBaseName}_720p${extension}`);
+            const incorrectPath = path.join(targetDir, `${originalBaseName}_720p${extension}`);
+
+            if ((await fileExists(incorrectPath)) && !(await fileExists(correctPath))) {
+                await fs.promises.mkdir(targetDir, { recursive: true });
+                await fs.promises.rename(incorrectPath, correctPath);
+
+                renamedFiles.push({
+                    videoId: video.id,
+                    from: path.relative(uploadsRootDirectory, incorrectPath),
+                    to: path.relative(uploadsRootDirectory, correctPath),
+                });
+            }
+        }
+
+        res.status(200).json({ renamedCount: renamedFiles.length, renamedFiles });
+    } catch (err) {
+        console.error('Hiba a 720p fájlnevek javításakor:', err);
+        res.status(500).json({ message: 'Nem sikerült kijavítani a 720p fájlneveket.' });
+    }
+});
 
 app.post('/api/admin/rescue-720p-files', authenticateToken, isAdmin, async (_req, res) => {
     const normalizeForComparison = (value) => {
