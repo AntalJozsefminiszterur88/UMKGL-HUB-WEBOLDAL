@@ -1212,24 +1212,49 @@
 
       .pagination {
         display: flex;
-        gap: 0.35rem;
-        flex-wrap: wrap;
-        margin: 1.25rem 0 0.5rem;
+        align-items: center;
         justify-content: center;
+        gap: 0.4rem;
+        margin: 1.25rem 0 0.5rem;
+        flex-wrap: wrap;
       }
 
       .pagination button {
-        background: #2c2f33;
+        background: #2f3136;
         color: #fff;
-        border: 1px solid #3c4047;
-        padding: 0.5rem 0.9rem;
-        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 0.5rem 0.7rem;
+        min-width: 42px;
+        border-radius: 6px;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
       }
 
       .pagination button.active {
-        background: #2d6cdf;
-        border-color: #2d6cdf;
+        background: #5865f2;
+        border-color: #5865f2;
+        font-weight: 700;
+        color: #fff;
+      }
+
+      .pagination button:hover {
+        background: #3a3c43;
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .pagination span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 42px;
+        padding: 0.5rem 0.7rem;
+        background: #2f3136;
+        color: #e5e7eb;
+        border-radius: 6px;
       }
 
       .modal-grid {
