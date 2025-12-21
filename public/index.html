@@ -6128,15 +6128,17 @@
       adminNavBtn.addEventListener("click", loadAdminPanel);
     }
 
+    const VIDEO_MANAGEMENT_PATH = "/video-kezeles-felulet.html";
+
     if (loadClipsBtn) {
       loadClipsBtn.addEventListener("click", () => {
-        window.open("/clips.html", "_blank");
+        window.open(VIDEO_MANAGEMENT_PATH, "_blank");
       });
     }
 
     if (processingStatusBtn) {
       processingStatusBtn.addEventListener("click", () => {
-        window.open("/processing-status.html", "_blank");
+        window.open(VIDEO_MANAGEMENT_PATH, "_blank");
       });
     }
 
