@@ -1924,7 +1924,7 @@
         margin-top: 1rem;
       }
 
-      #loadClipsBtn {
+      #videoManagementBtn {
         padding: 0.65rem 1.25rem;
       }
 
@@ -3252,8 +3252,7 @@
         <button id="savePermissionsBtn">Változtatások Mentése</button>
 
         <div class="admin-clips-actions">
-          <button id="loadClipsBtn" class="secondary-btn" type="button">Klip lista megnyitása</button>
-          <button id="processingStatusBtn" class="secondary-btn" type="button">Feldolgozási állapot</button>
+          <button id="videoManagementBtn" class="secondary-btn" type="button">Videó Kezelés Felület</button>
         </div>
       </section>
 
@@ -3378,8 +3377,7 @@
     const fileTransferNavBtn = document.getElementById("fileTransferNavBtn");
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
-    const loadClipsBtn = document.getElementById("loadClipsBtn");
-    const processingStatusBtn = document.getElementById("processingStatusBtn");
+    const videoManagementBtn = document.getElementById("videoManagementBtn");
     const pollCreator = document.getElementById("pollCreator");
     const pollCreatorNotice = document.getElementById("pollCreatorNotice");
     const createPollForm = document.getElementById("createPollForm");
@@ -6130,14 +6128,8 @@
 
     const VIDEO_MANAGEMENT_PATH = "/video-kezeles-felulet.html";
 
-    if (loadClipsBtn) {
-      loadClipsBtn.addEventListener("click", () => {
-        window.open(VIDEO_MANAGEMENT_PATH, "_blank");
-      });
-    }
-
-    if (processingStatusBtn) {
-      processingStatusBtn.addEventListener("click", () => {
+    if (videoManagementBtn) {
+      videoManagementBtn.addEventListener("click", () => {
         window.open(VIDEO_MANAGEMENT_PATH, "_blank");
       });
     }
