@@ -1058,7 +1058,7 @@
         padding: 1rem;
         border-radius: 10px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-        align-items: flex-start;
+        align-items: flex-end;
       }
 
       .filter-group {
@@ -1073,44 +1073,128 @@
         color: #c9d1d9;
       }
 
-      .tag-filter-control {
+      .filter-group input,
+      .filter-group select,
+      .custom-select-container {
+        background: #2c2f33;
+        border: 1px solid #3c4047;
+        color: #fff;
+        padding: 0.6rem 0.75rem;
+        border-radius: 8px;
+        min-height: 40px;
+      }
+
+      .filter-group input,
+      .filter-group select {
+        height: 40px;
+      }
+
+      .custom-select-container {
+        position: relative;
         display: flex;
-        flex-direction: column;
+        align-items: center;
         gap: 0.5rem;
-      }
-
-      .selected-tags-container {
-        display: flex;
+        cursor: pointer;
         flex-wrap: wrap;
-        gap: 0.4rem;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        padding: 0.35rem 0.5rem;
-        min-height: 38px;
       }
 
-      .selected-tag-pill {
+      .custom-select-container.open {
+        border-color: #6f8cff;
+        box-shadow: 0 0 0 3px rgba(111, 140, 255, 0.18);
+      }
+
+      .custom-select-value {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        flex: 1;
+        min-height: 24px;
+      }
+
+      .custom-select-placeholder {
+        color: #9ca3af;
+      }
+
+      .custom-select-arrow {
+        margin-left: auto;
+        opacity: 0.8;
+      }
+
+      .custom-select-dropdown {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 6px);
+        background: #1b1e24;
+        border: 1px solid #31343a;
+        border-radius: 10px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+        padding: 0.35rem;
+        display: none;
+        max-height: 260px;
+        overflow: auto;
+        z-index: 10;
+      }
+
+      .custom-select-container.open .custom-select-dropdown {
+        display: block;
+      }
+
+      .custom-select-option {
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: none;
+        color: #e6e9f0;
+        padding: 0.5rem 0.65rem 0.5rem 0.9rem;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+      }
+
+      .custom-select-option:hover,
+      .custom-select-option:focus-visible {
+        background: rgba(111, 140, 255, 0.08);
+        outline: none;
+      }
+
+      .custom-select-option[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .custom-select-option__color,
+      .custom-select-chip__color {
+        width: 8px;
+        border-radius: 6px;
+        background: #6f8cff;
+      }
+
+      .custom-select-option__color {
+        height: 18px;
+      }
+
+      .custom-select-chip {
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.04));
         border: 1px solid rgba(255, 255, 255, 0.15);
         color: #f5f6f7;
-        padding: 0.35rem 0.6rem;
+        padding: 0.25rem 0.5rem 0.25rem 0.45rem;
         border-radius: 12px;
         font-size: 0.9rem;
         line-height: 1.25;
       }
 
-      .selected-tag-pill__dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+      .custom-select-chip__color {
+        height: 20px;
       }
 
-      .selected-tag-pill__remove {
+      .custom-select-chip__remove {
         background: transparent;
         border: none;
         color: #cfd4df;
@@ -1120,23 +1204,8 @@
         padding: 0 0.15rem;
       }
 
-      .selected-tag-pill__remove:hover {
+      .custom-select-chip__remove:hover {
         color: #fff;
-      }
-
-      .selected-tag-pill--placeholder {
-        color: #9ca3af;
-        border-style: dashed;
-        border-color: rgba(255, 255, 255, 0.15);
-      }
-
-      .filter-group input,
-      .filter-group select {
-        background: #2c2f33;
-        border: 1px solid #3c4047;
-        color: #fff;
-        padding: 0.6rem 0.75rem;
-        border-radius: 8px;
       }
 
       .filter-group--actions {
@@ -3057,12 +3126,18 @@
               <input id="videoSearchInput" type="search" placeholder="Pl. epikus csata" />
             </div>
             <div class="filter-group">
-              <label for="tagFilterSelect">Címke</label>
-              <div class="tag-filter-control">
-                <div id="selectedTagContainer" class="selected-tags-container" aria-live="polite"></div>
-                <select id="tagFilterSelect">
-                  <option value="">Válassz címkét</option>
-                </select>
+              <label for="tagMultiSelect">Címke</label>
+              <div
+                class="custom-select-container"
+                id="tagMultiSelect"
+                role="combobox"
+                aria-expanded="false"
+                aria-controls="tagSelectDropdown"
+                tabindex="0"
+              >
+                <div class="custom-select-value" id="tagSelectValue" aria-live="polite"></div>
+                <span class="custom-select-arrow" aria-hidden="true">▾</span>
+                <div class="custom-select-dropdown" id="tagSelectDropdown" role="listbox" aria-multiselectable="true"></div>
               </div>
             </div>
             <div class="filter-group">
@@ -6659,8 +6734,9 @@
       const MAX_UPLOAD_FILES = 100;
       const globalTagSelect = document.getElementById("globalTagSelect");
       const videoSearchInput = document.getElementById("videoSearchInput");
-      const tagFilterSelect = document.getElementById("tagFilterSelect");
-      const selectedTagContainer = document.getElementById("selectedTagContainer");
+      const tagMultiSelect = document.getElementById("tagMultiSelect");
+      const tagSelectValue = document.getElementById("tagSelectValue");
+      const tagSelectDropdown = document.getElementById("tagSelectDropdown");
       const sortOrderSelect = document.getElementById("sortOrderSelect");
       const videoQualitySelect = document.getElementById("videoQualitySelect");
       const pageSizeSelect = document.getElementById("pageSizeSelect");
@@ -6736,7 +6812,7 @@
       }
 
       applyQualityPreference(currentVideoQuality);
-      renderSelectedTagChips();
+      renderTagSelector();
 
       function isAdminUser() {
         return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
@@ -7090,44 +7166,93 @@
       }
 
       function renderSelectedTagChips() {
-        if (!selectedTagContainer) return;
-        selectedTagContainer.innerHTML = "";
+        if (!tagSelectValue) return;
+        tagSelectValue.innerHTML = "";
 
         if (!videoFilters.tag.length) {
           const placeholder = document.createElement("span");
-          placeholder.className = "selected-tag-pill selected-tag-pill--placeholder";
-          placeholder.textContent = "Nincs kiválasztott címke";
-          selectedTagContainer.appendChild(placeholder);
+          placeholder.className = "custom-select-placeholder";
+          placeholder.textContent = "Válassz címkéket";
+          tagSelectValue.appendChild(placeholder);
           return;
         }
 
         videoFilters.tag.forEach((tagId) => {
           const tagData = availableTags.find((tag) => String(tag.id) === String(tagId));
           const chip = document.createElement("span");
-          chip.className = "selected-tag-pill";
+          chip.className = "custom-select-chip";
 
-          const dot = document.createElement("span");
-          dot.className = "selected-tag-pill__dot";
-          dot.style.background = normalizeColor(tagData?.color || DEFAULT_TAG_COLOR);
+          const colorBar = document.createElement("span");
+          colorBar.className = "custom-select-chip__color";
+          colorBar.style.background = normalizeColor(tagData?.color || DEFAULT_TAG_COLOR);
 
           const label = document.createElement("span");
           label.textContent = tagData?.name || `Címke #${tagId}`;
 
           const removeBtn = document.createElement("button");
           removeBtn.type = "button";
-          removeBtn.className = "selected-tag-pill__remove";
+          removeBtn.className = "custom-select-chip__remove";
           removeBtn.setAttribute("aria-label", `${label.textContent} törlése`);
           removeBtn.textContent = "×";
-          removeBtn.addEventListener("click", () => {
+          removeBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
             videoFilters.tag = videoFilters.tag.filter((id) => String(id) !== String(tagId));
             videoFilters.page = 1;
-            populateTagSelect();
+            renderTagSelector();
             loadVideos();
           });
 
-          chip.append(dot, label, removeBtn);
-          selectedTagContainer.appendChild(chip);
+          chip.append(colorBar, label, removeBtn);
+          tagSelectValue.appendChild(chip);
         });
+      }
+
+      function renderTagDropdownOptions() {
+        if (!tagSelectDropdown) return;
+        tagSelectDropdown.innerHTML = "";
+
+        const selectedValues = new Set(videoFilters.tag.map((value) => String(value)));
+
+        if (!availableTags.length) {
+          const emptyState = document.createElement("div");
+          emptyState.className = "custom-select-placeholder";
+          emptyState.style.padding = "0.35rem 0.65rem";
+          emptyState.textContent = "Nincs elérhető címke";
+          tagSelectDropdown.appendChild(emptyState);
+          return;
+        }
+
+        availableTags.forEach((tag) => {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = "custom-select-option";
+          option.dataset.value = String(tag.id);
+          option.disabled = selectedValues.has(option.dataset.value);
+
+          const colorBar = document.createElement("span");
+          colorBar.className = "custom-select-option__color";
+          colorBar.style.background = normalizeColor(tag.color);
+
+          const label = document.createElement("span");
+          label.textContent = tag.name;
+
+          option.append(colorBar, label);
+          option.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (option.disabled) return;
+            videoFilters.tag = [...videoFilters.tag, option.dataset.value];
+            videoFilters.page = 1;
+            renderTagSelector();
+            loadVideos();
+          });
+
+          tagSelectDropdown.appendChild(option);
+        });
+      }
+
+      function renderTagSelector() {
+        renderSelectedTagChips();
+        renderTagDropdownOptions();
       }
 
       function renderGlobalTagSelect() {
@@ -7197,7 +7322,6 @@
       }
 
       function populateTagSelect() {
-        if (!tagFilterSelect) return;
         const validTagIds = Array.isArray(videoFilters.tag)
           ? videoFilters.tag.filter((id) => availableTags.some((tag) => String(tag.id) === String(id)))
           : [];
@@ -7205,17 +7329,7 @@
           videoFilters.tag = validTagIds;
         }
 
-        const currentValues = new Set(validTagIds.map((id) => String(id)));
-        tagFilterSelect.innerHTML = '<option value="">Válassz címkét</option>';
-        availableTags.forEach((tag) => {
-          const option = document.createElement("option");
-          option.value = String(tag.id);
-          option.textContent = tag.name;
-          option.disabled = currentValues.has(option.value);
-          styleTagOption(option, tag.color);
-          tagFilterSelect.appendChild(option);
-        });
-        renderSelectedTagChips();
+        renderTagSelector();
       }
 
       async function fetchTags() {
@@ -8022,21 +8136,38 @@
         });
       }
 
-      if (tagFilterSelect) {
-        tagFilterSelect.addEventListener("change", () => {
-          const selectedValue = tagFilterSelect.value;
-          if (!selectedValue) return;
+      function toggleTagDropdown(forceState) {
+        if (!tagMultiSelect) return;
+        const shouldOpen = typeof forceState === "boolean" ? forceState : !tagMultiSelect.classList.contains("open");
+        tagMultiSelect.classList.toggle("open", shouldOpen);
+        tagMultiSelect.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+      }
 
-          if (!videoFilters.tag.includes(selectedValue)) {
-            videoFilters.tag = [...videoFilters.tag, selectedValue];
-            videoFilters.page = 1;
-            loadVideos();
+      if (tagMultiSelect) {
+        tagMultiSelect.addEventListener("click", (event) => {
+          const target = event.target;
+          if (tagSelectDropdown && tagSelectDropdown.contains(target) && target.classList.contains("custom-select-option")) {
+            return;
           }
+          toggleTagDropdown();
+        });
 
-          tagFilterSelect.value = "";
-          populateTagSelect();
+        tagMultiSelect.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleTagDropdown();
+          } else if (event.key === "Escape") {
+            toggleTagDropdown(false);
+          }
         });
       }
+
+      document.addEventListener("click", (event) => {
+        if (!tagMultiSelect) return;
+        if (!tagMultiSelect.contains(event.target)) {
+          toggleTagDropdown(false);
+        }
+      });
 
       if (sortOrderSelect) {
         sortOrderSelect.addEventListener("change", () => {
@@ -8090,10 +8221,8 @@
             videoSearchTimeout = null;
           }
           if (videoSearchInput) videoSearchInput.value = "";
-          if (tagFilterSelect) {
-            tagFilterSelect.value = "";
-            populateTagSelect();
-          }
+          renderTagSelector();
+          toggleTagDropdown(false);
           if (sortOrderSelect) {
             sortOrderSelect.value = videoFilters.sort;
             localStorage.setItem(VIDEO_SORT_ORDER_KEY, videoFilters.sort);
