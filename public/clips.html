@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Klipek listája</title>
+    <link rel="icon" type="image/png" href="program_icons/oldal_logo.png" />
+    <style>
+      body {
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f3f4f6;
+        color: #111827;
+        margin: 0;
+        padding: 20px;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .clip-window {
+        max-width: 1200px;
+        margin: 0 auto;
+        font-size: 14px;
+      }
+
+      .clip-window h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+
+      .clip-window__subtitle {
+        margin: 0 0 16px;
+        color: #4b5563;
+      }
+
+      .clip-window__controls {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+
+      .clip-window__select {
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        background: #f9fafb;
+        min-width: 220px;
+        font-size: 14px;
+      }
+
+      .clip-window__count {
+        color: #4b5563;
+        font-size: 13px;
+      }
+
+      .clip-window__status {
+        margin-bottom: 10px;
+        color: #374151;
+      }
+
+      .clip-window__table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+      }
+
+      .clip-window__table thead {
+        background: #e5e7eb;
+      }
+
+      .clip-window__table th,
+      .clip-window__table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #e5e7eb;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .clip-window__table th {
+        font-weight: 600;
+      }
+
+      .clip-window__table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .clip-window__delete {
+        background: #dc2626;
+        color: #fff;
+        border: none;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: background 0.2s ease;
+      }
+
+      .clip-window__delete:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .clip-window__delete:not(:disabled):hover {
+        background: #b91c1c;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 18px;
+        color: #2563eb;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .back-link span {
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <a href="/" class="back-link"><span>←</span> Vissza a főoldalra</a>
+    <div class="clip-window">
+      <h1>Feltöltött klipek</h1>
+      <p class="clip-window__subtitle">Egyszerű, áttekinthető lista a klipjeidről.</p>
+      <div class="clip-window__controls">
+        <label for="clipWindowVariant">Megjelenített fájlok</label>
+        <select id="clipWindowVariant" class="clip-window__select">
+          <option value="original">Eredeti videók</option>
+          <option value="720p">720p videók</option>
+          <option value="other">Egyéb fájlok</option>
+        </select>
+        <span id="clipWindowCount" class="clip-window__count"></span>
+      </div>
+      <div id="clipWindowStatus" class="clip-window__status">Klipek betöltése folyamatban...</div>
+      <div id="clipWindowTable"></div>
+    </div>
+
+    <script>
+      const SESSION_KEYS = {
+        token: "token",
+        username: "username",
+        isAdmin: "isAdmin",
+        canTransfer: "canTransfer",
+        canViewClips: "canViewClips",
+        profilePictureFilename: "profilePictureFilename",
+      };
+
+      function getStoredToken() {
+        return localStorage.getItem(SESSION_KEYS.token);
+      }
+
+      function isUserLoggedIn() {
+        return !!getStoredToken();
+      }
+
+      function buildAuthHeaders() {
+        const token = getStoredToken();
+        if (!token) {
+          return {};
+        }
+        return {
+          Authorization: `Bearer ${token}`,
+        };
+      }
+
+      function formatFileSize(size) {
+        if (!Number.isFinite(size)) {
+          return "Ismeretlen";
+        }
+        if (size >= 1024 * 1024) {
+          return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+        }
+        if (size >= 1024) {
+          return `${(size / 1024).toFixed(2)} KB`;
+        }
+        return `${size} B`;
+      }
+
+      function formatDateTime(value) {
+        if (!value) {
+          return "Ismeretlen dátum";
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return "Ismeretlen dátum";
+        }
+
+        return date.toLocaleString("hu-HU", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      async function fetchAdminClips(variant) {
+        const params = new URLSearchParams();
+        if (variant) {
+          params.set("type", variant);
+        }
+
+        const url = params.toString() ? `/api/admin/clips?${params.toString()}` : "/api/admin/clips";
+        const response = await fetch(url, { headers: buildAuthHeaders() });
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          const message = data && data.message ? data.message : "Nem sikerült lekérdezni a klipeket.";
+          throw new Error(message);
+        }
+
+        const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+        const total = Number.isFinite(data?.total) ? data.total : items.length;
+
+        return { items, total };
+      }
+
+      async function handleClipDelete(clipId, rowElement, button, clipName, statusEl) {
+        if (!Number.isFinite(clipId)) {
+          return;
+        }
+
+        const confirmed = window.confirm(`Biztosan törlöd a(z) "${clipName || "klip"}" elemet? A törlés végleges.`);
+        if (!confirmed) {
+          return;
+        }
+
+        if (button) {
+          button.disabled = true;
+        }
+
+        try {
+          const response = await fetch(`/api/videos/${clipId}`, {
+            method: "DELETE",
+            headers: buildAuthHeaders(),
+          });
+
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            const message = data && data.message ? data.message : "Nem sikerült törölni a klipet.";
+            throw new Error(message);
+          }
+
+          if (rowElement && rowElement.parentElement) {
+            rowElement.parentElement.removeChild(rowElement);
+          }
+
+          if (statusEl) {
+            statusEl.textContent = data?.message || "A klip törlése sikeres volt.";
+          }
+        } catch (error) {
+          console.error("Klip törlési hiba:", error);
+          if (statusEl) {
+            statusEl.textContent = error.message || "Nem sikerült törölni a klipet.";
+          }
+        } finally {
+          if (button) {
+            button.disabled = false;
+          }
+        }
+      }
+
+      function renderClipTable(statusEl, tableContainer, items, countEl) {
+        if (!tableContainer) {
+          return;
+        }
+
+        tableContainer.innerHTML = "";
+
+        if (!Array.isArray(items) || !items.length) {
+          const empty = document.createElement("p");
+          empty.className = "clip-window__status";
+          empty.textContent = "Nincs megjeleníthető klip.";
+          tableContainer.appendChild(empty);
+          if (statusEl) {
+            statusEl.textContent = "Nincs megjeleníthető klip.";
+          }
+          if (countEl) {
+            countEl.textContent = "(0 találat)";
+          }
+          return;
+        }
+
+        if (statusEl) {
+          statusEl.textContent = "";
+        }
+
+        const table = document.createElement("table");
+        table.className = "clip-window__table";
+
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["Azonosító", "Fájlnév", "Méret", "Feltöltve", "Egyéb", "Művelet"].forEach((title) => {
+          const th = document.createElement("th");
+          th.textContent = title;
+          headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        items.forEach((clip) => {
+          const row = document.createElement("tr");
+
+          const idCell = document.createElement("td");
+          idCell.textContent = clip.id ?? "-";
+          row.appendChild(idCell);
+
+          const nameCell = document.createElement("td");
+          nameCell.textContent = clip.original_name || "Ismeretlen";
+          row.appendChild(nameCell);
+
+          const sizeCell = document.createElement("td");
+          sizeCell.textContent = formatFileSize(Number(clip.sizeBytes));
+          row.appendChild(sizeCell);
+
+          const uploadedCell = document.createElement("td");
+          uploadedCell.textContent = formatDateTime(clip.uploaded_at);
+          row.appendChild(uploadedCell);
+
+          const extraCell = document.createElement("td");
+          const extraParts = [];
+          if (clip.uploader) {
+            extraParts.push(`Feltöltő: ${clip.uploader}`);
+          }
+          if (clip.category === "720p") {
+            extraParts.push("Verzió: 720p");
+          } else if (clip.category === "other") {
+            extraParts.push("Típus: Egyéb fájl");
+          } else {
+            extraParts.push("Verzió: Eredeti");
+          }
+          extraCell.textContent = extraParts.length ? extraParts.join(" • ") : "-";
+          row.appendChild(extraCell);
+
+          const actionCell = document.createElement("td");
+          const deleteBtn = document.createElement("button");
+          deleteBtn.type = "button";
+          deleteBtn.textContent = "Törlés";
+          deleteBtn.className = "clip-window__delete";
+          deleteBtn.addEventListener("click", () => {
+            handleClipDelete(clip.id, row, deleteBtn, clip.original_name, statusEl);
+          });
+          actionCell.appendChild(deleteBtn);
+          row.appendChild(actionCell);
+
+          tbody.appendChild(row);
+        });
+
+        table.appendChild(tbody);
+        tableContainer.appendChild(table);
+
+        if (countEl) {
+          countEl.textContent = `(${items.length} találat)`;
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", async () => {
+        const statusEl = document.getElementById("clipWindowStatus");
+        const tableContainer = document.getElementById("clipWindowTable");
+        const variantSelect = document.getElementById("clipWindowVariant");
+        const countEl = document.getElementById("clipWindowCount");
+
+        if (!isUserLoggedIn()) {
+          alert("Nincs érvényes hitelesítés. Jelentkezz be, hogy lásd a klipeket.");
+          window.location.href = "/";
+          return;
+        }
+
+        const loadVariant = async (variant) => {
+          if (statusEl) {
+            statusEl.textContent = "Klipek betöltése folyamatban...";
+          }
+          if (countEl) {
+            countEl.textContent = "";
+          }
+          if (tableContainer) {
+            tableContainer.innerHTML = "";
+          }
+
+          try {
+            const { items } = await fetchAdminClips(variant);
+            renderClipTable(statusEl, tableContainer, items, countEl);
+          } catch (error) {
+            console.error("Klip lista betöltési hiba:", error);
+            if (statusEl) {
+              statusEl.textContent = error.message || "Nem sikerült betölteni a klipeket.";
+            }
+          }
+        };
+
+        if (variantSelect) {
+          variantSelect.addEventListener("change", (event) => {
+            const value = event.target?.value || "original";
+            loadVariant(value);
+          });
+        }
+
+        await loadVariant(variantSelect?.value || "original");
+      });
+    </script>
+  </body>
+</html>
