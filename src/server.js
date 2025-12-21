@@ -1128,7 +1128,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (type === '720p') {
             const { rows } = await db.query(`
-                SELECT videos.id, videos.original_name, videos.filename, videos.uploaded_at, users.username
+                SELECT videos.id, videos.original_name, videos.filename, videos.uploaded_at, videos.content_created_at, users.username
                 FROM videos
                 LEFT JOIN users ON videos.uploader_id = users.id
                 WHERE videos.has_720p = 1
@@ -1147,6 +1147,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
                     original_name: video.original_name,
                     filename: filename720p,
                     uploaded_at: video.uploaded_at,
+                    content_created_at: video.content_created_at,
                     uploader: video.username || 'Ismeretlen',
                     sizeBytes: await getUploadFileSize(filename720p),
                     category: '720p',
@@ -1160,7 +1161,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
             const clips = [];
 
             const { rows: thumbnailRows } = await db.query(`
-                SELECT id, thumbnail_filename, uploaded_at
+                SELECT id, thumbnail_filename, uploaded_at, content_created_at
                 FROM videos
                 WHERE thumbnail_filename IS NOT NULL
             `);
@@ -1174,6 +1175,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
                     original_name: 'Videó előnézet',
                     filename: thumb.thumbnail_filename,
                     uploaded_at: thumb.uploaded_at,
+                    content_created_at: thumb.content_created_at,
                     uploader: 'Rendszer',
                     category: 'other',
                 });
@@ -1187,6 +1189,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
                         original_name: `${program.name || 'Program'} - Borítókép`,
                         filename: program.image_filename,
                         uploaded_at: program.created_at,
+                        content_created_at: program.created_at,
                         uploader: 'Program',
                         category: 'other',
                     });
@@ -1198,6 +1201,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
                         original_name: `${program.name || 'Program'} - Fájl`,
                         filename: program.file_filename,
                         uploaded_at: program.created_at,
+                        content_created_at: program.created_at,
                         uploader: 'Program',
                         category: 'other',
                     });
@@ -1213,7 +1217,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
         }
 
         const { rows } = await db.query(`
-            SELECT videos.id, videos.original_name, videos.filename, videos.uploaded_at, users.username
+            SELECT videos.id, videos.original_name, videos.filename, videos.uploaded_at, videos.content_created_at, users.username
             FROM videos
             LEFT JOIN users ON videos.uploader_id = users.id
             ORDER BY videos.uploaded_at DESC
@@ -1224,6 +1228,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
             original_name: video.original_name,
             filename: video.filename,
             uploaded_at: video.uploaded_at,
+            content_created_at: video.content_created_at,
             uploader: video.username || 'Ismeretlen',
             sizeBytes: await getUploadFileSize(video.filename),
             category: 'original',
