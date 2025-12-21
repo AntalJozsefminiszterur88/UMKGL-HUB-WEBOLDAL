@@ -1076,21 +1076,19 @@
       .filter-group input,
       .filter-group select,
       .custom-select-container {
-        background: #2c2f33;
+        height: 42px !important;
+        padding: 0 12px;
         border: 1px solid #3c4047;
+        background: #2c2f33;
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-size: 14px;
+        line-height: normal;
         color: #fff;
-        padding: 0.6rem 0.75rem;
-        border-radius: 8px;
-        min-height: 40px;
       }
 
-      #videoSearchInput,
-      #tagFilterSelect,
-      #sortOrderSelect,
-      #videoQualitySelect,
-      #pageSizeSelect,
       .custom-select-container {
-        height: 45px;
+        height: 42px !important;
         box-sizing: border-box;
         display: flex;
         align-items: center;
@@ -6770,6 +6768,7 @@
       let uploadedVideoIds = [];
       let clipToastTimeout = null;
       let availableTags = [];
+      let tagSelectHandlersAttached = false;
       const VIDEO_QUALITY_KEY = "videoQualityPreference";
       const DEFAULT_VIDEO_QUALITY = "1080p";
       const ALLOWED_VIDEO_QUALITIES = ["1080p", "720p"];
@@ -7193,6 +7192,7 @@
           const tagData = availableTags.find((tag) => String(tag.id) === String(tagId));
           const chip = document.createElement("span");
           chip.className = "custom-select-chip";
+          chip.dataset.value = String(tagId);
 
           const colorBar = document.createElement("span");
           colorBar.className = "custom-select-chip__color";
@@ -7206,13 +7206,6 @@
           removeBtn.className = "custom-select-chip__remove";
           removeBtn.setAttribute("aria-label", `${label.textContent} törlése`);
           removeBtn.textContent = "×";
-          removeBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
-            videoFilters.tag = videoFilters.tag.filter((id) => String(id) !== String(tagId));
-            videoFilters.page = 1;
-            renderTagSelector();
-            loadVideos();
-          });
 
           chip.append(colorBar, label, removeBtn);
           tagSelectValue.appendChild(chip);
@@ -7249,14 +7242,6 @@
           label.textContent = tag.name;
 
           option.append(colorBar, label);
-          option.addEventListener("click", (event) => {
-            event.stopPropagation();
-            if (option.disabled) return;
-            videoFilters.tag = [...videoFilters.tag, option.dataset.value];
-            videoFilters.page = 1;
-            renderTagSelector();
-            loadVideos();
-          });
 
           tagSelectDropdown.appendChild(option);
         });
@@ -8155,31 +8140,77 @@
         tagMultiSelect.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
       }
 
-      if (tagMultiSelect) {
-        tagMultiSelect.addEventListener("click", (event) => {
-          const target = event.target;
-          if (tagSelectDropdown && tagSelectDropdown.contains(target) && target.classList.contains("custom-select-option")) {
+      function renderCustomTagSelect() {
+        if (!tagMultiSelect || !tagSelectDropdown || !tagSelectValue || tagSelectHandlersAttached) {
+          return;
+        }
+
+        const handleTagSelection = (tagId) => {
+          if (!tagId) return;
+          const alreadySelected = videoFilters.tag.some((value) => String(value) === String(tagId));
+          if (alreadySelected) return;
+          videoFilters.tag = [...videoFilters.tag, String(tagId)];
+          videoFilters.page = 1;
+          renderTagSelector();
+          loadVideos();
+        };
+
+        const handleChipRemoval = (event) => {
+          const removeBtn = event.target.closest(".custom-select-chip__remove");
+          if (!removeBtn) return;
+          const chip = removeBtn.closest(".custom-select-chip");
+          const tagId = chip?.dataset?.value;
+          if (!tagId) return;
+          event.stopPropagation();
+          videoFilters.tag = videoFilters.tag.filter((id) => String(id) !== String(tagId));
+          videoFilters.page = 1;
+          renderTagSelector();
+          loadVideos();
+        };
+
+        const handleOptionClick = (event) => {
+          const option = event.target.closest(".custom-select-option");
+          if (!option) return;
+          event.stopPropagation();
+          if (option.disabled) return;
+          handleTagSelection(option.dataset.value);
+        };
+
+        const handleContainerClick = (event) => {
+          if (event.target.closest(".custom-select-chip__remove")) {
+            return;
+          }
+          if (event.target.closest(".custom-select-option")) {
             return;
           }
           toggleTagDropdown();
-        });
+        };
 
-        tagMultiSelect.addEventListener("keydown", (event) => {
+        const handleContainerKeydown = (event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             toggleTagDropdown();
           } else if (event.key === "Escape") {
             toggleTagDropdown(false);
           }
-        });
+        };
+
+        const handleOutsideClick = (event) => {
+          if (!tagMultiSelect.contains(event.target)) {
+            toggleTagDropdown(false);
+          }
+        };
+
+        tagMultiSelect.addEventListener("click", handleContainerClick);
+        tagMultiSelect.addEventListener("keydown", handleContainerKeydown);
+        tagSelectDropdown.addEventListener("click", handleOptionClick);
+        tagSelectValue.addEventListener("click", handleChipRemoval);
+        document.addEventListener("click", handleOutsideClick);
+
+        tagSelectHandlersAttached = true;
       }
 
-      document.addEventListener("click", (event) => {
-        if (!tagMultiSelect) return;
-        if (!tagMultiSelect.contains(event.target)) {
-          toggleTagDropdown(false);
-        }
-      });
+      renderCustomTagSelect();
 
       if (sortOrderSelect) {
         sortOrderSelect.addEventListener("change", () => {
