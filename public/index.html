@@ -1050,22 +1050,25 @@
       }
 
       .clip-filters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
         margin: 1rem 0;
         background: #1f2227;
         padding: 1rem;
         border-radius: 10px;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+      }
+
+      .filter-row {
+        display: flex;
+        flex-wrap: wrap;
         align-items: flex-end;
+        gap: 10px;
       }
 
       .filter-group {
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
-        flex: 1 1 230px;
+        flex: 1 1 200px;
       }
 
       .filter-group label {
@@ -1073,37 +1076,27 @@
         color: #c9d1d9;
       }
 
-      .filter-group input,
-      .filter-group select,
-      .custom-select-container {
-        height: 42px !important;
-        padding: 0 12px;
-        border: 1px solid #3c4047;
-        background: #2c2f33;
+      .unified-input {
+        height: 40px;
+        background: #202225;
+        border: 1px solid #2f3136;
         border-radius: 4px;
+        color: #dcddde;
+        width: 100%;
         box-sizing: border-box;
-        font-size: 14px;
-        line-height: normal;
-        color: #fff;
-      }
-
-      .custom-select-container {
-        height: 42px !important;
-        box-sizing: border-box;
-        display: flex;
-        align-items: center;
+        padding: 0 12px;
       }
 
       .custom-select-container {
         position: relative;
+        display: flex;
+        overflow: hidden;
+        align-items: center;
         gap: 0.5rem;
         cursor: pointer;
-        flex-wrap: nowrap;
-        overflow: hidden;
-        white-space: nowrap;
       }
 
-      .custom-select-container.open {
+      .custom-select-container.active {
         border-color: #6f8cff;
         box-shadow: 0 0 0 3px rgba(111, 140, 255, 0.18);
       }
@@ -1144,7 +1137,7 @@
         z-index: 10;
       }
 
-      .custom-select-container.open .custom-select-dropdown {
+      .custom-select-container.active .custom-select-dropdown {
         display: block;
       }
 
@@ -3131,51 +3124,58 @@
           </div>
 
           <div class="clip-filters">
-            <div class="filter-group">
-              <label for="videoSearchInput">Keresés cím vagy fájlnév alapján</label>
-              <input id="videoSearchInput" type="search" placeholder="Pl. epikus csata" />
-            </div>
-            <div class="filter-group">
-              <label for="tagMultiSelect">Címke</label>
-              <div
-                class="custom-select-container"
-                id="tagMultiSelect"
-                role="combobox"
-                aria-expanded="false"
-                aria-controls="tagSelectDropdown"
-                tabindex="0"
-              >
-                <div class="custom-select-value" id="tagSelectValue" aria-live="polite"></div>
-                <span class="custom-select-arrow" aria-hidden="true">▾</span>
-                <div class="custom-select-dropdown" id="tagSelectDropdown" role="listbox" aria-multiselectable="true"></div>
+            <div class="filter-row">
+              <div class="filter-group">
+                <label for="videoSearchInput">Keresés cím vagy fájlnév alapján</label>
+                <input
+                  id="videoSearchInput"
+                  class="unified-input"
+                  type="search"
+                  placeholder="Pl. epikus csata"
+                />
               </div>
-            </div>
-            <div class="filter-group">
-              <label for="sortOrderSelect">Rendezés</label>
-              <select id="sortOrderSelect">
-                <option value="newest">Legújabb elöl</option>
-                <option value="oldest">Legrégebbi elöl</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="videoQualitySelect">Minőség</label>
-              <select id="videoQualitySelect">
-                <option value="1080p">Eredeti (1080p)</option>
-                <option value="720p">HD (720p)</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="pageSizeSelect">Videók száma / oldal</label>
-              <select id="pageSizeSelect">
-                <option value="12">12</option>
-                <option value="24" selected>24</option>
-                <option value="40">40</option>
-                <option value="80">80</option>
-              </select>
-            </div>
-            <div class="filter-group filter-group--actions">
-              <label class="sr-only" for="filterResetBtn">Szűrők törlése</label>
-              <button id="filterResetBtn" class="secondary-btn">Szűrők törlése</button>
+              <div class="filter-group">
+                <label for="tagMultiSelect">Címke</label>
+                <div
+                  class="custom-select-container unified-input"
+                  id="tagMultiSelect"
+                  role="combobox"
+                  aria-expanded="false"
+                  aria-controls="tagSelectDropdown"
+                  tabindex="0"
+                >
+                  <div class="custom-select-value" id="tagSelectValue" aria-live="polite"></div>
+                  <span class="custom-select-arrow" aria-hidden="true">▾</span>
+                  <div class="custom-select-dropdown" id="tagSelectDropdown" role="listbox" aria-multiselectable="true"></div>
+                </div>
+              </div>
+              <div class="filter-group">
+                <label for="sortOrderSelect">Rendezés</label>
+                <select id="sortOrderSelect" class="unified-input">
+                  <option value="newest">Legújabb elöl</option>
+                  <option value="oldest">Legrégebbi elöl</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label for="videoQualitySelect">Minőség</label>
+                <select id="videoQualitySelect" class="unified-input">
+                  <option value="1080p">Eredeti (1080p)</option>
+                  <option value="720p">HD (720p)</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label for="pageSizeSelect">Videók száma / oldal</label>
+                <select id="pageSizeSelect" class="unified-input">
+                  <option value="12">12</option>
+                  <option value="24" selected>24</option>
+                  <option value="40">40</option>
+                  <option value="80">80</option>
+                </select>
+              </div>
+              <div class="filter-group filter-group--actions">
+                <label class="sr-only" for="filterResetBtn">Szűrők törlése</label>
+                <button id="filterResetBtn" class="secondary-btn unified-input">Szűrők törlése</button>
+              </div>
             </div>
           </div>
 
@@ -8135,8 +8135,8 @@
 
       function toggleTagDropdown(forceState) {
         if (!tagMultiSelect) return;
-        const shouldOpen = typeof forceState === "boolean" ? forceState : !tagMultiSelect.classList.contains("open");
-        tagMultiSelect.classList.toggle("open", shouldOpen);
+        const shouldOpen = typeof forceState === "boolean" ? forceState : !tagMultiSelect.classList.contains("active");
+        tagMultiSelect.classList.toggle("active", shouldOpen);
         tagMultiSelect.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
       }
 
