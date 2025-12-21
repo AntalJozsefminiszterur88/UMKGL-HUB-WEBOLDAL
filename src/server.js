@@ -1053,7 +1053,14 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
         const requestedLimit = Number.parseInt(req.query.limit, 10);
         const limit = allowedLimits.includes(requestedLimit) ? requestedLimit : 24;
         const search = (req.query.search || '').trim();
-        const tagId = Number.parseInt(req.query.tag, 10);
+        const tagFilters = Array.isArray(req.query.tag)
+            ? req.query.tag
+            : typeof req.query.tag === 'string' && req.query.tag.length
+                ? req.query.tag.split(',')
+                : [];
+        const tagIds = Array.from(new Set(tagFilters
+            .map((value) => Number.parseInt(value, 10))
+            .filter((value) => Number.isInteger(value))));
         const sortOrder = req.query.sort === 'oldest' ? 'ASC' : 'DESC';
 
         const filters = [];
@@ -1064,9 +1071,16 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
             filters.push(`(videos.original_name ILIKE $${idx} OR videos.filename ILIKE $${idx})`);
         }
 
-        if (Number.isInteger(tagId)) {
-            const idx = params.push(tagId);
-            filters.push(`EXISTS (SELECT 1 FROM video_tags vt WHERE vt.video_id = videos.id AND vt.tag_id = $${idx})`);
+        if (tagIds.length) {
+            const tagArrayIdx = params.push(tagIds);
+            const tagCountIdx = params.push(tagIds.length);
+            filters.push(`videos.id IN (
+                SELECT video_id
+                FROM video_tags
+                WHERE tag_id = ANY($${tagArrayIdx}::int[])
+                GROUP BY video_id
+                HAVING COUNT(DISTINCT tag_id) = $${tagCountIdx}
+            )`);
         }
 
         const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';

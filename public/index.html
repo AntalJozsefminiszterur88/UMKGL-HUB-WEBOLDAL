@@ -2992,7 +2992,7 @@
             </div>
             <div class="filter-group">
               <label for="tagFilterSelect">Címke</label>
-              <select id="tagFilterSelect">
+              <select id="tagFilterSelect" multiple size="6">
                 <option value="">Összes címke</option>
               </select>
             </div>
@@ -6623,7 +6623,7 @@
         page: 1,
         limit: [12, 24, 40, 80].includes(savedPageSize) ? savedPageSize : 24,
         search: "",
-        tag: "",
+        tag: [],
         sort: savedSortOrder === "oldest" ? "oldest" : "newest",
       };
       let currentVideoQuality = ALLOWED_VIDEO_QUALITIES.includes(savedQuality)
@@ -7085,16 +7085,26 @@
 
       function populateTagSelect() {
         if (!tagFilterSelect) return;
-        const currentValue = tagFilterSelect.value;
+        const validTagIds = Array.isArray(videoFilters.tag)
+          ? videoFilters.tag.filter((id) => availableTags.some((tag) => String(tag.id) === String(id)))
+          : [];
+        if (Array.isArray(videoFilters.tag) && validTagIds.length !== videoFilters.tag.length) {
+          videoFilters.tag = validTagIds;
+        }
+
+        const currentValues = new Set(validTagIds.map((id) => String(id)));
         tagFilterSelect.innerHTML = '<option value="">Összes címke</option>';
         availableTags.forEach((tag) => {
           const option = document.createElement("option");
           option.value = String(tag.id);
           option.textContent = tag.name;
+          if (currentValues.has(option.value)) {
+            option.selected = true;
+          }
           tagFilterSelect.appendChild(option);
         });
-        if (currentValue) {
-          tagFilterSelect.value = currentValue;
+        if (!currentValues.size && tagFilterSelect.multiple) {
+          tagFilterSelect.selectedIndex = -1;
         }
       }
 
@@ -7428,6 +7438,20 @@
         return result;
       }
 
+      function buildVideoQueryParams() {
+        const params = new URLSearchParams();
+        Object.entries(videoFilters).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            if (value.length) {
+              value.forEach((entry) => params.append(key, entry));
+            }
+          } else if (value !== undefined && value !== null && value !== "") {
+            params.append(key, value);
+          }
+        });
+        return params;
+      }
+
       async function loadVideos() {
         if (!videoGridContainer) {
           return;
@@ -7441,10 +7465,7 @@
         videoGridContainer.innerHTML = "";
         if (videoPagination) videoPagination.innerHTML = "";
 
-        const params = new URLSearchParams();
-        Object.entries(videoFilters).forEach(([key, value]) => {
-          if (value) params.append(key, value);
-        });
+        const params = buildVideoQueryParams();
 
         try {
           const response = await fetch(`/api/videos?${params.toString()}`, {
@@ -7864,7 +7885,9 @@
 
       if (tagFilterSelect) {
         tagFilterSelect.addEventListener("change", () => {
-          videoFilters.tag = tagFilterSelect.value;
+          videoFilters.tag = Array.from(tagFilterSelect.selectedOptions)
+            .map((option) => option.value)
+            .filter((value) => value);
           videoFilters.page = 1;
           loadVideos();
         });
@@ -7915,14 +7938,19 @@
         filterResetBtn.addEventListener("click", () => {
           videoFilters.page = 1;
           videoFilters.search = "";
-          videoFilters.tag = "";
+          videoFilters.tag = [];
           videoFilters.sort = "newest";
           if (videoSearchTimeout) {
             clearTimeout(videoSearchTimeout);
             videoSearchTimeout = null;
           }
           if (videoSearchInput) videoSearchInput.value = "";
-          if (tagFilterSelect) tagFilterSelect.value = "";
+          if (tagFilterSelect) {
+            Array.from(tagFilterSelect.options).forEach((option) => {
+              option.selected = false;
+            });
+            tagFilterSelect.selectedIndex = -1;
+          }
           if (sortOrderSelect) {
             sortOrderSelect.value = videoFilters.sort;
             localStorage.setItem(VIDEO_SORT_ORDER_KEY, videoFilters.sort);
