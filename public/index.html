@@ -6130,13 +6130,13 @@
 
     if (loadClipsBtn) {
       loadClipsBtn.addEventListener("click", () => {
-        openClipListWindow();
+        window.open("/clips.html", "_blank");
       });
     }
 
     if (processingStatusBtn) {
       processingStatusBtn.addEventListener("click", () => {
-        openProcessingStatusWindow();
+        window.open("/processing-status.html", "_blank");
       });
     }
 
