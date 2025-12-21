@@ -1129,6 +1129,12 @@
         object-fit: cover;
       }
 
+      .video-card__title-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+
       .video-card__title {
         font-size: clamp(0.95rem, 0.65vw + 0.8rem, 1.05rem);
         font-weight: 700;
@@ -1139,6 +1145,27 @@
         -webkit-box-orient: vertical;
         overflow: hidden;
         line-height: 1.3;
+        flex: 1;
+      }
+
+      .video-card__edit {
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        padding: 0.25rem;
+        border-radius: 8px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+
+      .video-card__edit:hover,
+      .video-card__edit:focus-visible {
+        background: #2f333a;
+        color: #fff;
+        outline: none;
       }
 
       .video-card__meta {
@@ -7475,16 +7502,89 @@
         return trimmed.replace(/\.[^.]+$/i, "").trim();
       }
 
+      async function handleClipTitleEdit(video, titleElement) {
+        if (!video || !Number.isFinite(video.id)) {
+          return;
+        }
+
+        const currentTitle = cleanVideoTitle(video.original_name || video.filename || "") || "Névtelen videó";
+        const updatedTitle = window.prompt("Add meg az új klipcímet:", currentTitle);
+
+        if (updatedTitle === null) {
+          return;
+        }
+
+        const normalizedTitle = updatedTitle.trim();
+        if (!normalizedTitle || normalizedTitle === currentTitle) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/videos/${video.id}/title`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...buildAuthHeaders(),
+            },
+            body: JSON.stringify({ title: normalizedTitle }),
+          });
+
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            const message = data?.message || "Nem sikerült frissíteni a klip címét.";
+            throw new Error(message);
+          }
+
+          const newTitle = data?.original_name || normalizedTitle;
+          video.original_name = newTitle;
+          if (titleElement) {
+            titleElement.textContent = cleanVideoTitle(newTitle) || "Névtelen videó";
+          }
+
+          if (videoPlayerModal?.classList.contains("open")) {
+            const activeVideo = currentVideoList[currentVideoIndex];
+            if (activeVideo?.id === video.id && modalVideoTitle) {
+              modalVideoTitle.textContent = cleanVideoTitle(newTitle) || "Névtelen videó";
+            }
+          }
+
+          showClipToast(data?.message || "A klip címe frissült.");
+        } catch (error) {
+          console.error("Klip cím módosítási hiba:", error);
+          alert(error.message || "Nem sikerült frissíteni a klip címét.");
+        }
+      }
+
       function renderVideoGrid(videos) {
         videoGridContainer.innerHTML = "";
         videos.forEach((video, index) => {
           const card = document.createElement("div");
           card.className = "video-card";
 
+          const titleRow = document.createElement("div");
+          titleRow.className = "video-card__title-row";
+
           const title = document.createElement("p");
           title.className = "video-card__title";
           const rawTitle = video.original_name || video.filename;
           title.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
+          titleRow.appendChild(title);
+
+          if (isAdminUser()) {
+            const editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.className = "video-card__edit";
+            editBtn.title = "Klip címének szerkesztése";
+            editBtn.setAttribute("aria-label", "Klip címének szerkesztése");
+            editBtn.textContent = "✏️";
+            editBtn.addEventListener("click", (event) => {
+              event.stopPropagation();
+              handleClipTitleEdit(video, title);
+            });
+            titleRow.appendChild(editBtn);
+          }
+
+          card.appendChild(titleRow);
 
           const videoElement = document.createElement("video");
           videoElement.poster = video.thumbnail_filename
