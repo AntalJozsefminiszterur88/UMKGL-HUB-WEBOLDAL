@@ -1072,13 +1072,13 @@
       }
 
       .uniform-control {
-        height: 42px;
+        height: 48px;
         box-sizing: border-box;
         border: 1px solid #40444b;
         background-color: #2f3136;
         color: #dcddde;
         border-radius: 4px;
-        font-size: 14px;
+        font-size: 15px;
         padding: 0 10px;
         display: flex;
         align-items: center;
@@ -1106,7 +1106,10 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
 
       .tag-dropdown {
@@ -1173,7 +1176,7 @@
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.04));
         border: 1px solid rgba(255, 255, 255, 0.15);
         color: #f5f6f7;
-        padding: 0.25rem 0.5rem 0.25rem 0.45rem;
+        padding: 2px 8px;
         border-radius: 12px;
         font-size: 0.9rem;
         line-height: 1.25;
@@ -1279,6 +1282,7 @@
         line-height: 1;
         font-size: 0.95rem;
         flex-shrink: 0;
+        min-width: 24px;
         width: 24px;
         height: 24px;
       }
