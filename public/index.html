@@ -7610,18 +7610,32 @@
         const rawTitle = activeVideo.original_name || activeVideo.filename;
         modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
         const videoElements = videoGridContainer.querySelectorAll(".video-card video");
+        const originalSrc = `/uploads/${activeVideo.filename}`;
         const { src, has720pAvailable, prefers720p } = getPreferredVideoSource(
           activeVideo,
           currentVideoQuality
         );
         const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src || "";
         const resolvedSource = src || sourceFromGrid;
+        const shouldFallbackToOriginal = prefers720p && resolvedSource && resolvedSource !== originalSrc;
 
         if (prefers720p && !has720pAvailable) {
           showClipToast("Ehhez a videóhoz nem érhető el 720p verzió.");
         }
 
-        modalVideoPlayer.src = resolvedSource || `/uploads/${activeVideo.filename}`;
+        if (shouldFallbackToOriginal) {
+          modalVideoPlayer.addEventListener(
+            "error",
+            () => {
+              modalVideoPlayer.src = originalSrc;
+              modalVideoPlayer.load();
+              modalVideoPlayer.play().catch(() => {});
+            },
+            { once: true }
+          );
+        }
+
+        modalVideoPlayer.src = resolvedSource || originalSrc;
         modalVideoPlayer.load();
         modalVideoPlayer.play().catch(() => {});
 
