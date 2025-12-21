@@ -1186,10 +1186,11 @@
         object-fit: cover;
       }
 
-      .video-card__title-row {
+      .video-card__header {
         display: flex;
-        align-items: center;
-        gap: 0.2rem;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
       }
 
       .video-card__title {
@@ -1210,11 +1211,11 @@
         background: transparent;
         color: #9ca3af;
         padding: 0;
-        margin-left: 0.2rem;
+        margin: 0;
         border-radius: 6px;
         cursor: pointer;
         display: inline-flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         line-height: 1;
         font-size: 0.95rem;
@@ -1229,7 +1230,6 @@
 
       .video-card__edit:hover,
       .video-card__edit:focus-visible {
-        background: #2f333a;
         color: #fff;
         outline: none;
       }
@@ -7713,14 +7713,14 @@
           const card = document.createElement("div");
           card.className = "video-card";
 
-          const titleRow = document.createElement("div");
-          titleRow.className = "video-card__title-row";
+          const header = document.createElement("div");
+          header.className = "video-card__header";
 
           const title = document.createElement("p");
           title.className = "video-card__title";
           const rawTitle = video.original_name || video.filename;
           title.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
-          titleRow.appendChild(title);
+          header.appendChild(title);
 
           if (isAdminUser()) {
             const editBtn = document.createElement("button");
@@ -7740,10 +7740,10 @@
               event.stopPropagation();
               handleClipTitleEdit(video, title);
             });
-            titleRow.appendChild(editBtn);
+            header.appendChild(editBtn);
           }
 
-          card.appendChild(titleRow);
+          card.appendChild(header);
 
           const videoElement = document.createElement("video");
           videoElement.poster = video.thumbnail_filename
