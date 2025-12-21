@@ -175,6 +175,7 @@
 
       .clip-window__table th {
         font-weight: 600;
+        user-select: none;
       }
 
       .clip-window__table tr:last-child td {
@@ -221,6 +222,16 @@
 
       .clip-window__delete:hover {
         background: #b91c1c;
+      }
+
+      .clip-window__sortable {
+        cursor: pointer;
+      }
+
+      .clip-window__sort-indicator {
+        margin-left: 6px;
+        color: var(--muted);
+        font-size: 12px;
       }
 
       /* Processing styles */
@@ -414,6 +425,49 @@
         });
       }
 
+      function parseDateToTimestamp(value) {
+        const date = new Date(value);
+        const timestamp = date.getTime();
+        return Number.isFinite(timestamp) ? timestamp : 0;
+      }
+
+      function getSortableValue(clip, key) {
+        switch (key) {
+          case "id":
+            return Number(clip.id) || 0;
+          case "original_name":
+            return (clip.original_name || clip.filename || "").toString().toLowerCase();
+          case "sizeBytes":
+            return Number(clip.sizeBytes) || 0;
+          case "uploaded_at":
+          case "content_created_at":
+            return parseDateToTimestamp(clip[key]);
+          default:
+            return 0;
+        }
+      }
+
+      function sortClips(items, sortState) {
+        if (!sortState?.key) {
+          return [...items];
+        }
+
+        const direction = sortState.direction === "asc" ? 1 : -1;
+
+        return [...items].sort((a, b) => {
+          const aValue = getSortableValue(a, sortState.key);
+          const bValue = getSortableValue(b, sortState.key);
+
+          if (aValue < bValue) {
+            return -1 * direction;
+          }
+          if (aValue > bValue) {
+            return 1 * direction;
+          }
+          return 0;
+        });
+      }
+
       async function fetchAdminClips(variant) {
         const params = new URLSearchParams();
         if (variant) {
@@ -435,7 +489,7 @@
         return { items, total };
       }
 
-      async function handleClipDelete(clipId, rowElement, button, clipName, statusEl) {
+      async function handleClipDelete(clipId, rowElement, button, clipName, statusEl, onDelete) {
         if (!Number.isFinite(clipId)) {
           return;
         }
@@ -463,6 +517,10 @@
 
           if (rowElement && rowElement.parentElement) {
             rowElement.parentElement.removeChild(rowElement);
+          }
+
+          if (typeof onDelete === "function") {
+            onDelete(clipId);
           }
 
           if (statusEl) {
@@ -525,14 +583,16 @@
         }
       }
 
-      function renderClipTable(statusEl, tableContainer, items, countEl, isAdmin) {
+      function renderClipTable(statusEl, tableContainer, items, countEl, isAdmin, sortState, onSortChange, onDelete) {
         if (!tableContainer) {
           return;
         }
 
         tableContainer.innerHTML = "";
 
-        if (!Array.isArray(items) || !items.length) {
+        const sortedItems = Array.isArray(items) ? sortClips(items, sortState) : [];
+
+        if (!sortedItems.length) {
           const empty = document.createElement("p");
           empty.className = "clip-window__status";
           empty.textContent = "Nincs megjeleníthető klip.";
@@ -553,18 +613,44 @@
         const table = document.createElement("table");
         table.className = "clip-window__table";
 
+        const sortableColumns = new Set(["id", "original_name", "sizeBytes", "uploaded_at", "content_created_at"]);
+
         const thead = document.createElement("thead");
         const headRow = document.createElement("tr");
-        ["Azonosító", "Fájlnév", "Méret", "Feltöltve", "Egyéb", "Művelet"].forEach((title) => {
+        const columns = [
+          { key: "id", label: "Azonosító" },
+          { key: "original_name", label: "Fájlnév" },
+          { key: "sizeBytes", label: "Méret" },
+          { key: "uploaded_at", label: "Feltöltve" },
+          { key: "content_created_at", label: "Létrehozva" },
+          { key: "extra", label: "Egyéb" },
+          { key: "actions", label: "Művelet" },
+        ];
+
+        columns.forEach((column) => {
           const th = document.createElement("th");
-          th.textContent = title;
+          th.textContent = column.label;
+
+          if (sortableColumns.has(column.key) && typeof onSortChange === "function") {
+            th.classList.add("clip-window__sortable");
+            th.dataset.sortKey = column.key;
+
+            const indicator = document.createElement("span");
+            indicator.className = "clip-window__sort-indicator";
+            const isActive = sortState?.key === column.key;
+            indicator.textContent = isActive ? (sortState.direction === "asc" ? "▲" : "▼") : "↕";
+
+            th.appendChild(indicator);
+            th.addEventListener("click", () => onSortChange(column.key));
+          }
+
           headRow.appendChild(th);
         });
         thead.appendChild(headRow);
         table.appendChild(thead);
 
         const tbody = document.createElement("tbody");
-        items.forEach((clip) => {
+        sortedItems.forEach((clip) => {
           const row = document.createElement("tr");
 
           const idCell = document.createElement("td");
@@ -601,6 +687,10 @@
           uploadedCell.textContent = formatDateTime(clip.uploaded_at);
           row.appendChild(uploadedCell);
 
+          const createdCell = document.createElement("td");
+          createdCell.textContent = formatDateTime(clip.content_created_at);
+          row.appendChild(createdCell);
+
           const extraCell = document.createElement("td");
           const extraParts = [];
           if (clip.uploader) {
@@ -622,7 +712,7 @@
           deleteBtn.textContent = "Törlés";
           deleteBtn.className = "clip-window__delete";
           deleteBtn.addEventListener("click", () => {
-            handleClipDelete(clip.id, row, deleteBtn, clip.original_name, statusEl);
+            handleClipDelete(clip.id, row, deleteBtn, clip.original_name, statusEl, onDelete);
           });
           actionCell.appendChild(deleteBtn);
           row.appendChild(actionCell);
@@ -749,6 +839,33 @@
         const VALID_VARIANTS = ["original", "720p", "other"];
         const adminUser = isAdminUser();
         let clipsLoaded = false;
+        let currentClips = [];
+        let currentSort = { key: "uploaded_at", direction: "desc" };
+        const sortableKeys = new Set(["id", "original_name", "sizeBytes", "uploaded_at", "content_created_at"]);
+
+        function handleSortChange(key) {
+          if (!sortableKeys.has(key)) {
+            return;
+          }
+
+          const isSameKey = currentSort.key === key;
+          const nextDirection = isSameKey && currentSort.direction === "asc" ? "desc" : "asc";
+          currentSort = {
+            key,
+            direction: isSameKey ? nextDirection : key === "original_name" ? "asc" : "desc",
+          };
+
+          renderCurrentClips();
+        }
+
+        function handleClipRemoval(clipId) {
+          currentClips = currentClips.filter((clip) => clip.id !== clipId);
+          renderCurrentClips();
+        }
+
+        const renderCurrentClips = () => {
+          renderClipTable(statusEl, tableContainer, currentClips, countEl, adminUser, currentSort, handleSortChange, handleClipRemoval);
+        };
 
         if (!isUserLoggedIn()) {
           alert("Nincs érvényes hitelesítés. Jelentkezz be, hogy lásd a klipeket és a feldolgozást.");
@@ -769,7 +886,8 @@
 
           try {
             const { items } = await fetchAdminClips(variant);
-            renderClipTable(statusEl, tableContainer, items, countEl, adminUser);
+            currentClips = items;
+            renderCurrentClips();
             clipsLoaded = true;
           } catch (error) {
             console.error("Klip lista betöltési hiba:", error);
