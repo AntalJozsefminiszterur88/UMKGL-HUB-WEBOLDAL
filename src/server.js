@@ -171,11 +171,10 @@ async function transcodeVideoTo720p(inputPath, outputDir, originalFilename) {
 async function processVideoFor720p(videoId, inputPath, outputDir, originalFilename) {
     const result = await transcodeVideoTo720p(inputPath, outputDir, originalFilename);
 
-    await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [videoId]);
-
     return {
         converted: !result.skipped,
         skippedReason: result.skipped ? result.reason : null,
+        outputPath: result.outputPath || null,
     };
 }
 
@@ -1699,6 +1698,56 @@ app.post('/api/admin/rescue-720p-files', authenticateToken, isAdmin, async (_req
     }
 });
 
+app.post('/api/admin/remove-phantom-720p', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const { rows: videos } = await db.query('SELECT id, filename, original_name FROM videos WHERE has_720p = 1');
+        const corrected = [];
+
+        for (const video of videos) {
+            const { outputPath } = build720pOutputPaths(video);
+            let isPhantom = false;
+
+            try {
+                const stats = await fs.promises.stat(outputPath);
+                isPhantom = !stats.isFile() || stats.size === 0;
+            } catch (err) {
+                if (err.code === 'ENOENT') {
+                    isPhantom = true;
+                } else {
+                    throw err;
+                }
+            }
+
+            if (isPhantom) {
+                try {
+                    await fs.promises.unlink(outputPath);
+                } catch (unlinkErr) {
+                    if (unlinkErr.code !== 'ENOENT') {
+                        throw unlinkErr;
+                    }
+                }
+
+                await db.query('UPDATE videos SET has_720p = 0 WHERE id = $1', [video.id]);
+
+                console.log(
+                    `Fantom 720p jelölés javítva | videoId=${video.id} | path=${path.relative(uploadsRootDirectory, outputPath)}`
+                );
+
+                corrected.push({
+                    videoId: video.id,
+                    filename: video.filename,
+                    removedPath: path.relative(uploadsRootDirectory, outputPath),
+                });
+            }
+        }
+
+        res.status(200).json({ inspected: videos.length, correctedCount: corrected.length, corrected });
+    } catch (err) {
+        console.error('Hiba a fantom 720p jelölések eltávolításakor:', err);
+        res.status(500).json({ message: 'Nem sikerült eltávolítani a fantom 720p jelöléseket.' });
+    }
+});
+
 app.post('/api/admin/reorganize-files', authenticateToken, isAdmin, async (_req, res) => {
     try {
         const { rows } = await db.query(`
@@ -1905,12 +1954,18 @@ async function processVideoQueue() {
             }
 
             if (!hasValid720p) {
-                await processVideoFor720p(
+                const outcome = await processVideoFor720p(
                     currentVideo.id,
                     videoPath,
                     outputDir,
                     currentVideo.original_name || currentVideo.filename
                 );
+
+                if (outcome.converted) {
+                    await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [currentVideo.id]);
+                } else {
+                    await db.query('UPDATE videos SET has_720p = 0 WHERE id = $1', [currentVideo.id]);
+                }
             } else {
                 await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [currentVideo.id]);
             }
