@@ -2167,6 +2167,42 @@ app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
     }
 });
 
+app.patch('/api/videos/:id/title', authenticateToken, isAdmin, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+    }
+
+    const rawTitle = (req.body?.title || req.body?.original_name || '').toString();
+    const normalizedTitle = normalizeFilename(rawTitle).trim();
+
+    if (!normalizedTitle) {
+        return res.status(400).json({ message: 'Az új cím megadása kötelező.' });
+    }
+
+    const truncatedTitle = normalizedTitle.slice(0, 255);
+
+    try {
+        const { rows } = await db.query(
+            'UPDATE videos SET original_name = $1 WHERE id = $2 RETURNING id, original_name',
+            [truncatedTitle, videoId]
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({ message: 'A videó nem található.' });
+        }
+
+        return res.status(200).json({
+            message: 'A klip címe frissült.',
+            id: rows[0].id,
+            original_name: rows[0].original_name,
+        });
+    } catch (err) {
+        console.error('Hiba a klip címének frissítésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült frissíteni a klip címét.' });
+    }
+});
+
 app.get('/api/programs', async (_req, res) => {
     try {
         const { rows } = await db.query('SELECT id, name, description, image_filename, file_filename, original_filename, download_count, created_at FROM programs ORDER BY created_at DESC');

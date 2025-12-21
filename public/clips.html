@@ -90,6 +90,34 @@
         border-bottom: none;
       }
 
+      .clip-window__name {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .clip-window__name-text {
+        flex: 1;
+      }
+
+      .clip-window__edit {
+        border: none;
+        background: none;
+        cursor: pointer;
+        color: #2563eb;
+        padding: 4px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .clip-window__edit:hover,
+      .clip-window__edit:focus-visible {
+        background: #e0e7ff;
+        outline: none;
+      }
+
       .clip-window__delete {
         background: #dc2626;
         color: #fff;
@@ -159,6 +187,10 @@
 
       function isUserLoggedIn() {
         return !!getStoredToken();
+      }
+
+      function isAdminUser() {
+        return localStorage.getItem(SESSION_KEYS.isAdmin) === "true";
       }
 
       function buildAuthHeaders() {
@@ -269,7 +301,52 @@
         }
       }
 
-      function renderClipTable(statusEl, tableContainer, items, countEl) {
+      async function handleClipTitleEdit(clip, nameTextEl, statusEl) {
+        const currentTitle = clip.original_name || "Ismeretlen";
+        const updatedTitle = window.prompt("Add meg az új klipcímet:", currentTitle);
+
+        if (updatedTitle === null) {
+          return;
+        }
+
+        const normalizedTitle = updatedTitle.trim();
+        if (!normalizedTitle || normalizedTitle === currentTitle) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/videos/${clip.id}/title`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...buildAuthHeaders(),
+            },
+            body: JSON.stringify({ title: normalizedTitle }),
+          });
+
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            const message = data?.message || "Nem sikerült frissíteni a klip címét.";
+            throw new Error(message);
+          }
+
+          const newTitle = data?.original_name || normalizedTitle;
+          clip.original_name = newTitle;
+          if (nameTextEl) {
+            nameTextEl.textContent = newTitle;
+          }
+          if (statusEl) {
+            statusEl.textContent = data?.message || "A klip címe frissült.";
+          }
+        } catch (error) {
+          console.error("Klip cím módosítási hiba:", error);
+          if (statusEl) {
+            statusEl.textContent = error.message || "Nem sikerült frissíteni a klip címét.";
+          }
+        }
+      }
+
+      function renderClipTable(statusEl, tableContainer, items, countEl, isAdmin) {
         if (!tableContainer) {
           return;
         }
@@ -316,7 +393,25 @@
           row.appendChild(idCell);
 
           const nameCell = document.createElement("td");
-          nameCell.textContent = clip.original_name || "Ismeretlen";
+          nameCell.className = "clip-window__name";
+
+          const nameText = document.createElement("span");
+          nameText.className = "clip-window__name-text";
+          nameText.textContent = clip.original_name || "Ismeretlen";
+          nameCell.appendChild(nameText);
+
+          if (isAdmin) {
+            const editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.className = "clip-window__edit";
+            editBtn.title = "Klip címének szerkesztése";
+            editBtn.textContent = "✏️";
+            editBtn.addEventListener("click", () => {
+              handleClipTitleEdit(clip, nameText, statusEl);
+            });
+            nameCell.appendChild(editBtn);
+          }
+
           row.appendChild(nameCell);
 
           const sizeCell = document.createElement("td");
@@ -371,6 +466,7 @@
         const countEl = document.getElementById("clipWindowCount");
         const VARIANT_STORAGE_KEY = "clipWindowVariant";
         const VALID_VARIANTS = ["original", "720p", "other"];
+        const adminUser = isAdminUser();
 
         if (!isUserLoggedIn()) {
           alert("Nincs érvényes hitelesítés. Jelentkezz be, hogy lásd a klipeket.");
@@ -391,7 +487,7 @@
 
           try {
             const { items } = await fetchAdminClips(variant);
-            renderClipTable(statusEl, tableContainer, items, countEl);
+            renderClipTable(statusEl, tableContainer, items, countEl, adminUser);
           } catch (error) {
             console.error("Klip lista betöltési hiba:", error);
             if (statusEl) {
