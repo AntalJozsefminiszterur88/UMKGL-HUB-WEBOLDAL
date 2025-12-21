@@ -7494,9 +7494,31 @@
         return `${filename.slice(0, dotIndex)}${suffix}${filename.slice(dotIndex)}`;
       }
 
+      function stripQualitySuffix(filename, suffix) {
+        if (typeof filename !== "string") return "";
+        const dotIndex = filename.lastIndexOf(".");
+
+        if (dotIndex === -1) {
+          return filename.replace(new RegExp(`${suffix}$`), "");
+        }
+
+        const base = filename.slice(0, dotIndex).replace(new RegExp(`${suffix}$`), "");
+        const extension = filename.slice(dotIndex);
+        return `${base}${extension}`;
+      }
+
+      function getOriginalVideoSource(video) {
+        if (!video?.filename) return "";
+
+        let originalPath = video.filename.replace("/720p/", "/eredeti/");
+        originalPath = stripQualitySuffix(originalPath, "_720p");
+
+        return `/uploads/${originalPath}`;
+      }
+
       function getPreferredVideoSource(video, qualityPreference) {
         const normalizedQuality = normalizeQualityPreference(qualityPreference);
-        const baseSource = video?.filename ? `/uploads/${video.filename}` : "";
+        const originalSource = getOriginalVideoSource(video);
         const has720pAvailable = Number(video?.has_720p) === 1 || video?.has_720p === true || video?.has_720p === "1";
 
         if (normalizedQuality === "720p" && has720pAvailable && video?.filename) {
@@ -7505,10 +7527,10 @@
             ? appendQualitySuffix(video.filename.replace("/eredeti/", "/720p/"), "_720p")
             : appendQualitySuffix(video.filename, "_720p");
 
-          return { src: `/uploads/${targetPath}`, has720pAvailable, prefers720p: true };
+          return { src: `/uploads/${targetPath}`, has720pAvailable, prefers720p: true, originalSource };
         }
 
-        return { src: baseSource, has720pAvailable, prefers720p: normalizedQuality === "720p" };
+        return { src: originalSource, has720pAvailable, prefers720p: normalizedQuality === "720p", originalSource };
       }
 
       function showClipToast(message) {
@@ -7824,11 +7846,11 @@
         const rawTitle = activeVideo.original_name || activeVideo.filename;
         modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
         const videoElements = videoGridContainer.querySelectorAll(".video-card video");
-        const originalSrc = `/uploads/${activeVideo.filename}`;
-        const { src, has720pAvailable, prefers720p } = getPreferredVideoSource(
+        const { src, has720pAvailable, prefers720p, originalSource } = getPreferredVideoSource(
           activeVideo,
           currentVideoQuality
         );
+        const originalSrc = originalSource || `/uploads/${activeVideo.filename}`;
         const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src || "";
         const resolvedSource = src || sourceFromGrid;
         const shouldFallbackToOriginal = prefers720p && resolvedSource && resolvedSource !== originalSrc;
