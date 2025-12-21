@@ -1073,6 +1073,63 @@
         color: #c9d1d9;
       }
 
+      .tag-filter-control {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .selected-tags-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 0.35rem 0.5rem;
+        min-height: 38px;
+      }
+
+      .selected-tag-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.04));
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #f5f6f7;
+        padding: 0.35rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.9rem;
+        line-height: 1.25;
+      }
+
+      .selected-tag-pill__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+      }
+
+      .selected-tag-pill__remove {
+        background: transparent;
+        border: none;
+        color: #cfd4df;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        padding: 0 0.15rem;
+      }
+
+      .selected-tag-pill__remove:hover {
+        color: #fff;
+      }
+
+      .selected-tag-pill--placeholder {
+        color: #9ca3af;
+        border-style: dashed;
+        border-color: rgba(255, 255, 255, 0.15);
+      }
+
       .filter-group input,
       .filter-group select {
         background: #2c2f33;
@@ -2993,9 +3050,12 @@
             </div>
             <div class="filter-group">
               <label for="tagFilterSelect">Címke</label>
-              <select id="tagFilterSelect" multiple size="6">
-                <option value="">Összes címke</option>
-              </select>
+              <div class="tag-filter-control">
+                <div id="selectedTagContainer" class="selected-tags-container" aria-live="polite"></div>
+                <select id="tagFilterSelect">
+                  <option value="">Válassz címkét</option>
+                </select>
+              </div>
             </div>
             <div class="filter-group">
               <label for="sortOrderSelect">Rendezés</label>
@@ -6591,6 +6651,7 @@
       const globalTagSelect = document.getElementById("globalTagSelect");
       const videoSearchInput = document.getElementById("videoSearchInput");
       const tagFilterSelect = document.getElementById("tagFilterSelect");
+      const selectedTagContainer = document.getElementById("selectedTagContainer");
       const sortOrderSelect = document.getElementById("sortOrderSelect");
       const videoQualitySelect = document.getElementById("videoQualitySelect");
       const pageSizeSelect = document.getElementById("pageSizeSelect");
@@ -6666,6 +6727,7 @@
       }
 
       applyQualityPreference(currentVideoQuality);
+      renderSelectedTagChips();
 
       function isAdminUser() {
         return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
@@ -7018,6 +7080,47 @@
         option.style.borderLeft = `6px solid ${safeColor}`;
       }
 
+      function renderSelectedTagChips() {
+        if (!selectedTagContainer) return;
+        selectedTagContainer.innerHTML = "";
+
+        if (!videoFilters.tag.length) {
+          const placeholder = document.createElement("span");
+          placeholder.className = "selected-tag-pill selected-tag-pill--placeholder";
+          placeholder.textContent = "Nincs kiválasztott címke";
+          selectedTagContainer.appendChild(placeholder);
+          return;
+        }
+
+        videoFilters.tag.forEach((tagId) => {
+          const tagData = availableTags.find((tag) => String(tag.id) === String(tagId));
+          const chip = document.createElement("span");
+          chip.className = "selected-tag-pill";
+
+          const dot = document.createElement("span");
+          dot.className = "selected-tag-pill__dot";
+          dot.style.background = normalizeColor(tagData?.color || DEFAULT_TAG_COLOR);
+
+          const label = document.createElement("span");
+          label.textContent = tagData?.name || `Címke #${tagId}`;
+
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "selected-tag-pill__remove";
+          removeBtn.setAttribute("aria-label", `${label.textContent} törlése`);
+          removeBtn.textContent = "×";
+          removeBtn.addEventListener("click", () => {
+            videoFilters.tag = videoFilters.tag.filter((id) => String(id) !== String(tagId));
+            videoFilters.page = 1;
+            populateTagSelect();
+            loadVideos();
+          });
+
+          chip.append(dot, label, removeBtn);
+          selectedTagContainer.appendChild(chip);
+        });
+      }
+
       function renderGlobalTagSelect() {
         if (!globalTagSelect) return;
         const currentSelection = getSelectValues(globalTagSelect);
@@ -7094,19 +7197,16 @@
         }
 
         const currentValues = new Set(validTagIds.map((id) => String(id)));
-        tagFilterSelect.innerHTML = '<option value="">Összes címke</option>';
+        tagFilterSelect.innerHTML = '<option value="">Válassz címkét</option>';
         availableTags.forEach((tag) => {
           const option = document.createElement("option");
           option.value = String(tag.id);
           option.textContent = tag.name;
-          if (currentValues.has(option.value)) {
-            option.selected = true;
-          }
+          option.disabled = currentValues.has(option.value);
+          styleTagOption(option, tag.color);
           tagFilterSelect.appendChild(option);
         });
-        if (!currentValues.size && tagFilterSelect.multiple) {
-          tagFilterSelect.selectedIndex = -1;
-        }
+        renderSelectedTagChips();
       }
 
       async function fetchTags() {
@@ -7886,11 +7986,17 @@
 
       if (tagFilterSelect) {
         tagFilterSelect.addEventListener("change", () => {
-          videoFilters.tag = Array.from(tagFilterSelect.selectedOptions)
-            .map((option) => option.value)
-            .filter((value) => value);
-          videoFilters.page = 1;
-          loadVideos();
+          const selectedValue = tagFilterSelect.value;
+          if (!selectedValue) return;
+
+          if (!videoFilters.tag.includes(selectedValue)) {
+            videoFilters.tag = [...videoFilters.tag, selectedValue];
+            videoFilters.page = 1;
+            loadVideos();
+          }
+
+          tagFilterSelect.value = "";
+          populateTagSelect();
         });
       }
 
@@ -7947,10 +8053,8 @@
           }
           if (videoSearchInput) videoSearchInput.value = "";
           if (tagFilterSelect) {
-            Array.from(tagFilterSelect.options).forEach((option) => {
-              option.selected = false;
-            });
-            tagFilterSelect.selectedIndex = -1;
+            tagFilterSelect.value = "";
+            populateTagSelect();
           }
           if (sortOrderSelect) {
             sortOrderSelect.value = videoFilters.sort;
