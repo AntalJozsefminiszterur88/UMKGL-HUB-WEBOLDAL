@@ -3143,8 +3143,10 @@
             <div class="filter-group">
               <label for="videoQualitySelect">Minőség</label>
               <select id="videoQualitySelect" class="uniform-control">
-                <option value="1080p">Eredeti (1080p)</option>
-                <option value="720p">HD (720p)</option>
+                <option value="original">Eredeti</option>
+                <option value="1440p">1440p</option>
+                <option value="1080p">1080p</option>
+                <option value="720p">720p</option>
               </select>
             </div>
             <div class="filter-group">
@@ -6754,7 +6756,7 @@
       let tagSelectHandlersAttached = false;
       const VIDEO_QUALITY_KEY = "videoQualityPreference";
       const DEFAULT_VIDEO_QUALITY = "1080p";
-      const ALLOWED_VIDEO_QUALITIES = ["1080p", "720p"];
+      const ALLOWED_VIDEO_QUALITIES = ["original", "1440p", "1080p", "720p"];
       const VIDEO_PAGE_SIZE_KEY = "videoPageSize";
       const VIDEO_SORT_ORDER_KEY = "videoSortOrder";
       const savedPageSize = Number.parseInt(localStorage.getItem(VIDEO_PAGE_SIZE_KEY), 10);
@@ -7619,21 +7621,59 @@
         return `/uploads/${originalPath}`;
       }
 
+      function buildQualitySource(video, quality) {
+        if (!video?.filename) return "";
+        const suffix = `_${quality}`;
+        const targetPath = video.filename.includes("/eredeti/")
+          ? appendQualitySuffix(video.filename.replace("/eredeti/", `/${quality}/`), suffix)
+          : appendQualitySuffix(video.filename, suffix);
+
+        return `/uploads/${targetPath}`;
+      }
+
+      function getQualityAvailability(video) {
+        return {
+          "1440p": Number(video?.has_1440p) === 1 || video?.has_1440p === true || video?.has_1440p === "1",
+          "1080p": Number(video?.has_1080p) === 1 || video?.has_1080p === true || video?.has_1080p === "1",
+          "720p": Number(video?.has_720p) === 1 || video?.has_720p === true || video?.has_720p === "1",
+        };
+      }
+
       function getPreferredVideoSource(video, qualityPreference) {
         const normalizedQuality = normalizeQualityPreference(qualityPreference);
         const originalSource = getOriginalVideoSource(video);
-        const has720pAvailable = Number(video?.has_720p) === 1 || video?.has_720p === true || video?.has_720p === "1";
+        const availability = getQualityAvailability(video);
 
-        if (normalizedQuality === "720p" && has720pAvailable && video?.filename) {
-          const hasOriginalFolder = video.filename.includes("/eredeti/");
-          const targetPath = hasOriginalFolder
-            ? appendQualitySuffix(video.filename.replace("/eredeti/", "/720p/"), "_720p")
-            : appendQualitySuffix(video.filename, "_720p");
-
-          return { src: `/uploads/${targetPath}`, has720pAvailable, prefers720p: true, originalSource };
+        if (normalizedQuality === "original") {
+          return { src: originalSource, originalSource, resolvedQuality: "original", requestedQuality: normalizedQuality, availability };
         }
 
-        return { src: originalSource, has720pAvailable, prefers720p: normalizedQuality === "720p", originalSource };
+        const order = ["1440p", "1080p", "720p"];
+        const startIndex = Math.max(order.indexOf(normalizedQuality), 0);
+
+        for (let i = startIndex; i < order.length; i += 1) {
+          const candidate = order[i];
+          if (availability[candidate]) {
+            return {
+              src: buildQualitySource(video, candidate),
+              originalSource,
+              resolvedQuality: candidate,
+              requestedQuality: normalizedQuality,
+              availability,
+            };
+          }
+        }
+
+        return { src: originalSource, originalSource, resolvedQuality: "original", requestedQuality: normalizedQuality, availability };
+      }
+
+      function listAvailableQualities(video) {
+        const availability = getQualityAvailability(video);
+        const available = ["1440p", "1080p", "720p"].filter((quality) => availability[quality]);
+        if (!available.length) {
+          return ["Eredeti"];
+        }
+        return [...available, "Eredeti"];
       }
 
       function showClipToast(message) {
@@ -7891,6 +7931,10 @@
           uploadedAt.textContent = formatDate(displayedDate);
           meta.append(uploader, uploadedAt);
 
+          const qualityInfo = document.createElement("div");
+          qualityInfo.className = "video-card__qualities";
+          qualityInfo.textContent = `Elérhető minőségek: ${listAvailableQualities(video).join(", ")}`;
+
           const tagList = document.createElement("div");
           tagList.className = "tag-list";
           (video.tags || []).forEach((tag) => {
@@ -7904,6 +7948,7 @@
           card.appendChild(title);
           card.appendChild(videoElement);
           card.appendChild(meta);
+          card.appendChild(qualityInfo);
           if (tagList.childElementCount) {
             card.appendChild(tagList);
           }
@@ -7956,17 +8001,19 @@
         const rawTitle = activeVideo.original_name || activeVideo.filename;
         modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
         const videoElements = videoGridContainer.querySelectorAll(".video-card video");
-        const { src, has720pAvailable, prefers720p, originalSource } = getPreferredVideoSource(
+        const { src, originalSource, resolvedQuality, requestedQuality, availability } = getPreferredVideoSource(
           activeVideo,
           currentVideoQuality
         );
         const originalSrc = originalSource || `/uploads/${activeVideo.filename}`;
         const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src || "";
         const resolvedSource = src || sourceFromGrid;
-        const shouldFallbackToOriginal = prefers720p && resolvedSource && resolvedSource !== originalSrc;
+        const requestedAvailable = requestedQuality === "original" ? true : availability[requestedQuality];
+        const shouldFallbackToOriginal = resolvedQuality !== "original";
 
-        if (prefers720p && !has720pAvailable) {
-          showClipToast("Ehhez a videóhoz nem érhető el 720p verzió.");
+        if (!requestedAvailable && requestedQuality !== resolvedQuality) {
+          const fallbackLabel = resolvedQuality === "original" ? "az eredeti verzióra" : `${resolvedQuality} minőségre`;
+          showClipToast(`A kért minőség nem érhető el, visszaváltás ${fallbackLabel}.`);
         }
 
         if (shouldFallbackToOriginal) {
