@@ -1050,10 +1050,10 @@
       }
 
       .clip-filters {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: minmax(240px, 1.6fr) minmax(200px, 1.2fr) repeat(3, minmax(150px, 1fr)) auto;
         gap: 15px;
-        align-items: flex-end;
+        align-items: end;
         background: #1f2227;
         padding: 15px;
         border-radius: 8px;
@@ -1063,7 +1063,7 @@
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
-        flex: 1 1 200px;
+        min-width: 0;
       }
 
       .filter-group label {
@@ -1095,14 +1095,13 @@
 
       .tag-select-container {
         position: relative;
-        flex: 1 1 200px;
         min-width: 200px;
       }
 
       .tag-select-box {
         cursor: pointer;
         width: 100%;
-        min-height: 42px;
+        height: 48px;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -1110,6 +1109,8 @@
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
+        box-sizing: border-box;
+        padding: 0 10px;
       }
 
       .tag-dropdown {
@@ -1156,6 +1157,16 @@
       .custom-select-option[disabled] {
         opacity: 0.5;
         cursor: not-allowed;
+      }
+
+      @media (max-width: 1100px) {
+        .clip-filters {
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+
+        .filter-group--actions {
+          justify-self: start;
+        }
       }
 
       .custom-select-option__color,
