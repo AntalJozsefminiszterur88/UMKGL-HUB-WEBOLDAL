@@ -65,6 +65,7 @@ async function initializeDatabase() {
         has_720p INTEGER DEFAULT 0,
         has_1080p INTEGER DEFAULT 0,
         has_1440p INTEGER DEFAULT 0,
+        original_quality TEXT,
         processing_status TEXT DEFAULT 'done',
         FOREIGN KEY (uploader_id) REFERENCES users(id)
       )
@@ -93,6 +94,9 @@ async function initializeDatabase() {
     );
     await client.query(
       "ALTER TABLE videos ADD COLUMN IF NOT EXISTS processing_status TEXT DEFAULT 'done'"
+    );
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS original_quality TEXT'
     );
 
     await client.query(`
