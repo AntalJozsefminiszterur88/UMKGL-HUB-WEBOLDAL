@@ -36,6 +36,8 @@ const uploadsRootDirectory = path.join(__dirname, '..', 'public', 'uploads');
 const clipsDirectory = path.join(uploadsRootDirectory, 'klippek');
 const clipsOriginalDirectory = path.join(clipsDirectory, 'eredeti');
 const clips720pDirectory = path.join(clipsDirectory, '720p');
+const clips1080pDirectory = path.join(clipsDirectory, '1080p');
+const clips1440pDirectory = path.join(clipsDirectory, '1440p');
 const thumbnailsDirectory = path.join(uploadsRootDirectory, 'thumbnails');
 const ensureDirectoryExists = (dirPath) => {
     try {
@@ -51,6 +53,8 @@ ensureDirectoryExists(uploadsRootDirectory);
 ensureDirectoryExists(clipsDirectory);
 ensureDirectoryExists(clipsOriginalDirectory);
 ensureDirectoryExists(clips720pDirectory);
+ensureDirectoryExists(clips1080pDirectory);
+ensureDirectoryExists(clips1440pDirectory);
 ensureDirectoryExists(thumbnailsDirectory);
 
 let isProcessing = false;
@@ -140,17 +144,37 @@ function getVideoHeight(filePath) {
     });
 }
 
-async function transcodeVideoTo720p(inputPath, outputDir, originalFilename) {
+function determineTargetResolutions(videoHeight) {
+    if (!Number.isFinite(videoHeight)) {
+        return [];
+    }
+
+    if (videoHeight >= 2160) {
+        return [1440, 1080, 720];
+    }
+
+    if (videoHeight >= 1440) {
+        return [1080, 720];
+    }
+
+    if (videoHeight >= 1080) {
+        return [720];
+    }
+
+    return [];
+}
+
+async function transcodeVideoToHeight(inputPath, outputDir, originalFilename, targetHeight) {
     const currentHeight = await getVideoHeight(inputPath);
-    if (!currentHeight || currentHeight <= 720) {
-        return { skipped: true, reason: 'Source height is 720p or lower' };
+    if (!currentHeight || currentHeight <= targetHeight) {
+        return { skipped: true, reason: `Source height is ${targetHeight}p or lower` };
     }
 
     const targetOutputDir = outputDir || path.dirname(inputPath);
     const parsedOriginal = path.parse(originalFilename || inputPath);
     const extension = parsedOriginal.ext || path.extname(inputPath) || '.mp4';
     const baseName = path.parse(inputPath).name;
-    const outputFilename = `${baseName}_720p${extension}`;
+    const outputFilename = `${baseName}_${targetHeight}p${extension}`;
     const outputPath = path.join(targetOutputDir, outputFilename);
 
     await fs.promises.mkdir(targetOutputDir, { recursive: true });
@@ -158,7 +182,7 @@ async function transcodeVideoTo720p(inputPath, outputDir, originalFilename) {
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
             .outputOptions(['-map_metadata 0', '-movflags +faststart'])
-            .videoFilters('scale=-2:720:flags=lanczos')
+            .videoFilters(`scale=-2:${targetHeight}:flags=lanczos`)
             .videoCodec('libx264')
             .audioCodec('aac')
             .output(outputPath)
@@ -166,16 +190,6 @@ async function transcodeVideoTo720p(inputPath, outputDir, originalFilename) {
             .on('error', (err) => reject(err))
             .run();
     });
-}
-
-async function processVideoFor720p(videoId, inputPath, outputDir, originalFilename) {
-    const result = await transcodeVideoTo720p(inputPath, outputDir, originalFilename);
-
-    return {
-        converted: !result.skipped,
-        skippedReason: result.skipped ? result.reason : null,
-        outputPath: result.outputPath || null,
-    };
 }
 
 function computeFileHash(filePath) {
@@ -700,7 +714,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
 
 app.post('/api/profile/update-quality', authenticateToken, async (req, res) => {
     const { quality } = req.body || {};
-    const allowedQualities = ['720p', '1080p'];
+    const allowedQualities = ['original', '1440p', '1080p', '720p'];
 
     if (!allowedQualities.includes(quality)) {
         return res.status(400).json({ message: 'Érvénytelen minőség érték.' });
@@ -1106,12 +1120,12 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
                 OFFSET $${dataParams.length}
             )
             SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at,
-                   fv.thumbnail_filename, fv.has_720p,
+                   fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p,
                    COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id
-            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p
+            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p
             ORDER BY fv.content_created_at ${sortOrder};
         `;
 
@@ -1352,7 +1366,7 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
 
             if (needsProcessing) {
                 await db.query(
-                    "UPDATE videos SET has_720p = 0, processing_status = 'pending' WHERE id = $1",
+                    "UPDATE videos SET has_720p = 0, has_1080p = 0, has_1440p = 0, processing_status = 'pending' WHERE id = $1",
                     [video.id]
                 );
                 queuedVideos.push(video.id);
@@ -1365,6 +1379,73 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
     } catch (err) {
         console.error('Hiba a hiányzó 720p videók újraütemezése során:', err);
         res.status(500).json({ message: 'Nem sikerült elvégezni a 720p feldolgozás ütemezését.' });
+    }
+});
+
+app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, res) => {
+    const summary = {
+        checked: 0,
+        queued: 0,
+        deletedPhantom: 0,
+        updated: 0,
+    };
+
+    try {
+        const { rows: videos } = await db.query('SELECT id, filename, original_name, processing_status FROM videos');
+
+        for (const video of videos) {
+            summary.checked += 1;
+            const updates = { 720: 0, 1080: 0, 1440: 0 };
+            const originalPath = path.join(uploadsRootDirectory, video.filename);
+            const videoHeight = await getVideoHeight(originalPath);
+            const targets = determineTargetResolutions(videoHeight);
+            let shouldQueue = false;
+
+            for (const height of [720, 1080, 1440]) {
+                const { outputPath } = buildResolutionOutputPaths(video, height);
+                try {
+                    const stats = await fs.promises.stat(outputPath);
+                    if (stats.isFile() && stats.size > 0) {
+                        updates[height] = 1;
+                        continue;
+                    }
+
+                    if (stats.isFile() && stats.size === 0) {
+                        await safeUnlink(outputPath);
+                        summary.deletedPhantom += 1;
+                    }
+                } catch (err) {
+                    if (err.code !== 'ENOENT') {
+                        console.error(`Nem sikerült ellenőrizni a ${height}p verziót (${video.id}):`, err);
+                    }
+                }
+
+                if (targets.includes(height)) {
+                    shouldQueue = true;
+                }
+            }
+
+            const newStatus = shouldQueue ? 'pending' : video.processing_status;
+
+            await db.query(
+                'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3, processing_status = $4 WHERE id = $5',
+                [updates[720], updates[1080], updates[1440], newStatus, video.id]
+            );
+
+            summary.updated += 1;
+            if (shouldQueue) {
+                summary.queued += 1;
+            }
+        }
+
+        if (summary.queued > 0) {
+            processVideoQueue();
+        }
+
+        res.status(200).json({ message: 'Repair completed', summary });
+    } catch (err) {
+        console.error('Hiba a videók javítása során:', err);
+        res.status(500).json({ message: 'Nem sikerült javítani a videókat.', summary });
     }
 });
 
@@ -1492,7 +1573,7 @@ app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, (_req, re
 
     (async () => {
         try {
-            const targetDirectories = [clipsOriginalDirectory, clips720pDirectory];
+            const targetDirectories = [clipsOriginalDirectory, clips720pDirectory, clips1080pDirectory, clips1440pDirectory];
             const allMp4Files = [];
 
             for (const directory of targetDirectories) {
@@ -1906,15 +1987,25 @@ function resolveFolderNameFromFilename(filename) {
     return possibleFolder ? sanitizeFolderName(possibleFolder) : 'egyeb';
 }
 
-function build720pOutputPaths(video) {
+function buildResolutionOutputPaths(video, targetHeight) {
     const extension = path.extname(video.original_name || video.filename) || '.mp4';
     const baseName = path.parse(video.original_name || video.filename).name || path.parse(video.filename).name;
     const folderName = resolveFolderNameFromFilename(video.filename);
-    const outputDir = path.join(clips720pDirectory, folderName);
-    const outputFilename = `${baseName}_720p${extension}`;
+    const targetLabel = `${targetHeight}p`;
+    const baseDir = targetHeight === 720
+        ? clips720pDirectory
+        : targetHeight === 1080
+            ? clips1080pDirectory
+            : clips1440pDirectory;
+    const outputDir = path.join(baseDir, folderName);
+    const outputFilename = `${baseName}_${targetLabel}${extension}`;
     const outputPath = path.join(outputDir, outputFilename);
 
-    return { outputDir, outputPath, outputFilename };
+    return { outputDir, outputPath, outputFilename, targetLabel };
+}
+
+function build720pOutputPaths(video) {
+    return buildResolutionOutputPaths(video, 720);
 }
 
 async function processVideoQueue() {
@@ -1958,36 +2049,54 @@ async function processVideoQueue() {
                 console.error(`Hiba a(z) ${currentVideo.id} videó faststart optimalizálása során:`, optErr);
             }
 
-            const { outputDir, outputPath } = build720pOutputPaths(currentVideo);
-            await fs.promises.mkdir(outputDir, { recursive: true });
+            const videoHeight = await getVideoHeight(videoPath);
+            const availability = { 720: 0, 1080: 0, 1440: 0 };
+            const targets = determineTargetResolutions(videoHeight);
 
-            let hasValid720p = false;
+            const resolutions = [720, 1080, 1440];
+            const outputConfigs = Object.fromEntries(resolutions.map((height) => [height, buildResolutionOutputPaths(currentVideo, height)]));
 
-            try {
-                const stats = await fs.promises.stat(outputPath);
-                hasValid720p = stats.isFile() && stats.size > 0;
-            } catch (statErr) {
-                if (statErr.code !== 'ENOENT') {
-                    throw statErr;
+            for (const height of resolutions) {
+                const { outputPath } = outputConfigs[height];
+                try {
+                    const stats = await fs.promises.stat(outputPath);
+                    if (stats.isFile() && stats.size > 0) {
+                        availability[height] = 1;
+                        continue;
+                    }
+                } catch (statErr) {
+                    if (statErr.code !== 'ENOENT') {
+                        console.error(`Nem sikerült ellenőrizni a ${height}p verziót (${currentVideo.id}):`, statErr);
+                    }
+                }
+
+                if (!targets.includes(height)) {
+                    continue;
+                }
+
+                const { outputDir } = outputConfigs[height];
+                await fs.promises.mkdir(outputDir, { recursive: true });
+
+                try {
+                    const result = await transcodeVideoToHeight(
+                        videoPath,
+                        outputDir,
+                        currentVideo.original_name || currentVideo.filename,
+                        height
+                    );
+
+                    if (!result.skipped) {
+                        availability[height] = 1;
+                    }
+                } catch (transcodeErr) {
+                    console.error(`Hiba a ${height}p verzió készítésekor (${currentVideo.id}):`, transcodeErr);
                 }
             }
 
-            if (!hasValid720p) {
-                const outcome = await processVideoFor720p(
-                    currentVideo.id,
-                    videoPath,
-                    outputDir,
-                    currentVideo.original_name || currentVideo.filename
-                );
-
-                if (outcome.converted) {
-                    await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [currentVideo.id]);
-                } else {
-                    await db.query('UPDATE videos SET has_720p = 0 WHERE id = $1', [currentVideo.id]);
-                }
-            } else {
-                await db.query('UPDATE videos SET has_720p = 1 WHERE id = $1', [currentVideo.id]);
-            }
+            await db.query(
+                'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3 WHERE id = $4',
+                [availability[720], availability[1080], availability[1440], currentVideo.id]
+            );
 
             await db.query("UPDATE videos SET processing_status = 'done' WHERE id = $1", [currentVideo.id]);
         } catch (processErr) {
