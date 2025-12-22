@@ -1383,70 +1383,114 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
 });
 
 app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, res) => {
-    const summary = {
-        checked: 0,
-        queued: 0,
-        deletedPhantom: 0,
-        updated: 0,
-    };
+    res.status(200).json({ message: 'A javítás elindult a háttérben.' });
 
-    try {
-        const { rows: videos } = await db.query('SELECT id, filename, original_name, processing_status FROM videos');
+    (async () => {
+        const MIN_VALID_SIZE_BYTES = 1000;
+        const updatedVideoIds = [];
 
-        for (const video of videos) {
-            summary.checked += 1;
-            const updates = { 720: 0, 1080: 0, 1440: 0 };
-            const originalPath = path.join(uploadsRootDirectory, video.filename);
-            const videoHeight = await getVideoHeight(originalPath);
-            const targets = determineTargetResolutions(videoHeight);
-            let shouldQueue = false;
+        const isFileValid = async (filePath) => {
+            try {
+                const stats = await fs.promises.stat(filePath);
+                if (stats.isFile() && stats.size > MIN_VALID_SIZE_BYTES) {
+                    return true;
+                }
 
-            for (const height of [720, 1080, 1440]) {
-                const { outputPath } = buildResolutionOutputPaths(video, height);
+                if (stats.isFile() && stats.size <= MIN_VALID_SIZE_BYTES) {
+                    await safeUnlink(filePath);
+                }
+            } catch (err) {
+                if (err.code !== 'ENOENT') {
+                    console.error(`Nem sikerült ellenőrizni a fájlt (${filePath}):`, err);
+                }
+            }
+
+            return false;
+        };
+
+        try {
+            const { rows: videos } = await db.query(
+                'SELECT id, filename, original_name, has_720p, has_1080p, has_1440p, processing_status FROM videos'
+            );
+
+            for (const video of videos) {
                 try {
-                    const stats = await fs.promises.stat(outputPath);
-                    if (stats.isFile() && stats.size > 0) {
-                        updates[height] = 1;
+                    const originalPath = path.join(uploadsRootDirectory, video.filename);
+                    let originalStats;
+
+                    try {
+                        originalStats = await fs.promises.stat(originalPath);
+                    } catch (err) {
+                        if (err.code === 'ENOENT') {
+                            console.log(`Hiányzó eredeti fájl (video_id=${video.id}): ${originalPath}`);
+                        } else {
+                            console.error(`Hiba az eredeti fájl ellenőrzésekor (video_id=${video.id}):`, err);
+                        }
+
                         continue;
                     }
 
-                    if (stats.isFile() && stats.size === 0) {
-                        await safeUnlink(outputPath);
-                        summary.deletedPhantom += 1;
+                    if (!originalStats.isFile() || originalStats.size <= MIN_VALID_SIZE_BYTES) {
+                        console.log(`Érvénytelen eredeti fájl (video_id=${video.id}): ${originalPath}`);
+                        continue;
+                    }
+
+                    const videoHeight = await getVideoHeight(originalPath);
+
+                    const requiredResolutions = [];
+                    if (Number.isFinite(videoHeight)) {
+                        if (videoHeight >= 2160) {
+                            requiredResolutions.push(1440, 1080, 720);
+                        } else if (videoHeight >= 1440) {
+                            requiredResolutions.push(1080, 720);
+                        } else if (videoHeight >= 1080) {
+                            requiredResolutions.push(720);
+                        }
+                    }
+
+                    if (requiredResolutions.length === 0) {
+                        continue;
+                    }
+
+                    const updatedFlags = {
+                        720: video.has_720p,
+                        1080: video.has_1080p,
+                        1440: video.has_1440p,
+                    };
+
+                    let shouldQueue = false;
+
+                    for (const resolution of requiredResolutions) {
+                        const { outputPath } = buildResolutionOutputPaths(video, resolution);
+                        const isValid = await isFileValid(outputPath);
+
+                        updatedFlags[resolution] = isValid ? 1 : 0;
+
+                        if (!isValid) {
+                            shouldQueue = true;
+                        }
+                    }
+
+                    if (shouldQueue) {
+                        await db.query(
+                            'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3, processing_status = $4 WHERE id = $5',
+                            [updatedFlags[720], updatedFlags[1080], updatedFlags[1440], 'pending', video.id]
+                        );
+
+                        updatedVideoIds.push(video.id);
                     }
                 } catch (err) {
-                    if (err.code !== 'ENOENT') {
-                        console.error(`Nem sikerült ellenőrizni a ${height}p verziót (${video.id}):`, err);
-                    }
-                }
-
-                if (targets.includes(height)) {
-                    shouldQueue = true;
+                    console.error(`Hiba a(z) ${video.id} videó javítása során:`, err);
                 }
             }
 
-            const newStatus = shouldQueue ? 'pending' : video.processing_status;
-
-            await db.query(
-                'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3, processing_status = $4 WHERE id = $5',
-                [updates[720], updates[1080], updates[1440], newStatus, video.id]
-            );
-
-            summary.updated += 1;
-            if (shouldQueue) {
-                summary.queued += 1;
+            if (updatedVideoIds.length > 0) {
+                await processVideoQueue();
             }
+        } catch (err) {
+            console.error('Hiba a videók háttérben történő javítása során:', err);
         }
-
-        if (summary.queued > 0) {
-            processVideoQueue();
-        }
-
-        res.status(200).json({ message: 'Repair completed', summary });
-    } catch (err) {
-        console.error('Hiba a videók javítása során:', err);
-        res.status(500).json({ message: 'Nem sikerült javítani a videókat.', summary });
-    }
+    })();
 });
 
 async function deleteZeroByteMp4Files(rootDir) {
