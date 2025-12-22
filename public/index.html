@@ -7636,8 +7636,19 @@
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
         const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
         const availability = getQualityAvailability(video);
+        const originalQuality = (video?.original_quality || "").toString();
 
         if (normalizedQuality === "original") {
+          return {
+            src: originalSource,
+            originalSource,
+            resolvedQuality: "original",
+            requestedQuality: normalizedQuality,
+            availability,
+          };
+        }
+
+        if (normalizedQuality !== "original" && originalQuality === normalizedQuality) {
           return {
             src: originalSource,
             originalSource,

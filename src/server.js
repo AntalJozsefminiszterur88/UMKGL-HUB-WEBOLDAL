@@ -144,6 +144,30 @@ function getVideoHeight(filePath) {
     });
 }
 
+function determineOriginalQualityLabel(videoHeight) {
+    if (!Number.isFinite(videoHeight)) {
+        return null;
+    }
+
+    if (videoHeight <= 480) {
+        return '480p';
+    }
+
+    if (videoHeight <= 720) {
+        return '720p';
+    }
+
+    if (videoHeight <= 1080) {
+        return '1080p';
+    }
+
+    if (videoHeight <= 1440) {
+        return '1440p';
+    }
+
+    return '2160p';
+}
+
 function determineTargetResolutions(videoHeight) {
     if (!Number.isFinite(videoHeight)) {
         return [];
@@ -1120,12 +1144,12 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
                 OFFSET $${dataParams.length}
             )
             SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at,
-                   fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p,
+                   fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p, fv.original_quality,
                    COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id
-            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p
+            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p, fv.original_quality
             ORDER BY fv.content_created_at ${sortOrder};
         `;
 
@@ -1410,7 +1434,7 @@ app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, re
 
         try {
             const { rows: videos } = await db.query(
-                'SELECT id, filename, original_name, has_720p, has_1080p, has_1440p, processing_status FROM videos'
+                'SELECT id, filename, original_name, has_720p, has_1080p, has_1440p, processing_status, original_quality FROM videos'
             );
 
             for (const video of videos) {
@@ -1436,6 +1460,11 @@ app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, re
                     }
 
                     const videoHeight = await getVideoHeight(originalPath);
+                    const originalQuality = determineOriginalQualityLabel(videoHeight);
+
+                    if (originalQuality !== video.original_quality) {
+                        await db.query('UPDATE videos SET original_quality = $1 WHERE id = $2', [originalQuality, video.id]);
+                    }
 
                     const requiredResolutions = [];
                     if (Number.isFinite(videoHeight)) {
@@ -1473,8 +1502,8 @@ app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, re
 
                     if (shouldQueue) {
                         await db.query(
-                            'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3, processing_status = $4 WHERE id = $5',
-                            [updatedFlags[720], updatedFlags[1080], updatedFlags[1440], 'pending', video.id]
+                            'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3, processing_status = $4, original_quality = $5 WHERE id = $6',
+                            [updatedFlags[720], updatedFlags[1080], updatedFlags[1440], 'pending', originalQuality, video.id]
                         );
 
                         updatedVideoIds.push(video.id);
@@ -2094,6 +2123,7 @@ async function processVideoQueue() {
             }
 
             const videoHeight = await getVideoHeight(videoPath);
+            const originalQuality = determineOriginalQualityLabel(videoHeight);
             const availability = { 720: 0, 1080: 0, 1440: 0 };
             const targets = determineTargetResolutions(videoHeight);
 
@@ -2138,8 +2168,8 @@ async function processVideoQueue() {
             }
 
             await db.query(
-                'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3 WHERE id = $4',
-                [availability[720], availability[1080], availability[1440], currentVideo.id]
+                'UPDATE videos SET has_720p = $1, has_1080p = $2, has_1440p = $3, original_quality = $4 WHERE id = $5',
+                [availability[720], availability[1080], availability[1440], originalQuality, currentVideo.id]
             );
 
             await db.query("UPDATE videos SET processing_status = 'done' WHERE id = $1", [currentVideo.id]);
