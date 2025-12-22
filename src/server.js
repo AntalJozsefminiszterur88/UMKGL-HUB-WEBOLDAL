@@ -2209,19 +2209,39 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         }
     })();
 
-    const filesWithNames = await Promise.all(req.files.map(async (file, index) => {
-        const { originalname } = file;
-        const normalizedOriginalName = normalizeFilename(originalname);
-        const metadata = metadataList[index] || {};
-        const customName = typeof metadata.name === 'string' ? normalizeFilename(metadata.name) : '';
-        const parsedName = path.parse(customName || normalizedOriginalName).name.trim();
-        const sanitizedOriginalName = parsedName || normalizedOriginalName;
-        const tagsForFile = normalizeTagIds(metadata.tags);
-        const filePath = path.join(clipsOriginalDirectory, file.filename);
-        const embeddedHash = await extractEmbeddedHash(filePath);
-        const fileHash = embeddedHash || await computeFileHash(filePath);
-        return { file, sanitizedOriginalName, tags: tagsForFile.length ? tagsForFile : fallbackTagIds, fileHash };
-    }));
+    let filesWithNames;
+    try {
+        filesWithNames = await Promise.all(req.files.map(async (file, index) => {
+            const { originalname } = file;
+            const normalizedOriginalName = normalizeFilename(originalname);
+            const metadata = metadataList[index] || {};
+            const customName = typeof metadata.name === 'string' ? normalizeFilename(metadata.name) : '';
+            const parsedName = path.parse(customName || normalizedOriginalName).name.trim();
+            const sanitizedOriginalName = parsedName || normalizedOriginalName;
+            const tagsForFile = normalizeTagIds(metadata.tags);
+            const filePath = path.join(clipsOriginalDirectory, file.filename);
+            const embeddedHash = await extractEmbeddedHash(filePath);
+
+            if (!embeddedHash) {
+                await safeUnlink(filePath);
+                const error = new Error(`Upload rejected: File ${originalname} is missing the required 'UMKGL_HASH' metadata tag.`);
+                error.statusCode = 400;
+                throw error;
+            }
+
+            return {
+                file,
+                sanitizedOriginalName,
+                tags: tagsForFile.length ? tagsForFile : fallbackTagIds,
+                fileHash: embeddedHash
+            };
+        }));
+    } catch (err) {
+        console.error('Hiba a feltöltött fájlok feldolgozásakor:', err);
+        const statusCode = err && err.statusCode === 400 ? 400 : 500;
+        const message = err && err.message ? err.message : 'Nem sikerült feldolgozni a feltöltött fájlokat.';
+        return res.status(statusCode).json({ message });
+    }
 
     const filesToProcess = filesWithNames;
 
