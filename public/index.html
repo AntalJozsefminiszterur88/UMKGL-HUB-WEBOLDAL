@@ -3154,10 +3154,10 @@
             <div class="filter-group">
               <label for="videoQualitySelect">Minőség</label>
               <select id="videoQualitySelect" class="uniform-control">
-                <option value="original">Eredeti</option>
-                <option value="1440p">1440p</option>
-                <option value="1080p">1080p</option>
-                <option value="720p">720p</option>
+                <option value="original">Eredeti / Max</option>
+                <option value="1440p">2K - 1440p</option>
+                <option value="1080p">Full HD - 1080p</option>
+                <option value="720p">HD - 720p</option>
               </select>
             </div>
             <div class="filter-group">
@@ -6767,7 +6767,7 @@
       let tagSelectHandlersAttached = false;
       const VIDEO_QUALITY_KEY = "videoQualityPreference";
       const DEFAULT_VIDEO_QUALITY = "1080p";
-      const ALLOWED_VIDEO_QUALITIES = ["original", "1440p", "1080p", "720p"];
+      const ALLOWED_VIDEO_QUALITIES = ["1440p", "1080p", "720p"];
       const VIDEO_PAGE_SIZE_KEY = "videoPageSize";
       const VIDEO_SORT_ORDER_KEY = "videoSortOrder";
       const savedPageSize = Number.parseInt(localStorage.getItem(VIDEO_PAGE_SIZE_KEY), 10);
@@ -6780,9 +6780,11 @@
         tag: [],
         sort: savedSortOrder === "oldest" ? "oldest" : "newest",
       };
-      let currentVideoQuality = ALLOWED_VIDEO_QUALITIES.includes(savedQuality)
-        ? savedQuality
-        : DEFAULT_VIDEO_QUALITY;
+      let currentVideoQuality = savedQuality === "original"
+        ? "original"
+        : ALLOWED_VIDEO_QUALITIES.includes(savedQuality)
+          ? savedQuality
+          : DEFAULT_VIDEO_QUALITY;
       let videoSearchTimeout = null;
       let currentVideoList = [];
       let currentVideoIndex = 0;
@@ -7582,6 +7584,7 @@
       }
 
       function normalizeQualityPreference(quality) {
+        if (quality === "original") return "original";
         if (!quality) return DEFAULT_VIDEO_QUALITY;
         return ALLOWED_VIDEO_QUALITIES.includes(quality) ? quality : DEFAULT_VIDEO_QUALITY;
       }
@@ -7601,45 +7604,23 @@
         return normalizedQuality;
       }
 
-      function appendQualitySuffix(filename, suffix) {
-        if (typeof filename !== "string") return "";
-        const dotIndex = filename.lastIndexOf(".");
-        if (dotIndex === -1) {
-          return `${filename}${suffix}`;
-        }
-        return `${filename.slice(0, dotIndex)}${suffix}${filename.slice(dotIndex)}`;
-      }
+      function buildVideoPath(originalFilename, targetResolution) {
+        if (!originalFilename || !targetResolution) return "";
+        const normalizedPath = String(originalFilename).replace(/^\/+/, "");
+        const segments = normalizedPath.split("/");
+        const eredetiIndex = segments.indexOf("eredeti");
 
-      function stripQualitySuffix(filename, suffix) {
-        if (typeof filename !== "string") return "";
-        const dotIndex = filename.lastIndexOf(".");
-
-        if (dotIndex === -1) {
-          return filename.replace(new RegExp(`${suffix}$`), "");
+        if (eredetiIndex === -1 || eredetiIndex + 1 >= segments.length) {
+          return "";
         }
 
-        const base = filename.slice(0, dotIndex).replace(new RegExp(`${suffix}$`), "");
-        const extension = filename.slice(dotIndex);
-        return `${base}${extension}`;
-      }
+        const folderName = segments[eredetiIndex + 1];
+        const baseFilename = segments[segments.length - 1];
+        const dotIndex = baseFilename.lastIndexOf(".");
+        const nameWithoutExt = dotIndex !== -1 ? baseFilename.slice(0, dotIndex) : baseFilename;
+        const extension = dotIndex !== -1 ? baseFilename.slice(dotIndex) : "";
 
-      function getOriginalVideoSource(video) {
-        if (!video?.filename) return "";
-
-        let originalPath = video.filename.replace("/720p/", "/eredeti/");
-        originalPath = stripQualitySuffix(originalPath, "_720p");
-
-        return `/uploads/${originalPath}`;
-      }
-
-      function buildQualitySource(video, quality) {
-        if (!video?.filename) return "";
-        const suffix = `_${quality}`;
-        const targetPath = video.filename.includes("/eredeti/")
-          ? appendQualitySuffix(video.filename.replace("/eredeti/", `/${quality}/`), suffix)
-          : appendQualitySuffix(video.filename, suffix);
-
-        return `/uploads/${targetPath}`;
+        return `/uploads/klippek/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}`;
       }
 
       function getQualityAvailability(video) {
@@ -7651,31 +7632,58 @@
       }
 
       function getPreferredVideoSource(video, qualityPreference) {
-        const normalizedQuality = normalizeQualityPreference(qualityPreference);
-        const originalSource = getOriginalVideoSource(video);
+        const requestedQuality = qualityPreference || "original";
+        const normalizedQuality = normalizeQualityPreference(requestedQuality);
+        const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
         const availability = getQualityAvailability(video);
 
         if (normalizedQuality === "original") {
-          return { src: originalSource, originalSource, resolvedQuality: "original", requestedQuality: normalizedQuality, availability };
+          return {
+            src: originalSource,
+            originalSource,
+            resolvedQuality: "original",
+            requestedQuality: normalizedQuality,
+            availability,
+          };
         }
 
-        const order = ["1440p", "1080p", "720p"];
-        const startIndex = Math.max(order.indexOf(normalizedQuality), 0);
-
-        for (let i = startIndex; i < order.length; i += 1) {
-          const candidate = order[i];
-          if (availability[candidate]) {
-            return {
-              src: buildQualitySource(video, candidate),
-              originalSource,
-              resolvedQuality: candidate,
-              requestedQuality: normalizedQuality,
-              availability,
-            };
-          }
+        if (normalizedQuality === "1440p" && availability["1440p"]) {
+          return {
+            src: buildVideoPath(video?.filename, "1440p"),
+            originalSource,
+            resolvedQuality: "1440p",
+            requestedQuality: normalizedQuality,
+            availability,
+          };
         }
 
-        return { src: originalSource, originalSource, resolvedQuality: "original", requestedQuality: normalizedQuality, availability };
+        if (normalizedQuality === "1080p" && availability["1080p"]) {
+          return {
+            src: buildVideoPath(video?.filename, "1080p"),
+            originalSource,
+            resolvedQuality: "1080p",
+            requestedQuality: normalizedQuality,
+            availability,
+          };
+        }
+
+        if (normalizedQuality === "720p" && availability["720p"]) {
+          return {
+            src: buildVideoPath(video?.filename, "720p"),
+            originalSource,
+            resolvedQuality: "720p",
+            requestedQuality: normalizedQuality,
+            availability,
+          };
+        }
+
+        return {
+          src: originalSource,
+          originalSource,
+          resolvedQuality: "original",
+          requestedQuality: normalizedQuality,
+          availability,
+        };
       }
 
       function listAvailableQualities(video) {
@@ -8012,34 +8020,24 @@
         const rawTitle = activeVideo.original_name || activeVideo.filename;
         modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "Névtelen videó";
         const videoElements = videoGridContainer.querySelectorAll(".video-card video");
-        const { src, originalSource, resolvedQuality, requestedQuality, availability } = getPreferredVideoSource(
-          activeVideo,
-          currentVideoQuality
-        );
+        const { src, originalSource } = getPreferredVideoSource(activeVideo, currentVideoQuality);
         const originalSrc = originalSource || `/uploads/${activeVideo.filename}`;
         const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src || "";
-        const resolvedSource = src || sourceFromGrid;
-        const requestedAvailable = requestedQuality === "original" ? true : availability[requestedQuality];
-        const shouldFallbackToOriginal = resolvedQuality !== "original";
+        const resolvedSource = src || sourceFromGrid || originalSrc;
 
-        if (!requestedAvailable && requestedQuality !== resolvedQuality) {
-          const fallbackLabel = resolvedQuality === "original" ? "az eredeti verzióra" : `${resolvedQuality} minőségre`;
-          showClipToast(`A kért minőség nem érhető el, visszaváltás ${fallbackLabel}.`);
-        }
-
-        if (shouldFallbackToOriginal) {
-          modalVideoPlayer.addEventListener(
-            "error",
-            () => {
+        modalVideoPlayer.addEventListener(
+          "error",
+          () => {
+            if (modalVideoPlayer.src !== originalSrc) {
               modalVideoPlayer.src = originalSrc;
               modalVideoPlayer.load();
               modalVideoPlayer.play().catch(() => {});
-            },
-            { once: true }
-          );
-        }
+            }
+          },
+          { once: true }
+        );
 
-        modalVideoPlayer.src = resolvedSource || originalSrc;
+        modalVideoPlayer.src = resolvedSource;
         modalVideoPlayer.load();
         modalVideoPlayer.play().catch(() => {});
 
