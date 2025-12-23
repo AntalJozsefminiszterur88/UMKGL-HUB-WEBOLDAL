@@ -8,6 +8,8 @@ services:
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
       - DB_NAME=mydb
+      - BOT_API_URL=http://music_bot:5050/share-video
+      - BASE_URL=https://umkgl.online 
     depends_on:
       db:
         condition: service_healthy
@@ -16,7 +18,8 @@ services:
     networks:
       - umgkl_net
       - shared_proxy_net
-
+      - umkgl-network
+      
   db:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -39,3 +42,6 @@ networks:
   umgkl_net:
   shared_proxy_net:
     external: true
+    
+  umkgl-network:
+    external: true  
