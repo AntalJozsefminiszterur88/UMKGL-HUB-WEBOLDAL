@@ -248,6 +248,22 @@
         border-top-color: var(--discord-blurple);
         animation: spin 0.8s linear infinite;
         margin: 24px auto;
+        display: none;
+      }
+
+      .card__video {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--discord-border);
+        background: #0f1628;
+        max-height: 220px;
+        object-fit: cover;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+      }
+
+      #scroll-sentinel {
+        width: 100%;
+        height: 1px;
       }
 
       @keyframes spin {
@@ -283,6 +299,7 @@
 
       <div id="loader" class="loader" aria-hidden="true"></div>
       <section id="video-grid" class="grid" aria-live="polite"></section>
+      <div id="scroll-sentinel" aria-hidden="true"></div>
       <div id="empty-state" class="empty-state" style="display: none;">
         Nincs megjeleníthető videó vagy nincs jogosultság a klipek megtekintéséhez.
       </div>
@@ -290,6 +307,12 @@
 
     <script>
       const SESSION_KEYS = { token: "token" };
+      const PAGE_SIZE = 12;
+
+      let currentPage = 1;
+      let isLoading = false;
+      let hasMore = true;
+      let observer;
 
       function getStoredToken() {
         return localStorage.getItem(SESSION_KEYS.token);
@@ -308,14 +331,19 @@
         document.getElementById("status-text").textContent = "";
       }
 
-      async function fetchVideos() {
+      function toggleLoader(visible) {
+        const loader = document.getElementById("loader");
+        loader.style.display = visible ? "block" : "none";
+      }
+
+      async function fetchVideos(page = 1) {
         const token = getStoredToken();
         if (!token) {
           showStatus("Jelentkezz be a videók megosztásához.", "warning");
-          return [];
+          return { data: [], pagination: null };
         }
 
-        const response = await fetch(`/api/videos?limit=40`, {
+        const response = await fetch(`/api/videos?page=${page}&limit=${PAGE_SIZE}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -323,74 +351,82 @@
 
         if (response.status === 401 || response.status === 403) {
           showStatus("Nincs jogosultság a videók listázásához.", "error");
-          return [];
+          return { data: [], pagination: null };
         }
 
         if (!response.ok) {
           showStatus("Nem sikerült betölteni a videókat.", "error");
-          return [];
+          return { data: [], pagination: null };
         }
 
         const data = await response.json();
-        return data?.data || [];
+        return { data: data?.data || [], pagination: data?.pagination };
       }
 
-      function renderVideos(videos) {
+      function createVideoCard(video) {
+        const card = document.createElement("article");
+        card.className = "card";
+
+        const header = document.createElement("div");
+        header.className = "card__header";
+        const title = document.createElement("h2");
+        title.className = "card__title";
+        title.textContent = video.original_name || video.filename || "Ismeretlen videó";
+
+        const subtitle = document.createElement("small");
+        subtitle.textContent = video.filename;
+        title.appendChild(subtitle);
+        header.appendChild(title);
+
+        const meta = document.createElement("div");
+        meta.className = "card__meta";
+        const uploader = document.createElement("span");
+        uploader.className = "chip";
+        uploader.textContent = video.username ? `Feltöltő: ${video.username}` : "Feltöltő: ismeretlen";
+        const date = document.createElement("span");
+        const uploadedAt = video.content_created_at || video.uploaded_at;
+        date.textContent = uploadedAt ? new Date(uploadedAt).toLocaleString("hu-HU") : "Dátum ismeretlen";
+        meta.append(uploader, date);
+
+        const videoPlayer = document.createElement("video");
+        videoPlayer.className = "card__video";
+        videoPlayer.controls = true;
+        videoPlayer.preload = "metadata";
+        videoPlayer.playsInline = true;
+        videoPlayer.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}` : "";
+        videoPlayer.src = `/uploads/${video.filename}`;
+
+        const actions = document.createElement("div");
+        actions.className = "card__actions";
+
+        const shareBtn = document.createElement("button");
+        shareBtn.className = "btn-primary";
+        shareBtn.textContent = "Share to Discord";
+        shareBtn.addEventListener("click", () => shareVideo(video.id, shareBtn));
+
+        actions.append(shareBtn);
+
+        card.append(header, meta, videoPlayer, actions);
+        return card;
+      }
+
+      function renderVideos(videos, { reset = false } = {}) {
         const grid = document.getElementById("video-grid");
         const loader = document.getElementById("loader");
         const emptyState = document.getElementById("empty-state");
-        loader.style.display = "none";
-        grid.innerHTML = "";
+        if (reset) {
+          grid.innerHTML = "";
+        }
 
-        if (!videos.length) {
+        if (!videos.length && !grid.children.length) {
           emptyState.style.display = "block";
+          loader.style.display = "none";
           return;
         }
 
         emptyState.style.display = "none";
-
         videos.forEach((video) => {
-          const card = document.createElement("article");
-          card.className = "card";
-
-          const header = document.createElement("div");
-          header.className = "card__header";
-          const title = document.createElement("h2");
-          title.className = "card__title";
-          title.textContent = video.original_name || video.filename || "Ismeretlen videó";
-
-          const subtitle = document.createElement("small");
-          subtitle.textContent = video.filename;
-          title.appendChild(subtitle);
-          header.appendChild(title);
-
-          const meta = document.createElement("div");
-          meta.className = "card__meta";
-          const uploader = document.createElement("span");
-          uploader.className = "chip";
-          uploader.textContent = video.username ? `Feltöltő: ${video.username}` : "Feltöltő: ismeretlen";
-          const date = document.createElement("span");
-          const uploadedAt = video.content_created_at || video.uploaded_at;
-          date.textContent = uploadedAt ? new Date(uploadedAt).toLocaleString("hu-HU") : "Dátum ismeretlen";
-          meta.append(uploader, date);
-
-          const actions = document.createElement("div");
-          actions.className = "card__actions";
-
-          const shareBtn = document.createElement("button");
-          shareBtn.className = "btn-primary";
-          shareBtn.textContent = "Share to Discord";
-          shareBtn.addEventListener("click", () => shareVideo(video.id, shareBtn));
-
-          const copyBtn = document.createElement("button");
-          copyBtn.className = "btn-muted";
-          copyBtn.textContent = "Link másolása";
-          copyBtn.addEventListener("click", () => copyLink(video.filename));
-
-          actions.append(shareBtn, copyBtn);
-
-          card.append(header, meta, actions);
-          grid.appendChild(card);
+          grid.appendChild(createVideoCard(video));
         });
       }
 
@@ -431,17 +467,59 @@
         }
       }
 
-      async function copyLink(filename) {
-        if (!filename) {
-          showStatus("Nem található a videó hivatkozása.", "warning");
-          return;
+      function setupInfiniteScroll() {
+        const sentinel = document.getElementById("scroll-sentinel");
+        if (!sentinel) return;
+
+        observer = new IntersectionObserver(
+          (entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+              loadNextPage();
+            }
+          },
+          { rootMargin: "300px 0px" }
+        );
+
+        observer.observe(sentinel);
+      }
+
+      function stopInfiniteScroll() {
+        if (observer) {
+          observer.disconnect();
         }
-        const url = `${window.location.origin}/uploads/${filename}`;
+      }
+
+      async function loadNextPage() {
+        if (isLoading || !hasMore) return;
+        isLoading = true;
+        toggleLoader(true);
+
         try {
-          await navigator.clipboard.writeText(url);
-          showStatus("Hivatkozás másolva a vágólapra!", "success");
-        } catch (_) {
-          showStatus("Nem sikerült a hivatkozást másolni.", "error");
+          const { data, pagination } = await fetchVideos(currentPage);
+
+          const isFirstPage = currentPage === 1;
+          renderVideos(data, { reset: isFirstPage });
+
+          if (!pagination || data.length === 0) {
+            hasMore = false;
+            stopInfiniteScroll();
+            return;
+          }
+
+          const { currentPage: returnedPage = currentPage, totalPages = returnedPage } = pagination;
+          hasMore = returnedPage < totalPages;
+          if (hasMore) {
+            currentPage = returnedPage + 1;
+          } else {
+            stopInfiniteScroll();
+          }
+        } catch (error) {
+          console.error(error);
+          showStatus("Nem sikerült betölteni a videókat.", "error");
+          stopInfiniteScroll();
+        } finally {
+          isLoading = false;
+          toggleLoader(false);
         }
       }
 
@@ -452,8 +530,8 @@
           return;
         }
         hideStatus();
-        const videos = await fetchVideos();
-        renderVideos(videos);
+        setupInfiniteScroll();
+        await loadNextPage();
       }
 
       init();
