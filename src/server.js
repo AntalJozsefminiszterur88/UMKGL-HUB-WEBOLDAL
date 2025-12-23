@@ -22,6 +22,8 @@ function generateAuthToken(payload) {
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
+const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+const BOT_API_URL = process.env.BOT_API_URL;
 const server = http.createServer(app);
 server.setTimeout(0); // Added to prevent timeouts during large uploads
 const io = new Server(server);
@@ -1166,6 +1168,64 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
     } catch (err) {
         console.error('Hiba a videók lekérdezésekor:', err);
         res.status(500).json({ message: 'Nem sikerült lekérdezni a videókat.' });
+    }
+});
+
+app.post('/api/discord/share-video', authenticateToken, async (req, res) => {
+    const videoId = Number.parseInt(req.body?.videoId, 10);
+
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videóazonosító.' });
+    }
+
+    if (!BOT_API_URL) {
+        return res.status(500).json({ message: 'A Discord bot API URL nincs konfigurálva.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            `SELECT v.id, v.filename, v.original_name, u.username
+             FROM videos v
+             LEFT JOIN users u ON v.uploader_id = u.id
+             WHERE v.id = $1`,
+            [videoId]
+        );
+
+        const video = rows[0];
+
+        if (!video) {
+            return res.status(404).json({ message: 'A videó nem található.' });
+        }
+
+        if (!video.filename) {
+            return res.status(500).json({ message: 'A videó fájlneve hiányzik, nem lehet megosztani.' });
+        }
+
+        const publicUrl = `${BASE_URL}/uploads/${video.filename}`;
+        const payload = {
+            url: publicUrl,
+            title: video.original_name || video.filename,
+            uploader: video.username || 'Ismeretlen feltöltő',
+        };
+
+        const botResponse = await fetch(BOT_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!botResponse.ok) {
+            const errorText = await botResponse.text().catch(() => '');
+            return res.status(botResponse.status).json({
+                message: 'Nem sikerült elküldeni a videót a Discord botnak.',
+                details: errorText || undefined,
+            });
+        }
+
+        return res.status(200).json({ message: 'Videó sikeresen megosztva a Discordon.' });
+    } catch (err) {
+        console.error('Hiba a videó Discordra küldésekor:', err);
+        return res.status(502).json({ message: 'Nem sikerült kommunikálni a Discord bottal. Lehet, hogy offline.' });
     }
 });
 
