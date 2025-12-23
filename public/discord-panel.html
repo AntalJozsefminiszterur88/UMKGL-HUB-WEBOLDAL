@@ -251,14 +251,73 @@
         display: none;
       }
 
-      .card__video {
+      .card__video-wrapper {
+        position: relative;
         width: 100%;
         border-radius: 12px;
         border: 1px solid var(--discord-border);
         background: #0f1628;
         max-height: 220px;
-        object-fit: cover;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+      }
+
+      .card__video-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        aspect-ratio: 16 / 9;
+        background: #0f1628;
+        cursor: pointer;
+        position: relative;
+        border: none;
+        padding: 0;
+      }
+
+      .card__video-placeholder img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .card__video-placeholder .play-button {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.65) 100%);
+        color: #fff;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        border: none;
+        cursor: pointer;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+        padding: 0;
+      }
+
+      .card__video-placeholder .play-button::before {
+        content: "▶";
+        font-size: 42px;
+        filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+      }
+
+      .card__video-placeholder:hover .play-button,
+      .card__video-placeholder:focus-visible .play-button {
+        transform: scale(1.05);
+        opacity: 0.95;
+      }
+
+      .card__video {
+        width: 100%;
+        height: 100%;
+        border: none;
+        border-radius: 12px;
+        background: #0f1628;
+        object-fit: cover;
       }
 
       #scroll-sentinel {
@@ -363,6 +422,57 @@
         return { data: data?.data || [], pagination: data?.pagination };
       }
 
+      function createLazyVideoPlayer(video) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "card__video-wrapper";
+
+        const posterUrl = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}` : "";
+        const placeholderButton = document.createElement("button");
+        placeholderButton.type = "button";
+        placeholderButton.className = "card__video-placeholder";
+        placeholderButton.setAttribute("aria-label", "Videó lejátszása");
+
+        if (posterUrl) {
+          const poster = document.createElement("img");
+          poster.src = posterUrl;
+          poster.alt = video.original_name || video.filename || "Videó indexkép";
+          placeholderButton.appendChild(poster);
+        }
+
+        const playOverlay = document.createElement("span");
+        playOverlay.className = "play-button";
+        playOverlay.setAttribute("aria-hidden", "true");
+        placeholderButton.appendChild(playOverlay);
+
+        const loadVideo = () => {
+          const videoPlayer = document.createElement("video");
+          videoPlayer.className = "card__video";
+          videoPlayer.controls = true;
+          videoPlayer.preload = "metadata";
+          videoPlayer.playsInline = true;
+          if (posterUrl) {
+            videoPlayer.poster = posterUrl;
+          }
+          videoPlayer.src = `/uploads/${video.filename}`;
+
+          videoPlayer.addEventListener(
+            "loadeddata",
+            () => {
+              videoPlayer.play().catch(() => {});
+            },
+            { once: true }
+          );
+
+          wrapper.replaceChildren(videoPlayer);
+          videoPlayer.focus();
+        };
+
+        placeholderButton.addEventListener("click", loadVideo);
+        wrapper.appendChild(placeholderButton);
+
+        return wrapper;
+      }
+
       function createVideoCard(video) {
         const card = document.createElement("article");
         card.className = "card";
@@ -388,14 +498,6 @@
         date.textContent = uploadedAt ? new Date(uploadedAt).toLocaleString("hu-HU") : "Dátum ismeretlen";
         meta.append(uploader, date);
 
-        const videoPlayer = document.createElement("video");
-        videoPlayer.className = "card__video";
-        videoPlayer.controls = true;
-        videoPlayer.preload = "metadata";
-        videoPlayer.playsInline = true;
-        videoPlayer.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}` : "";
-        videoPlayer.src = `/uploads/${video.filename}`;
-
         const actions = document.createElement("div");
         actions.className = "card__actions";
 
@@ -406,7 +508,7 @@
 
         actions.append(shareBtn);
 
-        card.append(header, meta, videoPlayer, actions);
+        card.append(header, meta, createLazyVideoPlayer(video), actions);
         return card;
       }
 
