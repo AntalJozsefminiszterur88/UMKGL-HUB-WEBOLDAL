@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Discord megosztó panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --discord-blurple: #5865f2;
+        --discord-dark: #0b1021;
+        --discord-panel: #1c2333;
+        --discord-border: #2f3651;
+        --discord-text: #e8ecff;
+        --muted: #a9b1d6;
+        --success: #3ba55d;
+        --error: #f04747;
+        --warning: #f9a62b;
+        --card-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at 20% 20%, rgba(88, 101, 242, 0.14), transparent 35%),
+          radial-gradient(circle at 80% 10%, rgba(88, 101, 242, 0.16), transparent 30%),
+          radial-gradient(circle at 40% 80%, rgba(59, 165, 93, 0.12), transparent 25%),
+          var(--discord-dark);
+        color: var(--discord-text);
+        min-height: 100vh;
+      }
+
+      .page-shell {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .title-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .title-row h1 {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .pill {
+        background: rgba(88, 101, 242, 0.14);
+        color: var(--discord-text);
+        border: 1px solid rgba(88, 101, 242, 0.4);
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .description {
+        margin: 0;
+        color: var(--muted);
+        max-width: 760px;
+        line-height: 1.6;
+      }
+
+      .status {
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--discord-border);
+        background: rgba(17, 24, 39, 0.65);
+        display: none;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+        margin-bottom: 18px;
+      }
+
+      .status.visible {
+        display: flex;
+      }
+
+      .status.success {
+        border-color: rgba(59, 165, 93, 0.35);
+        background: rgba(59, 165, 93, 0.12);
+        color: #d9f7e7;
+      }
+
+      .status.error {
+        border-color: rgba(240, 71, 71, 0.35);
+        background: rgba(240, 71, 71, 0.12);
+        color: #ffe5e5;
+      }
+
+      .status.warning {
+        border-color: rgba(249, 166, 43, 0.35);
+        background: rgba(249, 166, 43, 0.12);
+        color: #fff2dc;
+      }
+
+      .status .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 18px;
+      }
+
+      .card {
+        background: linear-gradient(145deg, rgba(44, 53, 82, 0.92), rgba(26, 32, 50, 0.92));
+        border: 1px solid var(--discord-border);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: var(--card-shadow);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      .card::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 20% 20%, rgba(88, 101, 242, 0.18), transparent 45%);
+        opacity: 0.6;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .card__header,
+      .card__meta,
+      .card__actions {
+        position: relative;
+        z-index: 1;
+      }
+
+      .card__title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--discord-text);
+        letter-spacing: -0.01em;
+      }
+
+      .card__title small {
+        display: block;
+        color: var(--muted);
+        font-weight: 500;
+        margin-top: 6px;
+      }
+
+      .card__meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .chip {
+        padding: 6px 10px;
+        border-radius: 10px;
+        background: rgba(88, 101, 242, 0.14);
+        border: 1px solid rgba(88, 101, 242, 0.35);
+        font-weight: 600;
+      }
+
+      .card__actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      button {
+        font: inherit;
+        border: none;
+        border-radius: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #6b76f7, #4f5ae0);
+        color: #fff;
+        box-shadow: 0 10px 25px rgba(88, 101, 242, 0.35);
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 28px rgba(88, 101, 242, 0.45);
+      }
+
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+
+      .btn-muted {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--muted);
+        border: 1px solid var(--discord-border);
+      }
+
+      .empty-state {
+        border: 1px dashed var(--discord-border);
+        border-radius: 14px;
+        padding: 28px;
+        text-align: center;
+        color: var(--muted);
+        background: rgba(17, 24, 39, 0.5);
+        margin-top: 16px;
+      }
+
+      .loader {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 4px solid rgba(255, 255, 255, 0.08);
+        border-top-color: var(--discord-blurple);
+        animation: spin 0.8s linear infinite;
+        margin: 24px auto;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 600px) {
+        .title-row h1 {
+          font-size: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header>
+        <div class="title-row">
+          <h1>Discord megosztó</h1>
+          <span class="pill">Megosztás a music_bot segítségével</span>
+        </div>
+        <p class="description">
+          Válassz egy videót a listából, majd kattints a <strong>„Share to Discord”</strong> gombra, hogy a
+          music_bot azonnal megossza a Discord szerveren. A megosztáshoz be kell jelentkezve lenned, és a botnak elérhetőnek kell lennie.
+        </p>
+      </header>
+
+      <div id="status" class="status" role="status" aria-live="polite">
+        <span class="dot"></span>
+        <span id="status-text"></span>
+      </div>
+
+      <div id="loader" class="loader" aria-hidden="true"></div>
+      <section id="video-grid" class="grid" aria-live="polite"></section>
+      <div id="empty-state" class="empty-state" style="display: none;">
+        Nincs megjeleníthető videó vagy nincs jogosultság a klipek megtekintéséhez.
+      </div>
+    </div>
+
+    <script>
+      const SESSION_KEYS = { token: "token" };
+
+      function getStoredToken() {
+        return localStorage.getItem(SESSION_KEYS.token);
+      }
+
+      function showStatus(message, type = "info") {
+        const status = document.getElementById("status");
+        const text = document.getElementById("status-text");
+        status.className = `status visible ${type}`;
+        text.textContent = message;
+      }
+
+      function hideStatus() {
+        const status = document.getElementById("status");
+        status.className = "status";
+        document.getElementById("status-text").textContent = "";
+      }
+
+      async function fetchVideos() {
+        const token = getStoredToken();
+        if (!token) {
+          showStatus("Jelentkezz be a videók megosztásához.", "warning");
+          return [];
+        }
+
+        const response = await fetch(`/api/videos?limit=40`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          showStatus("Nincs jogosultság a videók listázásához.", "error");
+          return [];
+        }
+
+        if (!response.ok) {
+          showStatus("Nem sikerült betölteni a videókat.", "error");
+          return [];
+        }
+
+        const data = await response.json();
+        return data?.data || [];
+      }
+
+      function renderVideos(videos) {
+        const grid = document.getElementById("video-grid");
+        const loader = document.getElementById("loader");
+        const emptyState = document.getElementById("empty-state");
+        loader.style.display = "none";
+        grid.innerHTML = "";
+
+        if (!videos.length) {
+          emptyState.style.display = "block";
+          return;
+        }
+
+        emptyState.style.display = "none";
+
+        videos.forEach((video) => {
+          const card = document.createElement("article");
+          card.className = "card";
+
+          const header = document.createElement("div");
+          header.className = "card__header";
+          const title = document.createElement("h2");
+          title.className = "card__title";
+          title.textContent = video.original_name || video.filename || "Ismeretlen videó";
+
+          const subtitle = document.createElement("small");
+          subtitle.textContent = video.filename;
+          title.appendChild(subtitle);
+          header.appendChild(title);
+
+          const meta = document.createElement("div");
+          meta.className = "card__meta";
+          const uploader = document.createElement("span");
+          uploader.className = "chip";
+          uploader.textContent = video.username ? `Feltöltő: ${video.username}` : "Feltöltő: ismeretlen";
+          const date = document.createElement("span");
+          const uploadedAt = video.content_created_at || video.uploaded_at;
+          date.textContent = uploadedAt ? new Date(uploadedAt).toLocaleString("hu-HU") : "Dátum ismeretlen";
+          meta.append(uploader, date);
+
+          const actions = document.createElement("div");
+          actions.className = "card__actions";
+
+          const shareBtn = document.createElement("button");
+          shareBtn.className = "btn-primary";
+          shareBtn.textContent = "Share to Discord";
+          shareBtn.addEventListener("click", () => shareVideo(video.id, shareBtn));
+
+          const copyBtn = document.createElement("button");
+          copyBtn.className = "btn-muted";
+          copyBtn.textContent = "Link másolása";
+          copyBtn.addEventListener("click", () => copyLink(video.filename));
+
+          actions.append(shareBtn, copyBtn);
+
+          card.append(header, meta, actions);
+          grid.appendChild(card);
+        });
+      }
+
+      async function shareVideo(videoId, buttonEl) {
+        const token = getStoredToken();
+        if (!token) {
+          showStatus("Jelentkezz be a megosztáshoz.", "warning");
+          return;
+        }
+
+        const originalLabel = buttonEl.textContent;
+        buttonEl.disabled = true;
+        buttonEl.textContent = "Küldés...";
+
+        try {
+          const response = await fetch("/api/discord/share-video", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ videoId }),
+          });
+
+          const result = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            throw new Error(result?.message || "Nem sikerült elküldeni a videót a botnak.");
+          }
+
+          showStatus(result?.message || "Videó sikeresen megosztva Discordon!", "success");
+        } catch (err) {
+          console.error(err);
+          showStatus(err.message || "Ismeretlen hiba történt a megosztás során.", "error");
+        } finally {
+          buttonEl.disabled = false;
+          buttonEl.textContent = originalLabel;
+        }
+      }
+
+      async function copyLink(filename) {
+        if (!filename) {
+          showStatus("Nem található a videó hivatkozása.", "warning");
+          return;
+        }
+        const url = `${window.location.origin}/uploads/${filename}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          showStatus("Hivatkozás másolva a vágólapra!", "success");
+        } catch (_) {
+          showStatus("Nem sikerült a hivatkozást másolni.", "error");
+        }
+      }
+
+      async function init() {
+        const token = getStoredToken();
+        if (!token) {
+          showStatus("Jelentkezz be a videók megosztásához.", "warning");
+          return;
+        }
+        hideStatus();
+        const videos = await fetchVideos();
+        renderVideos(videos);
+      }
+
+      init();
+    </script>
+  </body>
+</html>
