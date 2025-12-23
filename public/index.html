@@ -2084,16 +2084,28 @@
         gap: 0.5rem;
       }
 
+      .admin-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1.25rem;
+        flex-wrap: wrap;
+      }
+
       .admin-description {
         margin-top: 0.5rem;
         max-width: 600px;
       }
 
-      .admin-clips-actions {
-        margin-top: 1rem;
+      .admin-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
       }
 
-      #videoManagementBtn {
+      #videoManagementBtn,
+      #discordPanelBtn {
         padding: 0.65rem 1.25rem;
       }
 
@@ -3421,16 +3433,22 @@
       </section>
 
       <section id="admin">
-        <h2>Felhasználók Kezelése</h2>
-        <p class="admin-description">
-          Állítsd be felhasználónként, hogy ki tölthet fel, valamint a feltöltésekhez tartozó méret- és darabkorlátokat.
-        </p>
+        <div class="admin-header">
+          <div>
+            <h2>Felhasználók Kezelése</h2>
+            <p class="admin-description">
+              Állítsd be felhasználónként, hogy ki tölthet fel, valamint a feltöltésekhez tartozó méret- és darabkorlátokat.
+            </p>
+          </div>
+
+          <div class="admin-actions">
+            <button id="videoManagementBtn" class="secondary-btn" type="button">Videó Kezelés Felület</button>
+            <button id="discordPanelBtn" class="secondary-btn" type="button">Discord Panel</button>
+          </div>
+        </div>
+
         <div id="userListContainer"></div>
         <button id="savePermissionsBtn">Változtatások Mentése</button>
-
-        <div class="admin-clips-actions">
-          <button id="videoManagementBtn" class="secondary-btn" type="button">Videó Kezelés Felület</button>
-        </div>
       </section>
 
       <section id="profile">
@@ -3555,6 +3573,7 @@
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
     const videoManagementBtn = document.getElementById("videoManagementBtn");
+    const discordPanelBtn = document.getElementById("discordPanelBtn");
     const pollCreator = document.getElementById("pollCreator");
     const pollCreatorNotice = document.getElementById("pollCreatorNotice");
     const createPollForm = document.getElementById("createPollForm");
@@ -6305,10 +6324,17 @@
     }
 
     const VIDEO_MANAGEMENT_PATH = "/video-kezeles-felulet.html";
+    const DISCORD_PANEL_PATH = "/discord-panel.html";
 
     if (videoManagementBtn) {
       videoManagementBtn.addEventListener("click", () => {
         window.open(VIDEO_MANAGEMENT_PATH, "_blank");
+      });
+    }
+
+    if (discordPanelBtn) {
+      discordPanelBtn.addEventListener("click", () => {
+        window.open(DISCORD_PANEL_PATH, "_blank");
       });
     }
 
