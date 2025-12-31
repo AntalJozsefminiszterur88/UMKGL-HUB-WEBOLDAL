@@ -7845,6 +7845,33 @@
         return trimmed.replace(/\.[^.]+$/i, "").trim();
       }
 
+      const CLIP_NAME_TAGS = ["Dávid", "Balázs"];
+      const clipNameTagPriority = new Map(
+        CLIP_NAME_TAGS.map((name, index) => [name.toLowerCase(), index])
+      );
+
+      function orderClipTags(tags) {
+        if (!Array.isArray(tags)) return [];
+        if (tags.length < 2) return tags;
+
+        return [...tags].sort((first, second) => {
+          const firstName = (first?.name || "").toLowerCase();
+          const secondName = (second?.name || "").toLowerCase();
+          const firstIsName = clipNameTagPriority.has(firstName) ? 0 : 1;
+          const secondIsName = clipNameTagPriority.has(secondName) ? 0 : 1;
+
+          if (firstIsName !== secondIsName) {
+            return firstIsName - secondIsName;
+          }
+
+          if (firstIsName === 0 && secondIsName === 0) {
+            return clipNameTagPriority.get(firstName) - clipNameTagPriority.get(secondName);
+          }
+
+          return 0;
+        });
+      }
+
       async function handleClipTitleEdit(video, titleElement) {
         if (!video || !Number.isFinite(video.id)) {
           return;
@@ -7993,7 +8020,7 @@
 
           const tagList = document.createElement("div");
           tagList.className = "tag-list";
-          (video.tags || []).forEach((tag) => {
+          orderClipTags(video.tags || []).forEach((tag) => {
             const chip = document.createElement("span");
             chip.className = "tag-chip";
             chip.style.setProperty("--tag-color", normalizeColor(tag.color));
