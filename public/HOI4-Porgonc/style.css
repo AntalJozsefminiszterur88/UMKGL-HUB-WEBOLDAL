@@ -177,7 +177,9 @@ h3 {
 
 
 input { 
-  width:100%; margin:5px 0 12px 0; padding:10px; 
+  width:100%;
+  margin:0px 0 0px 0;
+  padding:10px; 
   border-radius:0; 
   border: 1px solid #222528;
   background-color: #1e2124;
@@ -491,4 +493,5 @@ body.grid-zoomed-active::before {
   font-weight:bold;
   font-size: 1em; 
   box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+
 }
