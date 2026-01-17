@@ -3542,6 +3542,7 @@
         <div class="video-modal__content">
           <video id="modalVideoPlayer" class="video-modal__video" controls autoplay></video>
           <p id="modalVideoTitle" class="video-modal__title"></p>
+          <button id="copyVideoLinkBtn" class="primary-button" type="button">Link másolása</button>
         </div>
         <div class="video-modal__nav-wrapper">
           <button
@@ -6769,6 +6770,7 @@
       const videoPlayerModal = document.getElementById("videoPlayerModal");
       const modalVideoPlayer = document.getElementById("modalVideoPlayer");
       const modalVideoTitle = document.getElementById("modalVideoTitle");
+      const copyVideoLinkBtn = document.getElementById("copyVideoLinkBtn");
       const closeVideoModalBtn = document.getElementById("closeVideoModalBtn");
       const prevVideoBtn = document.getElementById("prevVideoBtn");
       const nextVideoBtn = document.getElementById("nextVideoBtn");
@@ -8198,6 +8200,18 @@
 
       if (closeVideoModalBtn) {
         closeVideoModalBtn.addEventListener("click", closeVideoModal);
+      }
+
+      if (copyVideoLinkBtn) {
+        copyVideoLinkBtn.addEventListener("click", () => {
+          const videoLink = modalVideoPlayer.src;
+          if (!videoLink) return;
+          navigator.clipboard.writeText(videoLink).then(() => {
+            showClipToast("Link másolva a vágólapra!");
+          }).catch(err => {
+            console.error("Nem sikerült másolni: ", err);
+          });
+        });
       }
 
       if (prevVideoBtn) {
