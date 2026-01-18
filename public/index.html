@@ -11,12 +11,13 @@
       href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=Roboto+Condensed:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"
       referrerpolicy="no-referrer"
     />
-    <link rel="stylesheet" href="HOI4-Porgonc/style.css" />
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
@@ -1571,9 +1572,8 @@
         pointer-events: none;
       }
 
-      /* A HOI4 sorsoló szekciónál ne legyen szélességkorlát, hogy a négy doboz egymás mellett
-         maradjon */
-      #sorsolas {
+      /* Az Akadémia szekciónál ne legyen szélességkorlát */
+      #akademia {
         max-width: none;
       }
 
@@ -2922,6 +2922,383 @@
           pointer-events: auto;
         }
       }
+
+      /* --- AKADÉMIA (KNOWLEDGE HUB) STYLES --- */
+      #akademia {
+          --hub-bg-body: #36393f;
+          --hub-bg-card: #2f3136;
+          --hub-bg-darker: #202225;
+          --hub-accent: #5865f2;       /* Discord Blurple */
+          --hub-accent-hover: #4752c4;
+          --hub-text-main: #dcddde;
+          --hub-text-header: #ffffff;
+          --hub-text-muted: #b9bbbe;
+          --hub-success: #3ba55c;
+          --hub-danger: #ed4245;
+          --hub-border: rgba(255,255,255,0.08);
+
+          background-color: var(--hub-bg-body);
+          color: var(--hub-text-main);
+          font-family: 'Inter', sans-serif;
+          text-align: left;
+      }
+
+      #akademia .hub-container {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 40px 20px;
+          min-height: 100vh;
+      }
+
+      #akademia .hub-header {
+          margin-bottom: 50px;
+          text-align: center;
+          border-bottom: 1px solid var(--hub-border);
+          padding-bottom: 30px;
+      }
+
+      #akademia .hub-title {
+          font-size: 42px;
+          font-weight: 800;
+          color: var(--hub-text-header);
+          margin-bottom: 10px;
+          letter-spacing: -1px;
+      }
+
+      #akademia .hub-subtitle {
+          font-size: 18px;
+          color: var(--hub-text-muted);
+          max-width: 600px;
+          margin: 0 auto;
+          line-height: 1.5;
+      }
+
+      #akademia .filter-bar {
+          display: flex;
+          justify-content: center;
+          gap: 10px;
+          margin-bottom: 40px;
+          flex-wrap: wrap;
+      }
+
+      #akademia .filter-btn {
+          background: var(--hub-bg-darker);
+          border: 1px solid var(--hub-border);
+          color: var(--hub-text-muted);
+          padding: 10px 20px;
+          border-radius: 20px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-size: 14px;
+          width: auto;
+      }
+
+      #akademia .filter-btn:hover, #akademia .filter-btn.active {
+          background: var(--hub-accent);
+          color: white;
+          border-color: var(--hub-accent);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(88, 101, 242, 0.3);
+      }
+
+      #akademia .research-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+          gap: 30px;
+      }
+
+      #akademia .research-card {
+          background: var(--hub-bg-card);
+          border: 1px solid var(--hub-border);
+          border-radius: 12px;
+          overflow: hidden;
+          transition: transform 0.3s ease, box-shadow 0.3s ease;
+          display: flex;
+          flex-direction: column;
+          cursor: pointer;
+          position: relative;
+      }
+
+      #akademia .research-card:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+          border-color: var(--hub-accent);
+      }
+
+      #akademia .card-header {
+          height: 140px;
+          background: linear-gradient(135deg, var(--hub-bg-darker), var(--hub-bg-card));
+          position: relative;
+          padding: 20px;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+      }
+
+      #akademia .card-header::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0);
+          background-size: 20px 20px;
+          opacity: 0.5;
+      }
+
+      #akademia .category-badge {
+          background: rgba(0,0,0,0.4);
+          backdrop-filter: blur(4px);
+          color: white;
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          border: 1px solid rgba(255,255,255,0.1);
+          z-index: 2;
+      }
+
+      #akademia .card-icon {
+          font-size: 40px;
+          color: rgba(255,255,255,0.1);
+          position: absolute;
+          bottom: 20px;
+          right: 20px;
+          transition: color 0.3s;
+      }
+
+      #akademia .research-card:hover .card-icon {
+          color: var(--hub-accent);
+      }
+
+      #akademia .card-body {
+          padding: 24px;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+      }
+
+      #akademia .card-meta {
+          font-size: 12px;
+          color: var(--hub-text-muted);
+          margin-bottom: 12px;
+          font-family: 'JetBrains Mono', monospace;
+      }
+
+      #akademia .card-title {
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--hub-text-header);
+          margin: 0 0 12px 0;
+          line-height: 1.4;
+          text-align: left;
+      }
+
+      #akademia .card-abstract {
+          font-size: 14px;
+          color: var(--hub-text-main);
+          line-height: 1.6;
+          margin-bottom: 20px;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          flex: 1;
+      }
+
+      #akademia .card-footer {
+          padding-top: 20px;
+          border-top: 1px solid var(--hub-border);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+      }
+
+      #akademia .read-more {
+          color: var(--hub-accent);
+          font-weight: 600;
+          font-size: 14px;
+          text-decoration: none;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+      }
+
+      #akademia .read-more:hover {
+          color: white;
+      }
+
+      #akademia .reader-view {
+          display: none;
+          animation: hubFadeIn 0.4s ease;
+      }
+
+      #akademia .reader-view.active { display: block; }
+
+      #akademia .back-nav {
+          margin-bottom: 30px;
+      }
+
+      #akademia .back-btn {
+          background: transparent;
+          border: none;
+          color: var(--hub-text-muted);
+          cursor: pointer;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0;
+          transition: color 0.2s;
+          width: auto;
+      }
+
+      #akademia .back-btn:hover { color: var(--hub-accent); }
+
+      #akademia .article-layout {
+          display: grid;
+          grid-template-columns: 280px 1fr;
+          gap: 50px;
+          align-items: start;
+      }
+
+      #akademia .article-meta-sidebar {
+          background: var(--hub-bg-card);
+          padding: 24px;
+          border-radius: 12px;
+          border: 1px solid var(--hub-border);
+          position: sticky;
+          top: 20px;
+      }
+
+      #akademia .meta-group { margin-bottom: 24px; }
+      #akademia .meta-label {
+          font-size: 11px;
+          text-transform: uppercase;
+          color: var(--hub-text-muted);
+          font-weight: 700;
+          margin-bottom: 8px;
+          display: block;
+      }
+      #akademia .meta-value {
+          color: var(--hub-text-header);
+          font-weight: 500;
+          font-size: 14px;
+      }
+
+      #akademia .toc-list { list-style: none; padding: 0; margin: 0; }
+      #akademia .toc-item {
+          padding: 8px 0;
+          border-bottom: 1px solid var(--hub-border);
+          color: var(--hub-text-main);
+          font-size: 13px;
+          cursor: pointer;
+          transition: color 0.2s;
+          text-align: left;
+      }
+      #akademia .toc-item:hover { color: var(--hub-accent); }
+      #akademia .toc-item:last-child { border-bottom: none; }
+
+      #akademia .download-btn {
+          background: var(--hub-success);
+          color: white;
+          border: none;
+          width: 100%;
+          padding: 12px;
+          border-radius: 6px;
+          font-weight: 600;
+          cursor: pointer;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 8px;
+          transition: filter 0.2s;
+      }
+      #akademia .download-btn:hover { filter: brightness(1.1); }
+
+      #akademia .article-content {
+          background: var(--hub-bg-card);
+          padding: 40px 60px;
+          border-radius: 12px;
+          border: 1px solid var(--hub-border);
+      }
+
+      #akademia .article-header {
+          margin-bottom: 40px;
+          padding-bottom: 30px;
+          border-bottom: 1px solid var(--hub-border);
+      }
+
+      #akademia .article-title {
+          font-size: 36px;
+          font-weight: 800;
+          color: var(--hub-text-header);
+          margin: 10px 0;
+          line-height: 1.3;
+          text-align: left;
+      }
+
+      #akademia .article-subtitle {
+          font-size: 18px;
+          color: var(--hub-accent);
+          font-weight: 400;
+          text-align: left;
+      }
+
+      #akademia .article-body h2 {
+          color: var(--hub-text-header);
+          font-size: 24px;
+          margin-top: 40px;
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          text-align: left;
+      }
+
+      #akademia .article-body h2::before {
+          content: '#';
+          color: var(--hub-accent);
+          margin-right: 10px;
+          opacity: 0.5;
+      }
+
+      #akademia .article-body p {
+          line-height: 1.8;
+          font-size: 16px;
+          margin-bottom: 20px;
+          color: #d1d2d3;
+          text-align: left;
+      }
+
+      #akademia .highlight-box {
+          background: rgba(88, 101, 242, 0.1);
+          border-left: 4px solid var(--hub-accent);
+          padding: 20px;
+          margin: 30px 0;
+          border-radius: 0 4px 4px 0;
+          text-align: left;
+      }
+
+      #akademia .data-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 30px 0;
+          font-size: 14px;
+      }
+      #akademia .data-table th { text-align: left; color: var(--hub-text-muted); border-bottom: 2px solid var(--hub-border); padding: 10px; }
+      #akademia .data-table td { border-bottom: 1px solid var(--hub-border); padding: 10px; color: var(--hub-text-main); }
+
+      @keyframes hubFadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      @media (max-width: 900px) {
+          #akademia .article-layout { grid-template-columns: 1fr; }
+          #akademia .article-meta-sidebar { position: static; margin-bottom: 30px; }
+          #akademia .article-content { padding: 30px; }
+      }
     </style>
   </head>
   <body>
@@ -2938,7 +3315,7 @@
           >Fájlküldés</a
         >
         <a href="#klipek" data-section="klipek">Klippek</a>
-        <a href="#sorsolas" data-section="sorsolas">Hoi4 Sorsolás</a>
+        <a href="#akademia" data-section="akademia">Akadémia</a>
         <a href="#szavazas" data-section="szavazas">Szavazás</a>
         <a
           href="#programok"
@@ -3277,131 +3654,232 @@
         </div>
       </section>
 
-      <!-- Hoi4 Sorsolás -->
-      <section id="sorsolas">
-        <h1>HOI4 Road to 56 – Sorsoló</h1>
+      <!-- Akadémia -->
+      <section id="akademia">
+    <div class="hub-container">
 
-        <div class="controls-top">
-          <button id="resetAllBtn">Teljes Sorsolás Visszaállítása</button>
-        </div>
-
-        <div class="options-panel">
-          <label for="balanceCountriesByStrength">
-            <input type="checkbox" id="balanceCountriesByStrength" checked />
-            Országok erősségalapú kiegyensúlyozása a csapatok között
-          </label>
-        </div>
-
-        <div class="last-picked-display">
-          Legutóbb: Játékos: <span id="lastPickedPlayer">-</span> | Ország:
-          <span id="lastPickedCountry">-</span>
-        </div>
-
-        <div id="spinResultOverlay" class="spin-result-overlay">
-          <div id="spunItemDisplay" class="spun-item-display">Kipörgetve: -</div>
-          <button id="nextSpinStepButton" class="next-spin-step-button">
-            Következő
-          </button>
-        </div>
-
-        <div class="flex">
-          <div class="box">
-            <h2>
-              Játékosok <span class="count-display" id="playerListCount">(0)</span>
-            </h2>
-            <input id="playerName" type="text" placeholder="Név" />
-            <input
-              id="playerSkill"
-              type="number"
-              placeholder="Képesség 1–10"
-              min="1"
-              max="10"
-            />
-            <button id="addPlayerBtn" onclick="handlePlayerSubmit()">
-              Hozzáadás
-            </button>
-            <ul id="playersList"></ul>
-          </div>
-
-          <div class="box">
-            <h2>
-              Országok <span class="count-display" id="countryListCount">(0)</span>
-            </h2>
-            <input id="countryName" type="text" placeholder="Ország neve" />
-            <input
-              id="countryStrength"
-              type="number"
-              placeholder="Erősség 1-10"
-              min="1"
-              max="10"
-            />
-            <button id="addCountryBtn" onclick="handleCountrySubmit()">
-              Hozzáadás
-            </button>
-            <ul id="countriesList"></ul>
-          </div>
-
-          <div class="box">
-            <h2>Csapatok</h2>
-            <div id="teamWheelContainer" class="wheel-container">
-              <div class="pointer">◄</div>
-              <canvas id="teamWheel" width="250" height="250"></canvas>
+        <!-- FŐOLDAL / KÖNYVTÁR NÉZET -->
+        <div id="library-view">
+            <div class="hub-header">
+                <div class="hub-title">UMKGL Akadémia</div>
+                <div class="hub-subtitle">
+                    Hivatalos kutatási dokumentumok, elemzések és tényfeltáró jelentések gyűjteménye.
+                    <br>Tudományos igényességgel, Discord stílusban.
+                </div>
             </div>
-            <button id="spinTeamBtn">Csapat osztás / Forgatás</button>
-            <h3>
-              Csapat 1 játékosok
-              <span class="count-display" id="team1PlayerCount">(0)</span>
-            </h3>
-            <ul id="playerBasket1" class="player-basket"></ul>
-            <h3>
-              Csapat 2 játékosok
-              <span class="count-display" id="team2PlayerCount">(0)</span>
-            </h3>
-            <ul id="playerBasket2" class="player-basket"></ul>
-          </div>
 
-          <div class="box">
-            <h2>
-              Országok <span class="count-display" id="countryBoxCount">(0)</span>
-            </h2>
-            <div id="countryWheelContainer" class="wheel-container">
-              <div class="pointer">◄</div>
-              <canvas id="countryWheel" width="250" height="250"></canvas>
+            <div class="filter-bar">
+                <button class="filter-btn active" onclick="filterCards('all')">Összes</button>
+                <button class="filter-btn" onclick="filterCards('political')">Politológia</button>
+                <button class="filter-btn" onclick="filterCards('media')">Médiakutatás</button>
+                <button class="filter-btn" onclick="filterCards('tech')">Technológia</button>
             </div>
-            <button id="spinCountryBtn">Ország osztás / Forgatás</button>
 
-            <div id="countryGridsContainer">
-              <div class="team-grid-wrapper" id="team1CountryGridWrapper">
-                <h3>
-                  Csapat 1 országok
-                  <span class="count-display" id="team1CountryCount">(0/9)</span>
-                  <button
-                    class="grid-zoom-btn"
-                    data-targetwrapper="team1CountryGridWrapper"
-                    title="Nagyítás/Kicsinyítés"
-                  >
-                    🔍
-                  </button>
-                </h3>
-                <div id="countrySlots1" class="basket-grid"></div>
-              </div>
-              <div class="team-grid-wrapper" id="team2CountryGridWrapper">
-                <h3>
-                  Csapat 2 országok
-                  <span class="count-display" id="team2CountryCount">(0/9)</span>
-                  <button
-                    class="grid-zoom-btn"
-                    data-targetwrapper="team2CountryGridWrapper"
-                    title="Nagyítás/Kicsinyítés"
-                  >
-                    🔍
-                  </button>
-                </h3>
-                <div id="countrySlots2" class="basket-grid"></div>
-              </div>
+            <div class="research-grid">
+
+                <!-- KÁRTYA 1: GULYÁS -->
+                <article class="research-card" onclick="openArticle('gulyas')">
+                    <div class="card-header">
+                        <span class="category-badge" style="border-color: var(--danger); color: #ffaeb0;">Politológia</span>
+                        <i class="fas fa-landmark card-icon"></i>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-meta">2024. MÁRCIUS • ESETTANULMÁNY</div>
+                        <h3 class="card-title">A Gulyás-Magyar Interakció: Politikai kríziskommunikáció elemzése</h3>
+                        <p class="card-abstract">
+                            Részletes vizsgálata a 2024. februári "kegyelmi botrány" utáni eseményeknek. A tanulmány feltárja az összefüggést Gulyás Gergely miniszter váratlan gerincműtétje és Magyar Péter Partizán-interjúja között, elemzi a "diplomáciai betegség" elméletét és a lojalitás vs. barátság kérdéskörét a NER-ben.
+                        </p>
+                        <div class="card-footer">
+                            <span class="read-more">Olvass tovább <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- KÁRTYA 2: DOGGYANDI -->
+                <article class="research-card" onclick="openArticle('doggyandi')">
+                    <div class="card-header">
+                        <span class="category-badge" style="border-color: var(--success); color: #9dfcb6;">Médiakutatás</span>
+                        <i class="fas fa-virus card-icon"></i>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-meta">2025. JÚNIUS • TÉNYFELTÁRÁS</div>
+                        <h3 class="card-title">Online Stigma és Dezinformáció: A "DoggyAndi-jelenség"</h3>
+                        <p class="card-abstract">
+                            Hogyan terjednek egészségügyi álhírek a gaming közösségekben? Ez a kutatás a Tabár-Szabó Andrea (DoggyAndi) körül kialakult HIV/AIDS pletykákat vizsgálja tudományos módszertannal, cáfolva azokat a nyilvános adatok és az orvostudomány tényei alapján.
+                        </p>
+                        <div class="card-footer">
+                            <span class="read-more">Olvass tovább <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- KÁRTYA 3: PLACEHOLDER (Hogy látszódjon a grid) -->
+                <article class="research-card" style="opacity: 0.6; cursor: not-allowed;">
+                    <div class="card-header">
+                        <span class="category-badge">Archívum</span>
+                        <i class="fas fa-lock card-icon"></i>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-meta">TBA • TITKOSÍTOTT</div>
+                        <h3 class="card-title">Minecraft Szerver Gazdaságtan</h3>
+                        <p class="card-abstract">
+                            Hamarosan érkező tanulmány a virtuális valuták inflációjáról és a kereskedelmi útvonalak hatásáról a játékosok viselkedésére.
+                        </p>
+                        <div class="card-footer">
+                            <span class="read-more">Hamarosan...</span>
+                        </div>
+                    </div>
+                </article>
+
             </div>
-          </div>
         </div>
+
+        <!-- CIKK OLVASÓ NÉZET: GULYÁS -->
+        <div id="article-gulyas" class="reader-view">
+            <div class="back-nav">
+                <button class="back-btn" onclick="closeArticle()"><i class="fas fa-arrow-left"></i> Vissza a Könyvtárhoz</button>
+            </div>
+
+            <div class="article-layout">
+                <!-- Sidebar -->
+                <aside class="article-meta-sidebar">
+                    <div class="meta-group">
+                        <span class="meta-label">Szerző</span>
+                        <div class="meta-value">Politikai Elemző Unit</div>
+                    </div>
+                    <div class="meta-group">
+                        <span class="meta-label">Dátum</span>
+                        <div class="meta-value">2024. Március 28.</div>
+                    </div>
+                    <div class="meta-group">
+                        <span class="meta-label">Kulcsszavak</span>
+                        <div class="meta-value">NER, Válság, Kommunikáció</div>
+                    </div>
+                    <div class="meta-group">
+                        <span class="meta-label">Tartalomjegyzék</span>
+                        <ul class="toc-list">
+                            <li class="toc-item">Bevezetés: A februári bomba</li>
+                            <li class="toc-item">A műtét időzítése</li>
+                            <li class="toc-item">Politikai következmények</li>
+                        </ul>
+                    </div>
+                    <button class="download-btn"><i class="fas fa-file-pdf"></i> PDF Letöltése</button>
+                </aside>
+
+                <!-- Content -->
+                <div class="article-content">
+                    <div class="article-header">
+                        <span class="category-badge" style="background: var(--danger); color: white;">Politikai Elemzés</span>
+                        <h1 class="article-title">Gulyás Gergely 2024-es gerincműtétje és Magyar Péter Partizán-interjúja: Összefüggések</h1>
+                        <div class="article-subtitle">Hogyan hatott a kegyelmi botrány a kormányzati kommunikációra?</div>
+                    </div>
+
+                    <div class="article-body">
+                        <div class="highlight-box">
+                            <strong>Kutatási Kérdés:</strong> Volt-e ok-okozati összefüggés Gulyás Gergely eltűnése és barátja, Magyar Péter színrelépése között? A "diplomáciai betegség" elméletének vizsgálata.
+                        </div>
+
+                        <h2>1. Bevezetés: A Februári Bomba</h2>
+                        <p>
+                            2024. február 11-én Magyar Péter, Varga Judit volt férje, a Partizán műsorában éles kritikát fogalmazott meg a kormány belső körei ellen. Ez az esemény ("kegyelmi botrány") dominálta a közbeszédet. Ezzel párhuzamosan Gulyás Gergely miniszter váratlanul eltűnt a nyilvánosság elől.
+                        </p>
+
+                        <h2>2. A Műtét Rejtélye</h2>
+                        <p>
+                            Február végén a Miniszterelnökség bejelentette: Gulyás sürgősségi gerincműtéten esett át. Saját elmondása szerint <em>"a műtét sikeres volt, de utána újra kellett tanulnom járni"</em>. Bár a közvélemény szkeptikus volt, és sokan azt hitték, hogy a miniszter csak kerüli a kényes kérdéseket barátja árulásával kapcsolatban, a rehabilitáció hossza és a fizikai állapot (járókeret) valós orvosi beavatkozást igazol.
+                        </p>
+
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Esemény</th>
+                                    <th>Időpont</th>
+                                    <th>Jelentőség</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Magyar Péter Interjú</td>
+                                    <td>Február 11.</td>
+                                    <td>A botrány kirobbanása</td>
+                                </tr>
+                                <tr>
+                                    <td>Gulyás Műtétje</td>
+                                    <td>Február 25.</td>
+                                    <td>Kivonulás a nyilvánosságból</td>
+                                </tr>
+                                <tr>
+                                    <td>Visszatérés</td>
+                                    <td>Április 11.</td>
+                                    <td>Elhatárolódás a baráttól</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <h2>3. Konklúzió</h2>
+                        <p>
+                            Gulyás Gergely lojalitása a kormány felé megkérdőjelezhetetlen maradt. Visszatérésekor egyértelművé tette: bár 20 éves barátság fűzte Magyarhoz, az általa tett lépéseket (különösen a felesége titkos rögzítését) elfogadhatatlannak tartja. A "kommunikációs karantén" részben tudatos lehetett, de az egészségügyi ok volt a döntő tényező.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CIKK OLVASÓ NÉZET: DOGGYANDI -->
+        <div id="article-doggyandi" class="reader-view">
+            <div class="back-nav">
+                <button class="back-btn" onclick="closeArticle()"><i class="fas fa-arrow-left"></i> Vissza a Könyvtárhoz</button>
+            </div>
+
+            <div class="article-layout">
+                <aside class="article-meta-sidebar">
+                    <div class="meta-group">
+                        <span class="meta-label">Kutató</span>
+                        <div class="meta-value">Fact-Check Team</div>
+                    </div>
+                    <div class="meta-group">
+                        <span class="meta-label">Dátum</span>
+                        <div class="meta-value">2025. Június 20.</div>
+                    </div>
+                    <button class="download-btn"><i class="fas fa-file-pdf"></i> PDF Letöltése</button>
+                </aside>
+
+                <div class="article-content">
+                    <div class="article-header">
+                        <span class="category-badge" style="background: var(--success); color: white;">Médiakutatás</span>
+                        <h1 class="article-title">DoggyAndi és az online pletykák: Tudományos elemzés</h1>
+                    </div>
+
+                    <div class="article-body">
+                        <div class="highlight-box" style="border-color: var(--success); background: rgba(59, 165, 92, 0.1);">
+                            <strong>Összefoglaló:</strong> A kutatás célja a "DoggyAndi" nevű tartalomgyártót érintő HIV/AIDS pletykák hitelességének vizsgálata volt. Az eredmények alapján a vádak alaptalanok.
+                        </div>
+
+                        <h2>A Problémafelvetés</h2>
+                        <p>
+                            Az internetes közösségekben, különösen a fiatalabb (Z generációs) demográfiai csoportokban gyakori a dezinformáció gyors terjedése. A vizsgált esetben egy népszerű Minecraft videós magánéletével kapcsolatos súlyos egészségügyi spekulációk (AIDS) jelentek meg fórumokon (pl. Gyakorikérdések.hu), különösen a 2020-as párkapcsolati szakítása után.
+                        </p>
+
+                        <h2>Tényellenőrzés</h2>
+                        <p>
+                            A kutatás során nem találtunk semmilyen hiteles orvosi dokumentációt vagy nyilatkozatot, ami alátámasztaná a pletykákat. Ellenkezőleg:
+                        </p>
+                        <ul>
+                            <li>Az alany aktív életmódot folytat (utazások, nyilvános szereplések).</li>
+                            <li>A HIV nem diagnosztizálható videós tartalmak alapján.</li>
+                            <li>A pletykák forrása anonim és gyakran rosszindulatú kommentekre vezethető vissza.</li>
+                        </ul>
+
+                        <h2>Etikai vonatkozások</h2>
+                        <p>
+                            Fontos hangsúlyozni a GDPR és a magánszféra védelmének elveit. Egy közszereplőnek sem kötelessége nyilvánosságra hozni az egészségügyi állapotát, különösen stigmatizáló vádakkal szemben. A tudományos konszenzus szerint az ilyen pletykák terjesztése káros és etikátlan.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
       </section>
 
       <!-- Szavazás -->
@@ -8987,6 +9465,36 @@
 
     </script>
 
-  <script src="HOI4-Porgonc/script.js"></script>
+  <script>
+        function openArticle(articleId) {
+            // 1. Grid elrejtése
+            document.getElementById('library-view').style.display = 'none';
+            // 2. Minden cikk elrejtése (biztonság kedvéért)
+            document.querySelectorAll('.reader-view').forEach(el => el.classList.remove('active'));
+            // 3. Kiválasztott cikk megjelenítése
+            document.getElementById('article-' + articleId).classList.add('active');
+            // 4. Görgetés a tetejére
+            window.scrollTo(0, 0);
+        }
+
+        function closeArticle() {
+            // 1. Cikkek elrejtése
+            document.querySelectorAll('.reader-view').forEach(el => el.classList.remove('active'));
+            // 2. Grid megjelenítése
+            document.getElementById('library-view').style.display = 'block';
+            // 3. Görgetés a tetejére
+            window.scrollTo(0, 0);
+        }
+
+        function filterCards(category) {
+            // Gombok frissítése
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Kártyák szűrése
+            /* (Ez csak egy vizuális demo logika, élesben lehet dataset alapján) */
+            alert("A szűrés funkció a demóban csak vizuális elem. A teljes kódban itt valósulna meg a DOM szűrés.");
+        }
+  </script>
   </body>
 </html>
