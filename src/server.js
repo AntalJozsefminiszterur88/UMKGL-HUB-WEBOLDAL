@@ -507,6 +507,11 @@ const VIDEO_MIME_TYPES = {
     '.mkv': 'video/x-matroska'
 };
 
+function isVideoFile(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    return Object.prototype.hasOwnProperty.call(VIDEO_MIME_TYPES, ext);
+}
+
 function getVideoMimeType(filePath) {
     const ext = path.extname(filePath).toLowerCase();
     return VIDEO_MIME_TYPES[ext] || 'application/octet-stream';
@@ -524,6 +529,10 @@ app.get('/uploads/*', (req, res) => {
         fs.stat(filePath, (statErr, stats) => {
             if (statErr || !stats.isFile()) {
                 return res.status(404).json({ message: 'A kért videó nem található.' });
+            }
+
+            if (!isVideoFile(filePath)) {
+                return res.sendFile(filePath);
             }
 
             const fileSize = stats.size;
