@@ -34,7 +34,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Fájlfeltöltés beállítása a videókhoz
-const uploadsRootDirectory = 'D:\\weboldal fájlok';
+const uploadsRootDirectory = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
 const clipsDirectory = path.join(uploadsRootDirectory, 'klippek');
 const clipsOriginalDirectory = path.join(clipsDirectory, 'eredeti');
 const clips720pDirectory = path.join(clipsDirectory, '720p');
@@ -82,8 +82,8 @@ async function getVideoFileSize(filename) {
     return getUploadFileSize(filename);
 }
 
-const programImagesDirectory = path.join('D:\\weboldal fájlok', 'programs', 'images');
-const programFilesDirectory = path.join('D:\\weboldal fájlok', 'programs', 'files');
+const programImagesDirectory = path.join(uploadsRootDirectory, 'programs', 'images');
+const programFilesDirectory = path.join(uploadsRootDirectory, 'programs', 'files');
 
 ensureDirectoryExists(programImagesDirectory);
 ensureDirectoryExists(programFilesDirectory);
@@ -591,8 +591,7 @@ app.get('/uploads/*', (req, res) => {
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Serve uploads from D: drive
-const uploadsDir = 'D:\\weboldal fájlok';
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsRootDirectory));
 
 const activeReceivers = new Map();
 
