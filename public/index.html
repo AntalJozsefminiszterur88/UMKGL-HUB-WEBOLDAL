@@ -820,6 +820,51 @@
         width: 100%;
       }
 
+      .admin-preview-bar {
+        display: flex;
+        justify-content: flex-start;
+        padding: 0.65rem 1rem 0;
+      }
+
+      .admin-preview-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        background: rgba(114, 137, 218, 0.25);
+        border: 1px solid rgba(114, 137, 218, 0.55);
+        color: #fff;
+        border-radius: 999px;
+        padding: 0.4rem 1rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      }
+
+      .admin-preview-toggle:hover,
+      .admin-preview-toggle:focus-visible {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.4);
+        outline: none;
+      }
+
+      .admin-preview-toggle.is-active {
+        background: rgba(231, 76, 60, 0.18);
+        border-color: rgba(231, 76, 60, 0.5);
+      }
+
+      @media (max-width: 600px) {
+        .admin-preview-bar {
+          padding: 0.55rem 0.75rem 0;
+        }
+
+        .admin-preview-toggle {
+          font-size: 0.85rem;
+          padding: 0.35rem 0.85rem;
+        }
+      }
+
       .banner {
         width: 100%;
         max-height: 300px;
@@ -3303,6 +3348,17 @@
   </head>
   <body>
     <header>
+      <div id="adminPreviewBar" class="admin-preview-bar" style="display: none;">
+        <button
+          id="adminPreviewToggleBtn"
+          type="button"
+          class="admin-preview-toggle"
+          aria-pressed="false"
+          style="display: none;"
+        >
+          Nézet: Felhasználó
+        </button>
+      </div>
       <img src="/uploads/boritok/brigad2.jpg" alt="UMKGL HUB" class="banner" />
       <nav>
         <a href="#home" data-section="home" class="active">Főoldal</a>
@@ -4048,6 +4104,7 @@
 
   <script>
     const ADMIN_SESSION_KEY = "isAdmin";
+    const ADMIN_PREVIEW_KEY = "adminPreviewUserView";
     const ADMIN_ONLY_SECTIONS = new Set(["admin"]);
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
@@ -4058,6 +4115,8 @@
     const authLoggedOut = document.getElementById("authLoggedOut");
     const authLoggedIn = document.getElementById("authLoggedIn");
     const userGreeting = document.getElementById("userGreeting");
+    const adminPreviewBar = document.getElementById("adminPreviewBar");
+    const adminPreviewToggleBtn = document.getElementById("adminPreviewToggleBtn");
     const adminNavBtn = document.getElementById("adminNavBtn");
     const programNavBtn = document.getElementById("programNavBtn");
     const fileTransferNavBtn = document.getElementById("fileTransferNavBtn");
@@ -5801,6 +5860,7 @@
     }
 
       function updateAdminNavVisibility() {
+        updateAdminPreviewToggle();
         const isAdmin = isAdminUser();
 
         if (adminNavBtn) {
@@ -5808,6 +5868,10 @@
         }
 
         updateProgramAdminControls();
+
+        if (createTagWrapper) {
+          createTagWrapper.style.display = isAdmin ? "block" : "none";
+        }
 
         if (!isAdmin) {
           const activeSection = document.querySelector("main section.active");
@@ -5896,6 +5960,7 @@
       localStorage.removeItem(SESSION_KEYS.token);
       localStorage.removeItem(SESSION_KEYS.username);
       localStorage.removeItem(SESSION_KEYS.isAdmin);
+      localStorage.removeItem(ADMIN_PREVIEW_KEY);
       localStorage.removeItem(SESSION_KEYS.canTransfer);
       localStorage.removeItem(SESSION_KEYS.canViewClips);
       localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
@@ -7341,8 +7406,80 @@
       applyQualityPreference(currentVideoQuality);
       renderTagSelector();
 
-      function isAdminUser() {
+      function isAdminPreviewEnabled() {
+        return localStorage.getItem(ADMIN_PREVIEW_KEY) === "true";
+      }
+
+      function isActualAdmin() {
         return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
+      }
+
+      function setAdminPreviewEnabled(enabled) {
+        if (enabled) {
+          localStorage.setItem(ADMIN_PREVIEW_KEY, "true");
+        } else {
+          localStorage.removeItem(ADMIN_PREVIEW_KEY);
+        }
+      }
+
+      function updateAdminPreviewToggle() {
+        if (!adminPreviewToggleBtn) {
+          return;
+        }
+
+        const actualAdmin = isActualAdmin();
+        if (!actualAdmin) {
+          setAdminPreviewEnabled(false);
+          if (adminPreviewBar) {
+            adminPreviewBar.style.display = "none";
+          }
+          adminPreviewToggleBtn.style.display = "none";
+          adminPreviewToggleBtn.setAttribute("aria-pressed", "false");
+          adminPreviewToggleBtn.classList.remove("is-active");
+          return;
+        }
+
+        const previewEnabled = isAdminPreviewEnabled();
+        if (adminPreviewBar) {
+          adminPreviewBar.style.display = "flex";
+        }
+        adminPreviewToggleBtn.style.display = "inline-flex";
+        adminPreviewToggleBtn.setAttribute("aria-pressed", previewEnabled ? "true" : "false");
+        adminPreviewToggleBtn.classList.toggle("is-active", previewEnabled);
+        adminPreviewToggleBtn.textContent = previewEnabled ? "Nézet: Admin" : "Nézet: Felhasználó";
+      }
+
+      function isAdminUser() {
+        return isActualAdmin() && !isAdminPreviewEnabled();
+      }
+
+      function applyAdminPreviewState() {
+        updateAdminNavVisibility();
+        updateClipAccessUI();
+
+        const activeSection = document.querySelector("main section.active");
+        const activeId = activeSection ? activeSection.id : "";
+
+        if (activeId === "klipek") {
+          if (hasClipAccess()) {
+            fetchTags();
+            loadVideos();
+          } else {
+            updateClipAccessUI();
+          }
+        }
+
+        if (activeId === "szavazas") {
+          loadPolls();
+        }
+      }
+
+      if (adminPreviewToggleBtn) {
+        adminPreviewToggleBtn.addEventListener("click", () => {
+          const nextState = !isAdminPreviewEnabled();
+          setAdminPreviewEnabled(nextState);
+          applyAdminPreviewState();
+        });
       }
 
       function hasFileTransferPermission() {
