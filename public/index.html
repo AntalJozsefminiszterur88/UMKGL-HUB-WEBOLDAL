@@ -818,19 +818,27 @@
         padding-bottom: 1rem;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
         width: 100%;
+        position: relative;
+      }
+
+      .banner-wrap {
+        position: relative;
       }
 
       .admin-preview-bar {
+        position: absolute;
+        top: 12px;
+        left: 12px;
         display: flex;
         justify-content: flex-start;
-        padding: 0.65rem 1rem 0;
+        z-index: 5;
       }
 
       .admin-preview-toggle {
         display: inline-flex;
         align-items: center;
         gap: 0.45rem;
-        background: rgba(114, 137, 218, 0.25);
+        background: rgba(114, 137, 218, 0.4);
         border: 1px solid rgba(114, 137, 218, 0.55);
         color: #fff;
         border-radius: 999px;
@@ -856,7 +864,8 @@
 
       @media (max-width: 600px) {
         .admin-preview-bar {
-          padding: 0.55rem 0.75rem 0;
+          top: 8px;
+          left: 8px;
         }
 
         .admin-preview-toggle {
@@ -2234,12 +2243,14 @@
         border-radius: 12px;
         width: 100%;
         max-width: 860px;
+        max-height: 90vh;
         position: relative;
         box-shadow: 0 14px 45px rgba(0, 0, 0, 0.6);
         border: 1px solid rgba(255, 255, 255, 0.06);
         display: flex;
         flex-direction: column;
         gap: 1rem;
+        overflow: hidden;
       }
 
       .upload-modal-header {
@@ -2414,17 +2425,24 @@
         margin-bottom: 0.5rem;
       }
 
+      .add-more-btn {
+        align-self: flex-start;
+        margin-bottom: 0.5rem;
+      }
+
       .upload-queue-container {
         background: rgba(255, 255, 255, 0.02);
         border: 1px dashed rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 0.75rem;
         min-height: 140px;
-        max-height: 400px;
+        max-height: clamp(220px, 34vh, 360px);
         overflow-y: auto;
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
+        min-height: 0;
+        flex: 1 1 auto;
       }
 
       .upload-queue-container::-webkit-scrollbar {
@@ -3348,18 +3366,20 @@
   </head>
   <body>
     <header>
-      <div id="adminPreviewBar" class="admin-preview-bar" style="display: none;">
-        <button
-          id="adminPreviewToggleBtn"
-          type="button"
-          class="admin-preview-toggle"
-          aria-pressed="false"
-          style="display: none;"
-        >
-          Nézet: Felhasználó
-        </button>
+      <div class="banner-wrap">
+        <img src="/uploads/boritok/brigad2.jpg" alt="UMKGL HUB" class="banner" />
+        <div id="adminPreviewBar" class="admin-preview-bar" style="display: none;">
+          <button
+            id="adminPreviewToggleBtn"
+            type="button"
+            class="admin-preview-toggle"
+            aria-pressed="false"
+            style="display: none;"
+          >
+            Nézet: Admin
+          </button>
+        </div>
       </div>
-      <img src="/uploads/boritok/brigad2.jpg" alt="UMKGL HUB" class="banner" />
       <nav>
         <a href="#home" data-section="home" class="active">Főoldal</a>
         <a
@@ -3675,6 +3695,10 @@
               </div>
 
               <input type="file" id="fileInput" accept="video/*" style="display: none;" multiple />
+
+              <button id="addMoreVideosBtn" class="secondary-btn add-more-btn" type="button" style="display: none;">
+                Videó hozzáadása
+              </button>
 
               <div id="uploadQueueContainer" class="upload-queue-container">
                 <div id="drop-zone" class="drop-zone">
@@ -4104,7 +4128,7 @@
 
   <script>
     const ADMIN_SESSION_KEY = "isAdmin";
-    const ADMIN_PREVIEW_KEY = "adminPreviewUserView";
+    const ADMIN_PREVIEW_KEY = "adminPreviewRole";
     const ADMIN_ONLY_SECTIONS = new Set(["admin"]);
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
@@ -5938,11 +5962,7 @@
         authLoggedIn.style.display = "flex";
       }
 
-      updateAdminNavVisibility();
-      updateProgramAdminControls();
-      updateFileTransferNavVisibility();
-      updateClipAccessUI();
-      updatePollCreatorState(true);
+      applyAdminPreviewState();
       markPollsForRefresh();
       loadPrograms();
 
@@ -7299,6 +7319,7 @@
       const closeUploadModalBtn = document.getElementById("closeUploadModal");
       const dropZone = document.getElementById("drop-zone");
       const uploadQueueContainer = document.getElementById("uploadQueueContainer");
+      const addMoreVideosBtn = document.getElementById("addMoreVideosBtn");
       const fileInput = document.getElementById("fileInput");
       const addFilesBtn = document.getElementById("addFilesBtn");
       const cancelUploadBtn = document.getElementById("cancelUploadBtn");
@@ -7406,15 +7427,37 @@
       applyQualityPreference(currentVideoQuality);
       renderTagSelector();
 
-      function isAdminPreviewEnabled() {
-        return localStorage.getItem(ADMIN_PREVIEW_KEY) === "true";
+      function isActualAdmin() {
+        const value = localStorage.getItem(ADMIN_SESSION_KEY);
+        if (value === "true" || value === "1") {
+          return true;
+        }
+        if (value === "false" || value === "0") {
+          return false;
+        }
+
+        const token = getStoredToken();
+        const payload = token ? decodeTokenPayload(token) : null;
+        if (payload?.isAdmin === true || payload?.isAdmin === 1) {
+          return true;
+        }
+
+        return false;
       }
 
-      function isActualAdmin() {
-        return localStorage.getItem(ADMIN_SESSION_KEY) === "true";
+      function isAdminPreviewEnabled() {
+        const stored = localStorage.getItem(ADMIN_PREVIEW_KEY);
+        if (stored === "guest") {
+          localStorage.removeItem(ADMIN_PREVIEW_KEY);
+          return false;
+        }
+        return stored === "true" || stored === "user";
       }
 
       function setAdminPreviewEnabled(enabled) {
+        if (!isActualAdmin()) {
+          return;
+        }
         if (enabled) {
           localStorage.setItem(ADMIN_PREVIEW_KEY, "true");
         } else {
@@ -7429,7 +7472,7 @@
 
         const actualAdmin = isActualAdmin();
         if (!actualAdmin) {
-          setAdminPreviewEnabled(false);
+          localStorage.removeItem(ADMIN_PREVIEW_KEY);
           if (adminPreviewBar) {
             adminPreviewBar.style.display = "none";
           }
@@ -7446,7 +7489,7 @@
         adminPreviewToggleBtn.style.display = "inline-flex";
         adminPreviewToggleBtn.setAttribute("aria-pressed", previewEnabled ? "true" : "false");
         adminPreviewToggleBtn.classList.toggle("is-active", previewEnabled);
-        adminPreviewToggleBtn.textContent = previewEnabled ? "Nézet: Admin" : "Nézet: Felhasználó";
+        adminPreviewToggleBtn.textContent = previewEnabled ? "Nézet: felhasználó" : "Nézet: Admin";
       }
 
       function isAdminUser() {
@@ -7455,7 +7498,9 @@
 
       function applyAdminPreviewState() {
         updateAdminNavVisibility();
+        updateFileTransferNavVisibility();
         updateClipAccessUI();
+        updatePollCreatorState();
 
         const activeSection = document.querySelector("main section.active");
         const activeId = activeSection ? activeSection.id : "";
@@ -8134,7 +8179,13 @@
       function renderUploadQueue() {
         if (!uploadQueueContainer) return;
         uploadQueueContainer.innerHTML = "";
-        if (dropZone) {
+        const hasItems = uploadQueue.length > 0;
+
+        if (addMoreVideosBtn) {
+          addMoreVideosBtn.style.display = hasItems ? "inline-flex" : "none";
+        }
+
+        if (!hasItems && dropZone) {
           uploadQueueContainer.appendChild(dropZone);
         }
 
@@ -9258,6 +9309,10 @@
 
       if (addFilesBtn && fileInput) {
         addFilesBtn.addEventListener("click", () => fileInput.click());
+      }
+
+      if (addMoreVideosBtn && fileInput) {
+        addMoreVideosBtn.addEventListener("click", () => fileInput.click());
       }
 
       if (globalTagSelect) {

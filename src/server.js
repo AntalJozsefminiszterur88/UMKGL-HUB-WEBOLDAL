@@ -1401,8 +1401,24 @@ app.get('/api/videos/get-uploaded-titles', authenticateToken, ensureClipViewPerm
     }
 });
 
-app.get('/api/videos/get-uploaded-hashes', async (_req, res) => {
+const PUBLIC_VIDEO_HASHES_ENDPOINT = '/api/videos/get-uploaded-hashes';
+
+app.options(PUBLIC_VIDEO_HASHES_ENDPOINT, (_req, res) => {
+    res.set({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
+    return res.sendStatus(204);
+});
+
+app.get(PUBLIC_VIDEO_HASHES_ENDPOINT, async (_req, res) => {
     try {
+        res.set({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        });
         const { rows } = await db.query('SELECT file_hash FROM videos WHERE file_hash IS NOT NULL');
         const hashes = (rows || []).map((row) => row.file_hash).filter(Boolean);
         res.status(200).json(hashes);

@@ -10,6 +10,7 @@ services:
       - DB_NAME=mydb
       - BOT_API_URL=http://music_bot:5050/share-video
       - BASE_URL=https://umkgl.online 
+      - UPLOADS_DIR=/usr/src/app/public/uploads
     depends_on:
       db:
         condition: service_healthy
