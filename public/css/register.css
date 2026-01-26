@@ -1,0 +1,78 @@
+
+    :root { /* Hozzáadtam a hiányzó CSS változót a gomb színéhez */
+        --accent: #7289da;
+    }
+    body { text-align: center; padding-top: 50px; background: #36393f; color: #dcddde; font-family: sans-serif; }
+    h1 { color: var(--accent); }
+    form { background: #2f3136; padding: 1rem; border-radius: 4px; width: 300px; margin: auto; }
+    input { width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; padding: 0.5rem; background:#1e2124; color:#dcddde; border:1px solid #202225; border-radius:4px; }
+    button { background: var(--accent); color:#fff; border:none; padding:0.5rem 1rem; border-radius:4px; cursor:pointer; width:100%; }
+    a { color: var(--accent); display: inline-block; margin-top: 1rem; }
+
+    .feedback-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 1300;
+      padding: 1rem;
+    }
+
+    .feedback-modal__content {
+      background: #2f3136;
+      color: #dcddde;
+      padding: 1.5rem;
+      border-radius: 8px;
+      width: min(90%, 360px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      position: relative;
+      text-align: center;
+    }
+
+    .feedback-modal__title {
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .feedback-modal__message {
+      margin-bottom: 1.25rem;
+    }
+
+    .feedback-modal__close {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-size: 1.5rem;
+      line-height: 1;
+      width: 2rem;
+      height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 999px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .feedback-modal__close:hover,
+    .feedback-modal__close:focus-visible {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      outline: none;
+    }
+
+    .feedback-modal__actions button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      width: auto;
+    }
+  
