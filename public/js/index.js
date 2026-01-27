@@ -94,6 +94,17 @@
     let socket = null;
     let peerId = null;
     let selectedReceiver = null;
+    const P2P_CHUNK_SIZE = 64 * 1024;
+    const P2P_ACK_EVERY_BYTES = 5 * 1024 * 1024;
+    const P2P_ACK_EVERY_CHUNKS = 50;
+    const P2P_BUFFERED_THRESHOLD = 10 * 1024 * 1024;
+    const P2P_SIGNAL_TIMEOUT_MS = 4000;
+    const P2P_SIGNAL_RETRY_LIMIT = 3;
+    const P2P_SIGNAL_RETRY_DELAY_MS = 1200;
+    const P2P_ACK_TIMEOUT_MS = 8000;
+    const P2P_ACK_REQUEST_RETRY_LIMIT = 3;
+    const RECEIVER_HEARTBEAT_INTERVAL_MS = 8000;
+    let receiverHeartbeatTimer = null;
     const radarPanState = {
       offsetX: 0,
       offsetY: 0,
@@ -411,6 +422,24 @@
       }
       if (transfer) {
         transfer.completed = true;
+        if (transfer.chunkAckWaiter?.timeoutId) {
+          clearTimeout(transfer.chunkAckWaiter.timeoutId);
+        }
+        if (transfer.chunkAckWaiter?.reject) {
+          transfer.chunkAckWaiter.reject(new Error("Transfer ended"));
+        }
+        transfer.chunkAckWaiter = null;
+        if (transfer.signalWaiters) {
+          transfer.signalWaiters.forEach((waiter) => {
+            if (waiter?.timeoutId) {
+              clearTimeout(waiter.timeoutId);
+            }
+            if (waiter?.reject) {
+              waiter.reject(new Error("Transfer ended"));
+            }
+          });
+          transfer.signalWaiters.clear();
+        }
       }
       ensureTransferPlaceholder();
     }
@@ -432,6 +461,258 @@
         btn.addEventListener("click", onClick);
       }
       return btn;
+    }
+
+    function delay(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function startReceiverHeartbeat() {
+      if (receiverHeartbeatTimer || !socket) {
+        return;
+      }
+
+      receiverHeartbeatTimer = setInterval(() => {
+        if (!socket || !socket.connected || !receiverToggle?.checked || !peerId) {
+          return;
+        }
+        socket.emit("receiver_heartbeat", { peerId });
+      }, RECEIVER_HEARTBEAT_INTERVAL_MS);
+    }
+
+    function stopReceiverHeartbeat() {
+      if (receiverHeartbeatTimer) {
+        clearInterval(receiverHeartbeatTimer);
+        receiverHeartbeatTimer = null;
+      }
+    }
+
+    function waitForSignalAck(transfer, ackType, timeoutMs = P2P_SIGNAL_TIMEOUT_MS) {
+      if (!transfer) {
+        return Promise.reject(new Error("Nincs aktív átvitel."));
+      }
+
+      transfer.signalWaiters = transfer.signalWaiters || new Map();
+      const existing = transfer.signalWaiters.get(ackType);
+      if (existing?.timeoutId) {
+        clearTimeout(existing.timeoutId);
+      }
+
+      return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          transfer.signalWaiters.delete(ackType);
+          reject(new Error("Signal timeout"));
+        }, timeoutMs);
+
+        transfer.signalWaiters.set(ackType, { resolve, reject, timeoutId });
+      });
+    }
+
+    function resolveSignalAck(transfer, ackType, payload) {
+      if (!transfer?.signalWaiters) {
+        return;
+      }
+
+      const waiter = transfer.signalWaiters.get(ackType);
+      if (!waiter) {
+        return;
+      }
+
+      if (waiter.timeoutId) {
+        clearTimeout(waiter.timeoutId);
+      }
+      transfer.signalWaiters.delete(ackType);
+      waiter.resolve(payload);
+    }
+
+    async function sendSignalWithRetry(conn, transfer, payload, ackType, options = {}) {
+      const timeoutMs = options.timeoutMs ?? P2P_SIGNAL_TIMEOUT_MS;
+      const retries = options.retries ?? P2P_SIGNAL_RETRY_LIMIT;
+      const retryDelayMs = options.retryDelayMs ?? P2P_SIGNAL_RETRY_DELAY_MS;
+
+      let attempt = 0;
+      while (attempt <= retries && !transfer?.isCancelled) {
+        conn.send(payload);
+        try {
+          const ack = await waitForSignalAck(transfer, ackType, timeoutMs);
+          return ack;
+        } catch (err) {
+          attempt += 1;
+          if (attempt > retries) {
+            throw err;
+          }
+          await delay(retryDelayMs);
+        }
+      }
+
+      throw new Error("Signal retry exceeded");
+    }
+
+    function resolveChunkAck(transfer, payload) {
+      if (!transfer || !payload) {
+        return;
+      }
+
+      const receivedBytes = Number(payload.receivedBytes);
+      if (!Number.isFinite(receivedBytes)) {
+        return;
+      }
+
+      const receivedChunks = Number(payload.receivedChunks) || 0;
+      const final =
+        Boolean(payload.final) ||
+        (Number.isFinite(transfer.size) && receivedBytes >= transfer.size);
+
+      transfer.lastAck = {
+        receivedBytes,
+        receivedChunks,
+        final,
+        timestamp: Date.now(),
+      };
+
+      const waiter = transfer.chunkAckWaiter;
+      if (waiter && receivedBytes >= waiter.targetBytes) {
+        if (waiter.timeoutId) {
+          clearTimeout(waiter.timeoutId);
+        }
+        transfer.chunkAckWaiter = null;
+        waiter.resolve(transfer.lastAck);
+      }
+    }
+
+    function waitForChunkAck(transfer, targetBytes, timeoutMs = P2P_ACK_TIMEOUT_MS) {
+      if (!transfer) {
+        return Promise.reject(new Error("Nincs aktív átvitel."));
+      }
+
+      if (transfer.lastAck?.receivedBytes >= targetBytes) {
+        return Promise.resolve(transfer.lastAck);
+      }
+
+      return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          transfer.chunkAckWaiter = null;
+          reject(new Error("ACK timeout"));
+        }, timeoutMs);
+
+        transfer.chunkAckWaiter = { resolve, reject, targetBytes, timeoutId };
+      });
+    }
+
+    async function waitForChunkAckWithRetry(transfer, conn, targetBytes) {
+      let attempts = 0;
+
+      while (attempts <= P2P_ACK_REQUEST_RETRY_LIMIT && !transfer?.isCancelled) {
+        try {
+          return await waitForChunkAck(transfer, targetBytes, P2P_ACK_TIMEOUT_MS);
+        } catch (err) {
+          attempts += 1;
+          if (attempts > P2P_ACK_REQUEST_RETRY_LIMIT) {
+            throw err;
+          }
+          if (conn?.open) {
+            conn.send({ type: "ack_request", targetBytes });
+          }
+        }
+      }
+
+      throw new Error("ACK wait aborted");
+    }
+
+    function sendReceiverAck(conn, transfer) {
+      if (!conn?.open || !transfer) {
+        return;
+      }
+
+      const receivedBytes = Number(transfer.received) || 0;
+      const receivedChunks = Number(transfer.receivedChunks) || 0;
+      const final =
+        Number.isFinite(transfer.size) ? receivedBytes >= transfer.size : false;
+
+      conn.send({
+        type: "ack",
+        receivedBytes,
+        receivedChunks,
+        final,
+      });
+
+      transfer.lastAckBytes = receivedBytes;
+      transfer.lastAckChunks = receivedChunks;
+    }
+
+    function finalizeIncomingTransfer(transfer, conn) {
+      if (!transfer || transfer.completed || transfer.isCancelled) {
+        return;
+      }
+
+      const expectedSize = Number.isFinite(transfer.size) ? transfer.size : null;
+      if (expectedSize !== null && transfer.received < expectedSize) {
+        console.error(
+          "Átvitel sikertelen: a beérkezett méret nem egyezik a metaadatban lévő mérettel.",
+        );
+        finalizeTransfer(transfer, "Hiba: a fájl mérete nem stimmel, letöltés megszakítva.");
+        if (conn?.open) {
+          conn.send({
+            type: "complete_ack",
+            success: false,
+            message: "Méreteltérés.",
+          });
+        }
+        return;
+      }
+
+      let blob = new Blob(transfer.chunks, {
+        type: transfer.mimeType || "application/octet-stream",
+      });
+
+      if (expectedSize !== null && transfer.received > expectedSize) {
+        console.warn(
+          "A beérkezett méret nagyobb a vártnál, a fájl mérete korrigálva lesz.",
+        );
+        blob = blob.slice(0, expectedSize, transfer.mimeType || "application/octet-stream");
+      }
+      const url = URL.createObjectURL(blob);
+      transfer.chunks = [];
+      transfer.downloadUrl = url;
+      console.log("Fájl fogadva, mentésre vár", transfer.name);
+      updateTransferProgress(
+        transfer,
+        transfer.size || transfer.received,
+        transfer.size || transfer.received,
+      );
+
+      updateTransferStatus(transfer, "Átvitel kész. Kattints a Mentésre.");
+      if (transfer?.actions) {
+        transfer.actions.innerHTML = "";
+      }
+
+      const saveBtn = createTransferButton("💾 Mentés", "transfer-btn--accept", () => {
+        if (!transfer.downloadUrl) {
+          return;
+        }
+        const a = document.createElement("a");
+        a.href = transfer.downloadUrl;
+        a.download = transfer.name || "fajl";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        const urlToRevoke = transfer.downloadUrl;
+        transfer.downloadUrl = null;
+        setTimeout(() => {
+          URL.revokeObjectURL(urlToRevoke);
+        }, 4000);
+
+        finalizeTransfer(transfer, "Fájl mentése elindítva.");
+      });
+
+      if (transfer?.actions) {
+        transfer.actions.appendChild(saveBtn);
+      }
+
+      if (conn?.open) {
+        conn.send({ type: "complete_ack", success: true });
+      }
     }
 
     function getTransferByConn(conn) {
@@ -513,7 +794,14 @@
     }
 
     function ensureSocketConnection() {
-      if (socket || !isUserLoggedIn()) {
+      if (!isUserLoggedIn()) {
+        return;
+      }
+
+      if (socket) {
+        if (!socket.connected && socket.disconnected) {
+          socket.connect();
+        }
         return;
       }
 
@@ -521,11 +809,13 @@
         auth: { token: getStoredToken() },
         transports: ["websocket"],
         upgrade: false,
+        reconnection: true,
       });
 
       socket.on("connect", () => {
         updateReceiverStatus("Kapcsolódva a jelző szerverhez.");
         registerReceiverIfEnabled();
+        startReceiverHeartbeat();
       });
 
       socket.on("connect_error", (err) => {
@@ -545,6 +835,7 @@
       socket.on("disconnect", () => {
         clearReceiverList();
         updateReceiverStatus("Kapcsolat bontva a jelző szerverrel.");
+        stopReceiverHeartbeat();
       });
     }
 
@@ -558,17 +849,10 @@
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-            { urls: "stun:stun3.l.google.com:19302" },
-            { urls: "stun:stun4.l.google.com:19302" },
-            { urls: "stun:stun.framasoft.org" },
-            { urls: "stun:stun.voip.blackberry.com:3478" },
-            { urls: "stun:stun.antisip.com" },
-            { urls: "stun:stun.sipgate.net" },
-            { urls: "stun:openrelay.metered.ca:80" },
           ],
           iceCandidatePoolSize: 10,
         },
+        debug: 1,
       });
       peer.on("open", (id) => {
         peerId = id;
@@ -579,6 +863,9 @@
 
       peer.on("disconnected", () => {
         peerId = null;
+        if (typeof peer.reconnect === "function") {
+          peer.reconnect();
+        }
       });
     }
 
@@ -611,6 +898,7 @@
           } else if (socket) {
             socket.emit("unregister_receiver");
             updateReceiverStatus("Fogadó mód kikapcsolva.");
+            stopReceiverHeartbeat();
           }
         });
 
@@ -666,6 +954,7 @@
         socket.disconnect();
         socket = null;
       }
+      stopReceiverHeartbeat();
       if (peer) {
         peer.destroy();
         peer = null;
@@ -686,6 +975,7 @@
 
       socket.emit("register_receiver", { token: getStoredToken(), peerId });
       updateReceiverStatus("Fogadó mód aktiválva.");
+      startReceiverHeartbeat();
     }
 
     function handleIncomingConnection(conn) {
@@ -699,6 +989,11 @@
         let transfer = getTransferByConn(conn);
 
         if (data.type === "meta") {
+          if (transfer) {
+            conn.send({ type: "meta_ack" });
+            return;
+          }
+
           const transferId = `incoming-${Date.now()}-${Math.random().toString(16).slice(2)}`;
           transfer = createTransferCard({
             id: transferId,
@@ -714,7 +1009,17 @@
           }
 
           transfer.conn = conn;
+          transfer.received = 0;
+          transfer.receivedChunks = 0;
+          transfer.seenSeqs = new Set();
+          transfer.lastAckBytes = 0;
+          transfer.lastAckChunks = 0;
+          transfer.pendingComplete = false;
+          transfer.finalByteReceived = false;
+          transfer.isAccepted = false;
           conn.__transferId = transferId;
+
+          conn.send({ type: "meta_ack" });
 
           const cancelBtn = createTransferButton("Mégse", "transfer-btn--cancel", () => {
             transfer.isCancelled = true;
@@ -723,21 +1028,46 @@
             conn.close();
           });
 
-          const acceptBtn = createTransferButton("Elfogad (Letöltés)", "transfer-btn--accept", () => {
-            transfer.startTime = Date.now();
-            transfer.received = 0;
-            transfer.chunks = [];
-            updateTransferStatus(transfer, "Fogadás...");
-            setTransferActions(transfer, [cancelBtn]);
-            conn.send({ type: "accept" });
-            console.log("Accept üzenet elküldve a küldőnek");
-          });
+          const acceptBtn = createTransferButton(
+            "Elfogad (Letöltés)",
+            "transfer-btn--accept",
+            async () => {
+              if (transfer.isCancelled || transfer.completed) {
+                return;
+              }
+              transfer.isAccepted = true;
+              transfer.startTime = Date.now();
+              transfer.received = 0;
+              transfer.receivedChunks = 0;
+              transfer.chunks = [];
+              updateTransferStatus(transfer, "Fogadás...");
+              setTransferActions(transfer, [cancelBtn]);
+              try {
+                await sendSignalWithRetry(conn, transfer, { type: "accept" }, "accept_ack");
+              } catch (err) {
+                updateTransferStatus(transfer, "Elfogadás elküldve, várakozás a feladóra...");
+              }
+
+              if (Number(transfer.size) === 0) {
+                transfer.finalByteReceived = true;
+                sendReceiverAck(conn, transfer);
+                if (transfer.pendingComplete) {
+                  if (!transfer.finalizeScheduled) {
+                    transfer.finalizeScheduled = true;
+                    setTimeout(() => {
+                      transfer.finalizeScheduled = false;
+                      finalizeIncomingTransfer(transfer, conn);
+                    }, 0);
+                  }
+                }
+              }
+            },
+          );
 
           const rejectBtn = createTransferButton("Elutasít", "transfer-btn--reject", () => {
             transfer.isCancelled = true;
             conn.send({ type: "reject" });
             finalizeTransfer(transfer, "A fájlátvitel elutasítva.");
-            console.log("Reject üzenet elküldve a küldőnek");
             conn.close();
           });
 
@@ -748,6 +1078,16 @@
         }
 
         if (!transfer) {
+          return;
+        }
+
+        if (data.type === "accept_ack") {
+          resolveSignalAck(transfer, "accept_ack", data);
+          return;
+        }
+
+        if (data.type === "ack_request") {
+          sendReceiverAck(conn, transfer);
           return;
         }
 
@@ -771,8 +1111,17 @@
             return;
           }
 
+          const seq = data.seq;
+          if (transfer.seenSeqs) {
+            if (transfer.seenSeqs.has(seq)) {
+              return;
+            }
+            transfer.seenSeqs.add(seq);
+          }
+
           transfer.chunks.push(chunkBuffer);
           transfer.received += chunkBuffer.byteLength;
+          transfer.receivedChunks = (transfer.receivedChunks || 0) + 1;
 
           if (transfer.size) {
             const percent = Math.min(100, Math.round((transfer.received / transfer.size) * 100));
@@ -782,32 +1131,59 @@
           }
 
           updateTransferProgress(transfer, transfer.received, transfer.size || transfer.received);
+
+          const shouldAck =
+            transfer.received - (transfer.lastAckBytes || 0) >= P2P_ACK_EVERY_BYTES ||
+            transfer.receivedChunks - (transfer.lastAckChunks || 0) >= P2P_ACK_EVERY_CHUNKS ||
+            (Number.isFinite(transfer.size) && transfer.received >= transfer.size);
+
+          if (shouldAck) {
+            sendReceiverAck(conn, transfer);
+          }
+
+          if (Number.isFinite(transfer.size) && transfer.received >= transfer.size) {
+            transfer.finalByteReceived = true;
+          }
+
+          if (
+            Number.isFinite(transfer.size) &&
+            transfer.received === transfer.size &&
+            transfer.pendingComplete
+          ) {
+            if (!transfer.finalizeScheduled) {
+              transfer.finalizeScheduled = true;
+              setTimeout(() => {
+                transfer.finalizeScheduled = false;
+                finalizeIncomingTransfer(transfer, conn);
+              }, 0);
+            }
+          }
+
           return;
         }
 
         if (data.type === "complete") {
-          if (typeof transfer.size === "number" && transfer.received !== transfer.size) {
-            console.error(
-              "Átvitel sikertelen: a beérkezett méret nem egyezik a metaadatban lévő mérettel.",
-            );
-            finalizeTransfer(transfer, "Hiba: a fájl mérete nem stimmel, letöltés megszakítva.");
+          if (transfer.completed) {
+            if (conn?.open) {
+              conn.send({ type: "complete_ack", success: true });
+            }
             return;
           }
 
-          const blob = new Blob(transfer.chunks, {
-            type: transfer.mimeType || "application/octet-stream",
-          });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = transfer.name || "fajl";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-          console.log("Fájl letöltése elindítva", transfer.name);
-          updateTransferProgress(transfer, transfer.size || transfer.received, transfer.size || transfer.received);
-          finalizeTransfer(transfer, "Fájl fogadva és letöltve.");
+          if (Number.isFinite(transfer.size) && transfer.received < transfer.size) {
+            transfer.pendingComplete = true;
+            updateTransferStatus(transfer, "Véglegesítésre vár...");
+            return;
+          }
+
+          transfer.pendingComplete = true;
+          if (!transfer.finalizeScheduled) {
+            transfer.finalizeScheduled = true;
+            setTimeout(() => {
+              transfer.finalizeScheduled = false;
+              finalizeIncomingTransfer(transfer, conn);
+            }, 0);
+          }
           return;
         }
 
@@ -845,11 +1221,13 @@
       }
 
       const { conn, file } = transfer;
-      const chunkSize = 65536;
-      const bufferedThreshold = 10 * 1024 * 1024;
+      const chunkSize = P2P_CHUNK_SIZE;
+      const bufferedThreshold = P2P_BUFFERED_THRESHOLD;
+      const batchBytesTarget = P2P_ACK_EVERY_BYTES;
       let chunksSent = 0;
       let offset = 0;
       transfer.startTime = transfer.startTime || Date.now();
+      transfer.lastAck = transfer.lastAck || { receivedBytes: 0, receivedChunks: 0, final: false };
 
       while (offset < file.size) {
         if (transfer.isCancelled) {
@@ -857,23 +1235,51 @@
           return;
         }
 
-        while ((conn.dataChannel?.bufferedAmount ?? 0) > bufferedThreshold) {
-          await new Promise((resolve) => setTimeout(resolve, 15));
-          if (transfer.isCancelled) {
-            finalizeTransfer(transfer, "Küldés megszakítva.");
-            return;
+        let batchBytesSent = 0;
+        let batchChunksSent = 0;
+
+        while (offset < file.size && batchBytesSent < batchBytesTarget) {
+          while ((conn.dataChannel?.bufferedAmount ?? 0) > bufferedThreshold) {
+            await delay(15);
+            if (transfer.isCancelled) {
+              finalizeTransfer(transfer, "Küldés megszakítva.");
+              return;
+            }
+          }
+
+          const slice = file.slice(offset, offset + chunkSize);
+          const buffer = await slice.arrayBuffer();
+          if (!conn.open) {
+            throw new Error("A kapcsolat megszakadt a küldés közben.");
+          }
+          conn.send({ type: "chunk", data: buffer, seq: chunksSent });
+          offset += buffer.byteLength;
+          chunksSent += 1;
+          batchBytesSent += buffer.byteLength;
+          batchChunksSent += 1;
+          transfer.sentBytes = offset;
+          transfer.sentChunks = chunksSent;
+
+          if (chunksSent % 50 === 0 || offset >= file.size) {
+            const percent = Math.min(100, Math.round((offset / file.size) * 100));
+            updateTransferStatus(transfer, `Küldés: ${percent}%`);
+            updateTransferProgress(transfer, offset, file.size);
           }
         }
-        const slice = file.slice(offset, offset + chunkSize);
-        const buffer = await slice.arrayBuffer();
-        conn.send({ type: "chunk", data: buffer });
-        offset += buffer.byteLength;
-        chunksSent += 1;
 
-        if (chunksSent % 50 === 0 || offset >= file.size) {
-          const percent = Math.min(100, Math.round((offset / file.size) * 100));
-          updateTransferStatus(transfer, `Küldés: ${percent}%`);
-          updateTransferProgress(transfer, offset, file.size);
+        updateTransferStatus(transfer, "Batch elküldve, ACK kérés...");
+        if (conn.open) {
+          conn.send({ type: "ack_request", targetBytes: offset, targetChunks: chunksSent });
+        }
+
+        updateTransferStatus(transfer, "Várakozás a fogadó visszaigazolására...");
+        try {
+          await waitForChunkAckWithRetry(transfer, conn, offset);
+        } catch (err) {
+          transfer.isCancelled = true;
+          finalizeTransfer(transfer, "A fogadó nem válaszol, az átvitel megszakadt.");
+          conn.close();
+          return;
         }
       }
 
@@ -881,9 +1287,28 @@
         return;
       }
 
-      conn.send({ type: "complete" });
-      updateTransferProgress(transfer, file.size, file.size);
-      finalizeTransfer(transfer, "Fájl sikeresen elküldve.");
+      try {
+        await waitForChunkAckWithRetry(transfer, conn, file.size);
+      } catch (err) {
+        transfer.isCancelled = true;
+        finalizeTransfer(transfer, "Nem érkezett végleges visszaigazolás.");
+        conn.close();
+        return;
+      }
+
+      updateTransferStatus(transfer, "Átvitel lezárása...");
+
+      try {
+        const ack = await sendSignalWithRetry(conn, transfer, { type: "complete" }, "complete_ack");
+        if (ack && ack.success === false) {
+          finalizeTransfer(transfer, "A fogadó hibát jelzett a lezárásnál.");
+          return;
+        }
+        updateTransferProgress(transfer, file.size, file.size);
+        finalizeTransfer(transfer, "Fájl sikeresen elküldve.");
+      } catch (err) {
+        finalizeTransfer(transfer, "Nem sikerült lezárni az átvitelt.");
+      }
     }
 
     function startFileSend(receiver, file) {
@@ -892,7 +1317,11 @@
         return;
       }
 
-      const conn = peer.connect(receiver.peerId);
+      const conn = peer.connect(receiver.peerId, {
+        reliable: true,
+        serialization: "binary",
+        metadata: { type: "file-transfer-request" },
+      });
       const transferId = `outgoing-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
       const safeName = file?.name || "ismeretlen_fajl";
@@ -915,6 +1344,8 @@
 
       transfer.conn = conn;
       transfer.file = file;
+      transfer.lastAck = { receivedBytes: 0, receivedChunks: 0, final: false };
+      transfer.isSending = false;
       conn.__transferId = transferId;
 
       const cancelBtn = createTransferButton("Mégse", "transfer-btn--cancel", () => {
@@ -927,25 +1358,69 @@
 
       const connectionTimeout = setTimeout(() => {
         transfer.isCancelled = true;
-        finalizeTransfer(transfer, "Nem sikerült kapcsolódni 15 másodpercen belül.");
+        finalizeTransfer(
+          transfer,
+          "Nem sikerült kapcsolódni 45 másodpercen belül (NAT/Tűzfal hiba lehet).",
+        );
         conn.close();
-      }, 15000);
+      }, 45000);
 
-      conn.on("open", () => {
+      conn.on("open", async () => {
         clearTimeout(connectionTimeout);
         updateTransferStatus(transfer, "Kapcsolat létrejött, metaadat küldése...");
-        conn.send({ type: "meta", name: safeName, size: safeSize, mimeType: safeType });
+        try {
+          await sendSignalWithRetry(
+            conn,
+            transfer,
+            { type: "meta", name: safeName, size: safeSize, mimeType: safeType },
+            "meta_ack",
+          );
+          updateTransferStatus(transfer, "Várakozás a fogadó válaszára...");
+        } catch (err) {
+          transfer.isCancelled = true;
+          finalizeTransfer(transfer, "Nem sikerült elküldeni a metaadatokat.");
+          conn.close();
+        }
       });
 
       conn.on("data", async (data) => {
         if (!data || typeof data !== "object") {
           return;
         }
+
+        if (data.type === "meta_ack") {
+          resolveSignalAck(transfer, "meta_ack", data);
+          return;
+        }
+
+        if (data.type === "ack") {
+          resolveChunkAck(transfer, data);
+          return;
+        }
+
+        if (data.type === "complete_ack") {
+          resolveSignalAck(transfer, "complete_ack", data);
+          return;
+        }
+
         if (data.type === "accept") {
+          conn.send({ type: "accept_ack" });
+          if (transfer.isSending) {
+            return;
+          }
+          transfer.isSending = true;
           updateTransferStatus(transfer, "Fogadó elfogadta, küldés indul...");
           transfer.startTime = Date.now();
-          await sendFileChunks(transfer);
+          try {
+            await sendFileChunks(transfer);
+          } catch (err) {
+            transfer.isCancelled = true;
+            finalizeTransfer(transfer, "Hiba történt a küldés közben.");
+            conn.close();
+          }
+          return;
         }
+
         if (data.type === "reject") {
           transfer.isCancelled = true;
           finalizeTransfer(transfer, "A címzett elutasította a küldést.");
@@ -3239,6 +3714,7 @@
       let clipToastTimeout = null;
       let availableTags = [];
       let tagSelectHandlersAttached = false;
+      let clipTagHandlersAttached = false;
       const VIDEO_QUALITY_KEY = "videoQualityPreference";
       const DEFAULT_VIDEO_QUALITY = "1080p";
       const ALLOWED_VIDEO_QUALITIES = ["1440p", "1080p", "720p"];
@@ -3818,6 +4294,53 @@
       function renderTagSelector() {
         renderSelectedTagChips();
         renderTagDropdownOptions();
+      }
+
+      function selectClipTag(tagId) {
+        if (!tagId) return;
+        const tagValue = String(tagId);
+        const alreadySelected = videoFilters.tag.some((value) => String(value) === tagValue);
+        if (alreadySelected) return;
+        videoFilters.tag = [...videoFilters.tag, tagValue];
+        videoFilters.page = 1;
+        renderTagSelector();
+        loadVideos();
+      }
+
+      function getTagIdFromChip(chip) {
+        if (!chip) return null;
+        const directId = chip.dataset.tagId;
+        if (directId) return directId;
+        const tagName = chip.dataset.tagName;
+        if (!tagName) return null;
+        const match = availableTags.find((tag) => tag.name === tagName);
+        return match ? String(match.id) : null;
+      }
+
+      function handleClipTagClick(event) {
+        const chip = event.target.closest(".tag-chip");
+        if (!chip || !videoGridContainer?.contains(chip)) return;
+        event.stopPropagation();
+        const tagId = getTagIdFromChip(chip);
+        if (!tagId) return;
+        selectClipTag(tagId);
+      }
+
+      function handleClipTagKeydown(event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const chip = event.target.closest(".tag-chip");
+        if (!chip || !videoGridContainer?.contains(chip)) return;
+        event.preventDefault();
+        const tagId = getTagIdFromChip(chip);
+        if (!tagId) return;
+        selectClipTag(tagId);
+      }
+
+      function attachClipTagHandlers() {
+        if (!videoGridContainer || clipTagHandlersAttached) return;
+        videoGridContainer.addEventListener("click", handleClipTagClick);
+        videoGridContainer.addEventListener("keydown", handleClipTagKeydown);
+        clipTagHandlersAttached = true;
       }
 
       function renderGlobalTagSelect() {
@@ -4575,6 +5098,24 @@
             chip.className = "tag-chip";
             chip.style.setProperty("--tag-color", normalizeColor(tag.color));
             chip.textContent = tag.name;
+            chip.setAttribute("role", "button");
+            chip.tabIndex = 0;
+            if (tag && tag.id !== undefined && tag.id !== null) {
+              chip.dataset.tagId = String(tag.id);
+              chip.addEventListener("click", (event) => {
+                event.stopPropagation();
+                selectClipTag(tag.id);
+              });
+            } else if (tag?.name) {
+              chip.dataset.tagName = String(tag.name);
+              chip.addEventListener("click", (event) => {
+                event.stopPropagation();
+                const resolvedTagId = getTagIdFromChip(chip);
+                if (resolvedTagId) {
+                  selectClipTag(resolvedTagId);
+                }
+              });
+            }
             tagList.appendChild(chip);
           });
 
@@ -4804,13 +5345,7 @@
         }
 
         const handleTagSelection = (tagId) => {
-          if (!tagId) return;
-          const alreadySelected = videoFilters.tag.some((value) => String(value) === String(tagId));
-          if (alreadySelected) return;
-          videoFilters.tag = [...videoFilters.tag, String(tagId)];
-          videoFilters.page = 1;
-          renderTagSelector();
-          loadVideos();
+          selectClipTag(tagId);
         };
 
         const handleChipRemoval = (event) => {
@@ -4860,6 +5395,7 @@
       }
 
       renderCustomTagSelect();
+      attachClipTagHandlers();
 
       if (sortOrderSelect) {
         sortOrderSelect.addEventListener("change", () => {

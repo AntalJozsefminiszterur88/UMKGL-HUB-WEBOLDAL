@@ -1374,6 +1374,17 @@
         font-weight: 600;
         border: 1px solid var(--tag-color);
         box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .tag-chip:hover {
+        filter: brightness(1.08);
+      }
+
+      .tag-chip:focus-visible {
+        outline: 2px solid #ffffff;
+        outline-offset: 2px;
       }
 
       @media (max-width: 1200px) {

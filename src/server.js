@@ -594,31 +594,101 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(uploadsRootDirectory));
 
 const activeReceivers = new Map();
+const receiverSockets = new Map();
+const RECEIVER_STALE_MS = Number(process.env.RECEIVER_STALE_MS) || 30000;
+const RECEIVER_CLEANUP_INTERVAL_MS = Number(process.env.RECEIVER_CLEANUP_INTERVAL_MS) || 10000;
 
-function broadcastReceiversList() {
-    const receivers = Array.from(activeReceivers.values()).map(({ userId, username, peerId, profilePictureFilename }) => ({
+function getReceiversList() {
+    return Array.from(activeReceivers.values()).map(({ userId, username, peerId, profilePictureFilename }) => ({
         userId,
         username,
         peerId,
         profile_picture_filename: profilePictureFilename,
     }));
-    io.emit('update_receivers_list', receivers);
+}
+
+function broadcastReceiversList() {
+    io.emit('update_receivers_list', getReceiversList());
 }
 
 function removeReceiverBySocket(socketId) {
     let changed = false;
-    for (const [userId, receiver] of activeReceivers.entries()) {
-        if (receiver.socketId === socketId) {
+    const userId = receiverSockets.get(socketId);
+    if (userId) {
+        receiverSockets.delete(socketId);
+        const receiver = activeReceivers.get(userId);
+        if (receiver && receiver.socketId === socketId) {
             activeReceivers.delete(userId);
             changed = true;
         }
     }
+
+    if (!changed) {
+        for (const [activeUserId, receiver] of activeReceivers.entries()) {
+            if (receiver.socketId === socketId) {
+                activeReceivers.delete(activeUserId);
+                changed = true;
+                break;
+            }
+        }
+    }
+
     if (changed) {
         broadcastReceiversList();
     }
 }
 
+function touchReceiverBySocket(socketId, peerId) {
+    const userId = receiverSockets.get(socketId);
+    if (!userId) {
+        return false;
+    }
+
+    const receiver = activeReceivers.get(userId);
+    if (!receiver || receiver.socketId !== socketId) {
+        return false;
+    }
+
+    const updated = {
+        ...receiver,
+        lastSeen: Date.now(),
+    };
+
+    let changed = false;
+    if (peerId && receiver.peerId !== peerId) {
+        updated.peerId = peerId;
+        changed = true;
+    }
+
+    activeReceivers.set(userId, updated);
+    return changed;
+}
+
+function cleanupStaleReceivers() {
+    const now = Date.now();
+    let changed = false;
+
+    for (const [userId, receiver] of activeReceivers.entries()) {
+        if (!receiver.lastSeen || now - receiver.lastSeen > RECEIVER_STALE_MS) {
+            activeReceivers.delete(userId);
+            if (receiver.socketId) {
+                receiverSockets.delete(receiver.socketId);
+            }
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        broadcastReceiversList();
+    }
+}
+
+const receiverCleanupTimer = setInterval(cleanupStaleReceivers, RECEIVER_CLEANUP_INTERVAL_MS);
+receiverCleanupTimer.unref?.();
+
 io.on('connection', (socket) => {
+    socket.emit('update_receivers_list', getReceiversList());
+
     socket.on('register_receiver', async ({ token, peerId }) => {
         if (!token || !peerId) {
             return;
@@ -632,7 +702,13 @@ io.on('connection', (socket) => {
 
             if (!user || Number(user.can_transfer) !== 1) {
                 socket.emit('receiver_error', { message: 'Nincs jogosultság a fájlküldésre.' });
+                removeReceiverBySocket(socket.id);
                 return;
+            }
+
+            const existing = activeReceivers.get(userId);
+            if (existing && existing.socketId && existing.socketId !== socket.id) {
+                receiverSockets.delete(existing.socketId);
             }
 
             activeReceivers.set(userId, {
@@ -641,16 +717,26 @@ io.on('connection', (socket) => {
                 peerId,
                 profilePictureFilename: user.profile_picture_filename,
                 socketId: socket.id,
+                lastSeen: Date.now(),
             });
+            receiverSockets.set(socket.id, userId);
             broadcastReceiversList();
         } catch (err) {
             console.error('Hiba a fogadó regisztrációja során:', err);
             socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
+            removeReceiverBySocket(socket.id);
         }
     });
 
     socket.on('unregister_receiver', () => {
         removeReceiverBySocket(socket.id);
+    });
+
+    socket.on('receiver_heartbeat', ({ peerId } = {}) => {
+        const changed = touchReceiverBySocket(socket.id, peerId);
+        if (changed) {
+            broadcastReceiversList();
+        }
     });
 
     socket.on('disconnect', () => {
