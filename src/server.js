@@ -1375,7 +1375,7 @@ app.post('/api/academy/images', authenticateToken, isAdmin, (req, res) => {
 app.get('/api/academy/articles', async (_req, res) => {
     try {
         const { rows } = await db.query(
-            `SELECT a.*, COALESCE(
+            `SELECT a.*, COALESCE(a.inline_images, '[]'::jsonb) AS inline_images, COALESCE(
                 json_agg(
                     json_build_object(
                         'id', t.id,

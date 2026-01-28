@@ -4822,7 +4822,7 @@
           academyEditorTitle.textContent = article ? "Cikk szerkeszt?se" : "?j cikk";
         }
         if (academyEditorSaveBtn) {
-          academyEditorSaveBtn.textContent = article ? "Friss?t?s" : "Ment?s";
+          academyEditorSaveBtn.textContent = article ? "Frissítés" : "Mentés";
         }
 
         if (academyTitleInput) {
