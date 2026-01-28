@@ -1437,7 +1437,7 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
             const { rows } = await client.query(
                 `INSERT INTO academy_articles
                 (title, subtitle, summary, content, keywords, inline_images, cover_filename, pdf_filename, pdf_original_filename)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
                 RETURNING *`,
                 [
                     title,
@@ -1545,7 +1545,7 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
                      summary = $3,
                      content = $4,
                      keywords = $5,
-                     inline_images = $6,
+                     inline_images = $6::jsonb,
                      cover_filename = $7,
                      pdf_filename = $8,
                      pdf_original_filename = $9,
