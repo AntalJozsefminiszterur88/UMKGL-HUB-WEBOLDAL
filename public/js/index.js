@@ -4689,7 +4689,7 @@
         window.scrollTo(0, 0);
       }
 
-      function resetAcademyEditor(article = null) {
+      function resetAcademyEditor() {
         if (academyEditorForm) {
           academyEditorForm.reset();
         }
@@ -4888,9 +4888,8 @@
           academyEditorModal.classList.remove("modal-overlay--visible");
           academyEditorModal.style.display = "none";
         }
-        const articleSnapshot = editingAcademyArticle;
         editingAcademyArticle = null;
-        resetAcademyEditor(articleSnapshot);
+        resetAcademyEditor();
       }
 
       async function handleAcademyDelete(articleId, card, button) {
