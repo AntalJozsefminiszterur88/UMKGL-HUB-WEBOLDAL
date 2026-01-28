@@ -4287,6 +4287,24 @@
         return [];
       }
 
+      function normalizeAcademyInlineImages(value) {
+        if (Array.isArray(value)) {
+          return value;
+        }
+        if (!value) {
+          return [];
+        }
+        if (typeof value === "string") {
+          try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (error) {
+            return [];
+          }
+        }
+        return [];
+      }
+
       function formatAcademyContent(rawContent) {
         const safe = typeof rawContent === "string" ? rawContent.trim() : "";
         if (!safe) {
@@ -4328,7 +4346,7 @@
         if (!academyInlineImages.length) {
           return;
         }
-        academyInlineImages.forEach((image) => {
+        academyInlineImages.forEach((image, index) => {
           const item = document.createElement("div");
           item.className = "academy-inline-image-item";
 
@@ -4340,8 +4358,18 @@
           code.className = "academy-inline-image-code";
           code.textContent = `<img src="${image.url}" alt="${image.title}">`;
 
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "academy-inline-image-remove";
+          removeBtn.textContent = "Eltávolítás";
+          removeBtn.addEventListener("click", () => {
+            academyInlineImages = academyInlineImages.filter((_, idx) => idx !== index);
+            renderAcademyInlineImages();
+          });
+
           item.appendChild(title);
           item.appendChild(code);
+          item.appendChild(removeBtn);
           academyInlineImageList.appendChild(item);
         });
       }
@@ -4683,7 +4711,11 @@
         if (academyInlineImageStatus) {
           academyInlineImageStatus.textContent = "";
         }
-        academyInlineImages = [];
+        academyInlineImages = normalizeAcademyInlineImages(article?.inline_images).map((item) => {
+          const url = item?.url || "";
+          const title = formatInlineImageTitle(item?.title || item?.original_name || url.split("/").pop());
+          return { url, title };
+        }).filter((item) => item.url);
         renderAcademyInlineImages();
         if (academyTagCreateStatus) {
           academyTagCreateStatus.textContent = "";
@@ -4943,6 +4975,7 @@
         formData.append("summary", academySummaryInput?.value?.trim() || "");
         formData.append("keywords", academyKeywordsInput?.value?.trim() || "");
         formData.append("content", academyContentInput?.value || "");
+        formData.append("inline_images", JSON.stringify(academyInlineImages));
 
         const selectedTags = academyTagSelect
           ? Array.from(academyTagSelect.selectedOptions || []).map((option) => Number(option.value)).filter(Number.isFinite)

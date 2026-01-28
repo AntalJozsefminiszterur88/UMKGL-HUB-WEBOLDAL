@@ -3424,6 +3424,22 @@
           word-break: break-all;
       }
 
+      #akademia .academy-inline-image-remove {
+          align-self: flex-start;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          color: var(--hub-text-main);
+          border-radius: 8px;
+          padding: 0.3rem 0.6rem;
+          cursor: pointer;
+          transition: background 0.2s ease, border-color 0.2s ease;
+      }
+
+      #akademia .academy-inline-image-remove:hover {
+          background: rgba(255, 255, 255, 0.16);
+          border-color: rgba(255, 255, 255, 0.2);
+      }
+
       #akademia .academy-cover-preview {
           width: 100%;
           border-radius: 12px;

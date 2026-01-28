@@ -136,6 +136,48 @@ function parseAcademyTagIds(value) {
     return [];
 }
 
+function parseAcademyInlineImages(value) {
+    if (!value) {
+        return [];
+    }
+    if (Array.isArray(value)) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return [];
+        }
+        try {
+            const parsed = JSON.parse(trimmed);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+            return [];
+        }
+    }
+    return [];
+}
+
+function sanitizeAcademyInlineImages(value) {
+    const images = parseAcademyInlineImages(value)
+        .map((item) => {
+            if (!item || typeof item !== 'object') {
+                return null;
+            }
+            const rawUrl = typeof item.url === 'string' ? item.url.trim() : '';
+            if (!rawUrl) {
+                return null;
+            }
+            const safeUrl = rawUrl.startsWith('/uploads/akademia/')
+                ? rawUrl
+                : rawUrl;
+            const title = typeof item.title === 'string' ? item.title.trim() : '';
+            return { url: safeUrl, title };
+        })
+        .filter(Boolean);
+    return images;
+}
+
 async function resolveAcademyTagIds(client, tagIds) {
     const unique = Array.from(new Set((tagIds || []).filter(Number.isFinite)));
     if (!unique.length) {
@@ -1376,6 +1418,7 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
         const summary = (req.body.summary || '').trim();
         const content = (req.body.content || '').trim();
         const keywords = (req.body.keywords || '').trim();
+        const inlineImages = sanitizeAcademyInlineImages(req.body.inline_images);
 
         if (!title) {
             if (coverFile) {
@@ -1393,8 +1436,8 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
             await client.query('BEGIN');
             const { rows } = await client.query(
                 `INSERT INTO academy_articles
-                (title, subtitle, summary, content, keywords, cover_filename, pdf_filename, pdf_original_filename)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                (title, subtitle, summary, content, keywords, inline_images, cover_filename, pdf_filename, pdf_original_filename)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING *`,
                 [
                     title,
@@ -1402,6 +1445,7 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
                     summary || null,
                     content || null,
                     keywords || null,
+                    JSON.stringify(inlineImages),
                     coverFile ? coverFile.filename : null,
                     pdfFile ? pdfFile.filename : null,
                     pdfFile ? pdfFile.originalname : null
@@ -1501,17 +1545,19 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
                      summary = $3,
                      content = $4,
                      keywords = $5,
-                     cover_filename = $6,
-                     pdf_filename = $7,
-                     pdf_original_filename = $8,
+                     inline_images = $6,
+                     cover_filename = $7,
+                     pdf_filename = $8,
+                     pdf_original_filename = $9,
                      updated_at = NOW()
-                 WHERE id = $9`,
+                 WHERE id = $10`,
                 [
                     title,
                     subtitle || null,
                     summary || null,
                     content || null,
                     keywords || null,
+                    JSON.stringify(inlineImages),
                     newCoverFilename,
                     newPdfFilename,
                     newPdfOriginal,

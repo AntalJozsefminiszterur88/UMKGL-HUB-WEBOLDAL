@@ -123,6 +123,7 @@ async function initializeDatabase() {
         summary TEXT,
         content TEXT,
         keywords TEXT,
+        inline_images JSONB DEFAULT '[]',
         cover_filename TEXT,
         pdf_filename TEXT,
         pdf_original_filename TEXT,
@@ -142,6 +143,9 @@ async function initializeDatabase() {
     );
     await client.query(
       'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS keywords TEXT'
+    );
+    await client.query(
+      "ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS inline_images JSONB DEFAULT '[]'"
     );
     await client.query(
       'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS cover_filename TEXT'
