@@ -1358,7 +1358,7 @@ app.post('/api/academy/images', authenticateToken, isAdmin, (req, res) => {
         }
 
         const items = files.map((file) => {
-            const original = file.originalname || '';
+            const original = normalizeFilename(file.originalname || '');
             const title = original.replace(/\.[^/.]+$/, '').trim();
             return {
                 filename: file.filename,
@@ -1413,6 +1413,7 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
 
         const coverFile = req.files?.cover?.[0] || null;
         const pdfFile = req.files?.pdf?.[0] || null;
+        const pdfOriginalName = pdfFile ? normalizeFilename(pdfFile.originalname) : null;
         const title = (req.body.title || '').trim();
         const subtitle = (req.body.subtitle || '').trim();
         const summary = (req.body.summary || '').trim();
@@ -1448,7 +1449,7 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
                     JSON.stringify(inlineImages),
                     coverFile ? coverFile.filename : null,
                     pdfFile ? pdfFile.filename : null,
-                    pdfFile ? pdfFile.originalname : null
+                    pdfOriginalName
                 ]
             );
 
@@ -1534,7 +1535,7 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
 
             const newCoverFilename = coverFile ? coverFile.filename : existing.cover_filename;
             const newPdfFilename = pdfFile ? pdfFile.filename : existing.pdf_filename;
-            const newPdfOriginal = pdfFile ? pdfFile.originalname : existing.pdf_original_filename;
+            const newPdfOriginal = pdfFile ? normalizeFilename(pdfFile.originalname) : existing.pdf_original_filename;
 
             const rawTagIds = parseAcademyTagIds(req.body.tags);
             await client.query('BEGIN');
@@ -3172,7 +3173,7 @@ app.post('/api/programs', authenticateToken, isAdmin, (req, res, next) => {
     try {
         await db.query(
             'INSERT INTO programs (name, description, image_filename, file_filename, original_filename) VALUES ($1, $2, $3, $4, $5)',
-            [name, description, imageFile.filename, programFile.filename, programFile.originalname]
+            [name, description, imageFile.filename, programFile.filename, normalizeFilename(programFile.originalname)]
         );
 
         res.status(201).json({ message: 'Program sikeresen feltöltve.' });
@@ -3231,7 +3232,7 @@ app.put('/api/programs/:id', authenticateToken, isAdmin, (req, res, next) => {
 
         const newImageFilename = imageFile ? imageFile.filename : existingProgram.image_filename;
         const newFileFilename = programFile ? programFile.filename : existingProgram.file_filename;
-        const newOriginalFilename = programFile ? programFile.originalname : existingProgram.original_filename;
+        const newOriginalFilename = programFile ? normalizeFilename(programFile.originalname) : existingProgram.original_filename;
 
         await db.query(
             'UPDATE programs SET name = $1, description = $2, image_filename = $3, file_filename = $4, original_filename = $5 WHERE id = $6',
