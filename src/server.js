@@ -1479,7 +1479,6 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
         }
     });
 });
-
 app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
     const uploadHandler = uploadAcademyFiles.fields([
         { name: 'cover', maxCount: 1 },
@@ -1503,6 +1502,7 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
         const summary = (req.body.summary || '').trim();
         const content = (req.body.content || '').trim();
         const keywords = (req.body.keywords || '').trim();
+        const inlineImages = sanitizeAcademyInlineImages(req.body.inline_images);
 
         if (!title) {
             if (coverFile) {
@@ -1599,7 +1599,6 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
         }
     });
 });
-
 app.delete('/api/academy/articles/:id', authenticateToken, isAdmin, async (req, res) => {
     const articleId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(articleId)) {
