@@ -91,9 +91,9 @@
     const academyPdfInput = document.getElementById("academyPdfInput");
     const academyPdfName = document.getElementById("academyPdfName");
     const academyInlineImageInput = document.getElementById("academyInlineImageInput");
-    const academyInlineImageAlt = document.getElementById("academyInlineImageAlt");
     const academyInlineImageUploadBtn = document.getElementById("academyInlineImageUploadBtn");
     const academyInlineImageStatus = document.getElementById("academyInlineImageStatus");
+    const academyInlineImageList = document.getElementById("academyInlineImageList");
     const academyTagSelect = document.getElementById("academyTagSelect");
     const academyEditorCancelBtn = document.getElementById("academyEditorCancelBtn");
     const academyEditorCloseBtn = document.getElementById("academyEditorCloseBtn");
@@ -125,6 +125,7 @@
     let academyCoverCropperInstance = null;
     let academyCoverBlob = null;
     let academyCoverOriginalFileName = "";
+    let academyInlineImages = [];
     let editingAcademyArticle = null;
     let activeAcademyArticle = null;
 
@@ -4313,10 +4314,43 @@
         textarea.focus();
       }
 
+      function formatInlineImageTitle(name) {
+        if (!name) return "Kép";
+        const base = name.replace(/\.[^/.]+$/, "");
+        return base.replace(/[_-]+/g, " ").trim() || "Kép";
+      }
+
+      function renderAcademyInlineImages() {
+        if (!academyInlineImageList) {
+          return;
+        }
+        academyInlineImageList.innerHTML = "";
+        if (!academyInlineImages.length) {
+          return;
+        }
+        academyInlineImages.forEach((image) => {
+          const item = document.createElement("div");
+          item.className = "academy-inline-image-item";
+
+          const title = document.createElement("div");
+          title.className = "academy-inline-image-title";
+          title.textContent = image.title;
+
+          const code = document.createElement("div");
+          code.className = "academy-inline-image-code";
+          code.textContent = `<img src="${image.url}" alt="${image.title}">`;
+
+          item.appendChild(title);
+          item.appendChild(code);
+          academyInlineImageList.appendChild(item);
+        });
+      }
+
       function closeAcademyCoverCropper(resetSelection = false) {
         if (academyCoverCropperModal) {
           academyCoverCropperModal.classList.remove("open");
           academyCoverCropperModal.setAttribute("aria-hidden", "true");
+          academyCoverCropperModal.style.display = "none";
         }
         if (academyCoverCropperInstance) {
           academyCoverCropperInstance.destroy();
@@ -4360,6 +4394,7 @@
 
           academyCoverCropperModal.classList.add("open");
           academyCoverCropperModal.setAttribute("aria-hidden", "false");
+          academyCoverCropperModal.style.display = "flex";
         };
         reader.readAsDataURL(file);
       }
@@ -4645,12 +4680,11 @@
         if (academyInlineImageInput) {
           academyInlineImageInput.value = "";
         }
-        if (academyInlineImageAlt) {
-          academyInlineImageAlt.value = "";
-        }
         if (academyInlineImageStatus) {
           academyInlineImageStatus.textContent = "";
         }
+        academyInlineImages = [];
+        renderAcademyInlineImages();
         if (academyTagCreateStatus) {
           academyTagCreateStatus.textContent = "";
         }
@@ -4800,12 +4834,11 @@
         if (academyInlineImageInput) {
           academyInlineImageInput.value = "";
         }
-        if (academyInlineImageAlt) {
-          academyInlineImageAlt.value = "";
-        }
         if (academyInlineImageStatus) {
           academyInlineImageStatus.textContent = "";
         }
+        academyInlineImages = [];
+        renderAcademyInlineImages();
 
         loadAcademyTags(true).then(() => {
           const selectedIds = normalizeAcademyTags(article?.tags).map((tag) => tag.id);
@@ -6832,6 +6865,7 @@
         academyEditorModal.addEventListener("click", (event) => {
           if (event.target === academyEditorModal) {
             event.preventDefault();
+            event.stopPropagation();
           }
         });
       }
@@ -6913,22 +6947,24 @@
       if (academyInlineImageUploadBtn) {
         academyInlineImageUploadBtn.addEventListener("click", async () => {
           if (!isAdminUser()) {
-            alert("Csak admin t?lthet fel k?pet.");
+            alert("Csak admin tölthet fel képet.");
             return;
           }
-          const file = academyInlineImageInput?.files?.[0];
-          if (!file) {
+          const files = Array.from(academyInlineImageInput?.files || []);
+          if (!files.length) {
             if (academyInlineImageStatus) {
-              academyInlineImageStatus.textContent = "V?lassz ki egy k?pet.";
+              academyInlineImageStatus.textContent = "Válassz ki legalább egy képet.";
             }
             return;
           }
 
           const formData = new FormData();
-          formData.append("image", file);
+          files.forEach((file) => {
+            formData.append("images", file);
+          });
 
           if (academyInlineImageStatus) {
-            academyInlineImageStatus.textContent = "Felt?lt?s...";
+            academyInlineImageStatus.textContent = "Feltöltés...";
           }
           academyInlineImageUploadBtn.disabled = true;
 
@@ -6940,29 +6976,31 @@
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
-              throw new Error(payload?.message || "Nem siker?lt a k?p felt?lt?se.");
+              throw new Error(payload?.message || "Nem sikerült a képek feltöltése.");
             }
-            const imageUrl = payload?.url || (payload?.filename ? `/uploads/akademia/${payload.filename}` : "");
-            if (!imageUrl) {
-              throw new Error("Nem siker?lt a k?p besz?r?sa.");
+            const items = Array.isArray(payload?.items) ? payload.items : [];
+            if (!items.length) {
+              throw new Error("Nem sikerült képeket visszakapni.");
             }
-            const altTextRaw = academyInlineImageAlt?.value?.trim() || file.name;
-            const altText = escapeHtml(altTextRaw);
-            insertTextAtCursor(academyContentInput, `\n<img src="${imageUrl}" alt="${altText}" />\n`);
+            const mapped = items.map((item) => {
+              const title = formatInlineImageTitle(item?.title || item?.original_name || item?.filename);
+              const url = item?.url || (item?.filename ? `/uploads/akademia/${item.filename}` : "");
+              return { title, url };
+            }).filter((item) => item.url);
+
+            academyInlineImages = academyInlineImages.concat(mapped);
+            renderAcademyInlineImages();
 
             if (academyInlineImageInput) {
               academyInlineImageInput.value = "";
             }
-            if (academyInlineImageAlt) {
-              academyInlineImageAlt.value = "";
-            }
             if (academyInlineImageStatus) {
-              academyInlineImageStatus.textContent = "K?p besz?rva a tartalomba.";
+              academyInlineImageStatus.textContent = "Képek feltöltve. Másold ki a kódot a listából.";
             }
           } catch (error) {
-            console.error("Akad?mia k?p felt?lt?si hiba:", error);
+            console.error("Akadémia kép feltöltési hiba:", error);
             if (academyInlineImageStatus) {
-              academyInlineImageStatus.textContent = error.message || "Nem siker?lt a k?p felt?lt?se.";
+              academyInlineImageStatus.textContent = error.message || "Nem sikerült a képek feltöltése.";
             }
           } finally {
             academyInlineImageUploadBtn.disabled = false;

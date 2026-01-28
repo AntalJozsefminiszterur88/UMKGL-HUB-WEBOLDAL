@@ -1302,14 +1302,31 @@ app.post('/api/academy/tags', authenticateToken, isAdmin, async (req, res) => {
     }
 });
 
-app.post('/api/academy/images', authenticateToken, isAdmin, uploadAcademyImage.single('image'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'Nem sikerült a kép feltöltése.' });
-    }
+app.post('/api/academy/images', authenticateToken, isAdmin, (req, res) => {
+    const uploadHandler = uploadAcademyImage.array('images', 12);
 
-    return res.status(201).json({
-        filename: req.file.filename,
-        url: `/uploads/akademia/${req.file.filename}`
+    uploadHandler(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ message: err.message || 'Nem sikerült a képek feltöltése.' });
+        }
+
+        const files = Array.isArray(req.files) ? req.files : [];
+        if (!files.length) {
+            return res.status(400).json({ message: 'Nem sikerült a képek feltöltése.' });
+        }
+
+        const items = files.map((file) => {
+            const original = file.originalname || '';
+            const title = original.replace(/\.[^/.]+$/, '').trim();
+            return {
+                filename: file.filename,
+                original_name: original,
+                title,
+                url: `/uploads/akademia/${file.filename}`
+            };
+        });
+
+        return res.status(201).json({ items });
     });
 });
 

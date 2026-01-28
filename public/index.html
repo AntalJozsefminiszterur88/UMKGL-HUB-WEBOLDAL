@@ -25,7 +25,7 @@
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
       referrerpolicy="no-referrer"
     ></script>
-    <link rel="stylesheet" href="css/index.css?v=20260126-2">
+    <link rel="stylesheet" href="css/index.css?v=20260128-1">
   </head>
   <body>
     <header>
@@ -515,13 +515,13 @@
                 </div>
                 <div class="academy-editor-tile">
                   <div class="tile-header">
-                    <label for="academyInlineImageInput">Beágyazott kép</label>
-                    <span class="tile-hint">PNG / JPG / GIF / WEBP</span>
+                    <label for="academyInlineImageInput">Beágyazott képek</label>
+                    <span class="tile-hint">PNG / JPG / GIF / WEBP • több fájl is</span>
                   </div>
-                  <input type="file" id="academyInlineImageInput" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" />
-                  <input type="text" id="academyInlineImageAlt" class="uniform-control" placeholder="Kép leírása (alt) - opcionális" />
-                  <button type="button" id="academyInlineImageUploadBtn" class="secondary-btn">Feltöltés és beszúrás</button>
+                  <input type="file" id="academyInlineImageInput" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" multiple />
+                  <button type="button" id="academyInlineImageUploadBtn" class="secondary-btn">Képek feltöltése</button>
                   <span id="academyInlineImageStatus" class="academy-tag-status"></span>
+                  <div id="academyInlineImageList" class="academy-inline-image-list"></div>
                 </div>
               </div>
 
@@ -741,7 +741,7 @@
       </div>
     </div>
 
-  <script src="js/index.js?v=20260126-3"></script>
+  <script src="js/index.js?v=20260128-1"></script>
 
 
 
