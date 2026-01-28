@@ -4694,7 +4694,7 @@
           academyEditorForm.reset();
         }
         if (academyPdfName) {
-          academyPdfName.textContent = "Nincs kiválasztva PDF.";
+          academyPdfName.textContent = "Nincs kiv?lasztva PDF.";
         }
         if (academyCoverPreview) {
           academyCoverPreview.removeAttribute("src");
@@ -4711,12 +4711,11 @@
         if (academyInlineImageStatus) {
           academyInlineImageStatus.textContent = "";
         }
-        academyInlineImages = normalizeAcademyInlineImages(article?.inline_images).map((item) => {
-          const url = item?.url || "";
-          const title = formatInlineImageTitle(item?.title || item?.original_name || url.split("/").pop());
-          return { url, title };
-        }).filter((item) => item.url);
+
+        // JAV?T?S: Csak ?resre ?ll?tjuk, nem pr?b?lunk bet?lteni semmit
+        academyInlineImages = [];
         renderAcademyInlineImages();
+
         if (academyTagCreateStatus) {
           academyTagCreateStatus.textContent = "";
         }
@@ -4820,10 +4819,10 @@
 
         editingAcademyArticle = article;
         if (academyEditorTitle) {
-          academyEditorTitle.textContent = article ? "Cikk szerkesztése" : "Új cikk";
+          academyEditorTitle.textContent = article ? "Cikk szerkeszt?se" : "?j cikk";
         }
         if (academyEditorSaveBtn) {
-          academyEditorSaveBtn.textContent = article ? "Frissítés" : "Mentés";
+          academyEditorSaveBtn.textContent = article ? "Friss?t?s" : "Ment?s";
         }
 
         if (academyTitleInput) {
@@ -4841,12 +4840,15 @@
         if (academyContentInput) {
           academyContentInput.value = article?.content || "";
         }
+
+        // K?pek kezel?se
         if (academyCoverObjectUrl) {
           URL.revokeObjectURL(academyCoverObjectUrl);
           academyCoverObjectUrl = null;
         }
         academyCoverBlob = null;
         academyCoverOriginalFileName = "";
+
         if (academyCoverPreview) {
           if (article?.cover_filename) {
             academyCoverPreview.src = `/uploads/akademia/${article.cover_filename}`;
@@ -4855,21 +4857,26 @@
           }
         }
         if (academyPdfName) {
-          academyPdfName.textContent = article?.pdf_original_filename || "Nincs kiválasztva PDF.";
+          academyPdfName.textContent = article?.pdf_original_filename || "Nincs kiv?lasztva PDF.";
         }
-        if (academyCoverInput) {
-          academyCoverInput.value = "";
+
+        // Inputok null?z?sa
+        if (academyCoverInput) academyCoverInput.value = "";
+        if (academyPdfInput) academyPdfInput.value = "";
+        if (academyInlineImageInput) academyInlineImageInput.value = "";
+        if (academyInlineImageStatus) academyInlineImageStatus.textContent = "";
+
+        // JAV?T?S: Itt t?ltj?k be a mentett k?peket a szerkeszt?be
+        if (article && article.inline_images) {
+          academyInlineImages = normalizeAcademyInlineImages(article.inline_images).map((item) => {
+            const url = item?.url || "";
+            // Ha van c?me, haszn?ljuk, ha nincs, gener?lunk a f?jln?vb?l
+            const title = item?.title || formatInlineImageTitle(url.split("/").pop());
+            return { url, title };
+          }).filter((item) => item.url);
+        } else {
+          academyInlineImages = [];
         }
-        if (academyPdfInput) {
-          academyPdfInput.value = "";
-        }
-        if (academyInlineImageInput) {
-          academyInlineImageInput.value = "";
-        }
-        if (academyInlineImageStatus) {
-          academyInlineImageStatus.textContent = "";
-        }
-        academyInlineImages = [];
         renderAcademyInlineImages();
 
         loadAcademyTags(true).then(() => {
