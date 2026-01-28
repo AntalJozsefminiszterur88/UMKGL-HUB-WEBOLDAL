@@ -84,9 +84,11 @@ async function getVideoFileSize(filename) {
 
 const programImagesDirectory = path.join(uploadsRootDirectory, 'programs', 'images');
 const programFilesDirectory = path.join(uploadsRootDirectory, 'programs', 'files');
+const academyDirectory = path.join(uploadsRootDirectory, 'akademia');
 
 ensureDirectoryExists(programImagesDirectory);
 ensureDirectoryExists(programFilesDirectory);
+ensureDirectoryExists(academyDirectory);
 
 function normalizeHexColor(value) {
     if (!value || typeof value !== 'string') {
@@ -105,6 +107,43 @@ async function ensureTagColorColumn() {
 }
 
 ensureTagColorColumn();
+
+function parseAcademyTagIds(value) {
+    if (!value) {
+        return [];
+    }
+    if (Array.isArray(value)) {
+        return value.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite);
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return [];
+        }
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+                return parsed.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite);
+            }
+        } catch (err) {
+            // Fall back to comma-separated list
+        }
+        return trimmed
+            .split(',')
+            .map((id) => Number.parseInt(id.trim(), 10))
+            .filter(Number.isFinite);
+    }
+    return [];
+}
+
+async function resolveAcademyTagIds(client, tagIds) {
+    const unique = Array.from(new Set((tagIds || []).filter(Number.isFinite)));
+    if (!unique.length) {
+        return [];
+    }
+    const { rows } = await client.query('SELECT id FROM academy_tags WHERE id = ANY($1)', [unique]);
+    return rows.map((row) => row.id);
+}
 
 function getVideoCreationDate(filePath) {
     return new Promise((resolve) => {
@@ -373,6 +412,32 @@ const programStorage = multer.diskStorage({
 });
 
 const uploadProgramFiles = multer({ storage: programStorage });
+
+const academyStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, academyDirectory),
+    filename: (_req, file, cb) => {
+        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
+        cb(null, uniqueName);
+    }
+});
+
+const academyFileFilter = (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (file.fieldname === 'cover') {
+        const allowed = ['.png', '.jpg', '.jpeg', '.webp'];
+        return allowed.includes(ext)
+            ? cb(null, true)
+            : cb(new Error('Csak PNG, JPG vagy WEBP borítókép engedélyezett.'));
+    }
+    if (file.fieldname === 'pdf') {
+        return ext === '.pdf'
+            ? cb(null, true)
+            : cb(new Error('Csak PDF fájl tölthető fel.'));
+    }
+    return cb(new Error('Ismeretlen fájl mező.'));
+};
+
+const uploadAcademyFiles = multer({ storage: academyStorage, fileFilter: academyFileFilter });
 
 function getNumberSetting(value, defaultValue) {
     const parsed = Number(value);
@@ -1181,6 +1246,338 @@ app.delete('/api/tags/:tagId', authenticateToken, isAdmin, async (req, res) => {
     } catch (err) {
         console.error('Hiba a címke törlése során:', err);
         res.status(500).json({ message: 'Nem sikerült törölni a címkét.' });
+    }
+});
+
+app.get('/api/academy/tags', async (_req, res) => {
+    try {
+        const { rows } = await db.query(
+            'SELECT id, name, COALESCE(color, $1) AS color, created_at FROM academy_tags ORDER BY name ASC',
+            [DEFAULT_TAG_COLOR]
+        );
+        res.status(200).json(rows || []);
+    } catch (err) {
+        console.error('Hiba az akadémia címkék lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni az akadémia címkéket.' });
+    }
+});
+
+app.post('/api/academy/tags', authenticateToken, isAdmin, async (req, res) => {
+    const { name, color } = req.body;
+    const trimmedName = (name || '').trim();
+    const normalizedColor = normalizeHexColor(color);
+
+    if (!trimmedName) {
+        return res.status(400).json({ message: 'A tag neve nem lehet üres.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'INSERT INTO academy_tags (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING RETURNING id, name, color, created_at',
+            [trimmedName, normalizedColor]
+        );
+
+        if (rows[0]) {
+            return res.status(201).json(rows[0]);
+        }
+
+        const { rows: existing } = await db.query(
+            'SELECT id, name, COALESCE(color, $1) AS color, created_at FROM academy_tags WHERE name = $2',
+            [DEFAULT_TAG_COLOR, trimmedName]
+        );
+        return res.status(200).json(existing[0]);
+    } catch (err) {
+        console.error('Hiba az akadémia tag létrehozása során:', err);
+        res.status(500).json({ message: 'Nem sikerült létrehozni az akadémia taget.' });
+    }
+});
+
+app.get('/api/academy/articles', async (_req, res) => {
+    try {
+        const { rows } = await db.query(
+            `SELECT a.*, COALESCE(
+                json_agg(
+                    json_build_object(
+                        'id', t.id,
+                        'name', t.name,
+                        'color', COALESCE(t.color, $1)
+                    )
+                ) FILTER (WHERE t.id IS NOT NULL),
+                '[]'::json
+            ) AS tags
+            FROM academy_articles a
+            LEFT JOIN academy_article_tags at ON at.article_id = a.id
+            LEFT JOIN academy_tags t ON t.id = at.tag_id
+            GROUP BY a.id
+            ORDER BY a.created_at DESC`,
+            [DEFAULT_TAG_COLOR]
+        );
+
+        res.status(200).json(rows || []);
+    } catch (err) {
+        console.error('Hiba az akadémia cikkek lekérdezésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült lekérdezni az akadémia cikkeket.' });
+    }
+});
+
+app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
+    const uploadHandler = uploadAcademyFiles.fields([
+        { name: 'cover', maxCount: 1 },
+        { name: 'pdf', maxCount: 1 }
+    ]);
+
+    uploadHandler(req, res, async (err) => {
+        if (err) {
+            return res.status(400).json({ message: err.message || 'Hiba történt a fájl feltöltésekor.' });
+        }
+
+        const coverFile = req.files?.cover?.[0] || null;
+        const pdfFile = req.files?.pdf?.[0] || null;
+        const title = (req.body.title || '').trim();
+        const subtitle = (req.body.subtitle || '').trim();
+        const summary = (req.body.summary || '').trim();
+        const content = (req.body.content || '').trim();
+        const keywords = (req.body.keywords || '').trim();
+
+        if (!title) {
+            if (coverFile) {
+                await safeUnlink(path.join(academyDirectory, coverFile.filename));
+            }
+            if (pdfFile) {
+                await safeUnlink(path.join(academyDirectory, pdfFile.filename));
+            }
+            return res.status(400).json({ message: 'A cím megadása kötelező.' });
+        }
+
+        const rawTagIds = parseAcademyTagIds(req.body.tags);
+        const client = await db.pool.connect();
+        try {
+            await client.query('BEGIN');
+            const { rows } = await client.query(
+                `INSERT INTO academy_articles
+                (title, subtitle, summary, content, keywords, cover_filename, pdf_filename, pdf_original_filename)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING *`,
+                [
+                    title,
+                    subtitle || null,
+                    summary || null,
+                    content || null,
+                    keywords || null,
+                    coverFile ? coverFile.filename : null,
+                    pdfFile ? pdfFile.filename : null,
+                    pdfFile ? pdfFile.originalname : null
+                ]
+            );
+
+            const article = rows[0];
+            const resolvedTagIds = await resolveAcademyTagIds(client, rawTagIds);
+
+            for (const tagId of resolvedTagIds) {
+                await client.query(
+                    'INSERT INTO academy_article_tags (article_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [article.id, tagId]
+                );
+            }
+
+            await client.query('COMMIT');
+            res.status(201).json({ id: article.id });
+        } catch (dbErr) {
+            await client.query('ROLLBACK');
+            if (coverFile) {
+                await safeUnlink(path.join(academyDirectory, coverFile.filename));
+            }
+            if (pdfFile) {
+                await safeUnlink(path.join(academyDirectory, pdfFile.filename));
+            }
+            console.error('Hiba az akadémia cikk mentésekor:', dbErr);
+            res.status(500).json({ message: 'Nem sikerült menteni a cikket.' });
+        } finally {
+            client.release();
+        }
+    });
+});
+
+app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
+    const uploadHandler = uploadAcademyFiles.fields([
+        { name: 'cover', maxCount: 1 },
+        { name: 'pdf', maxCount: 1 }
+    ]);
+
+    uploadHandler(req, res, async (err) => {
+        if (err) {
+            return res.status(400).json({ message: err.message || 'Hiba történt a fájl feltöltésekor.' });
+        }
+
+        const articleId = Number.parseInt(req.params.id, 10);
+        if (!Number.isFinite(articleId)) {
+            return res.status(400).json({ message: 'Érvénytelen cikk azonosító.' });
+        }
+
+        const coverFile = req.files?.cover?.[0] || null;
+        const pdfFile = req.files?.pdf?.[0] || null;
+        const title = (req.body.title || '').trim();
+        const subtitle = (req.body.subtitle || '').trim();
+        const summary = (req.body.summary || '').trim();
+        const content = (req.body.content || '').trim();
+        const keywords = (req.body.keywords || '').trim();
+
+        if (!title) {
+            if (coverFile) {
+                await safeUnlink(path.join(academyDirectory, coverFile.filename));
+            }
+            if (pdfFile) {
+                await safeUnlink(path.join(academyDirectory, pdfFile.filename));
+            }
+            return res.status(400).json({ message: 'A cím megadása kötelező.' });
+        }
+
+        const client = await db.pool.connect();
+        let existing;
+        try {
+            const { rows } = await client.query(
+                'SELECT cover_filename, pdf_filename, pdf_original_filename FROM academy_articles WHERE id = $1',
+                [articleId]
+            );
+            existing = rows[0];
+            if (!existing) {
+                if (coverFile) {
+                    await safeUnlink(path.join(academyDirectory, coverFile.filename));
+                }
+                if (pdfFile) {
+                    await safeUnlink(path.join(academyDirectory, pdfFile.filename));
+                }
+                return res.status(404).json({ message: 'A cikk nem található.' });
+            }
+
+            const newCoverFilename = coverFile ? coverFile.filename : existing.cover_filename;
+            const newPdfFilename = pdfFile ? pdfFile.filename : existing.pdf_filename;
+            const newPdfOriginal = pdfFile ? pdfFile.originalname : existing.pdf_original_filename;
+
+            const rawTagIds = parseAcademyTagIds(req.body.tags);
+            await client.query('BEGIN');
+            await client.query(
+                `UPDATE academy_articles
+                 SET title = $1,
+                     subtitle = $2,
+                     summary = $3,
+                     content = $4,
+                     keywords = $5,
+                     cover_filename = $6,
+                     pdf_filename = $7,
+                     pdf_original_filename = $8,
+                     updated_at = NOW()
+                 WHERE id = $9`,
+                [
+                    title,
+                    subtitle || null,
+                    summary || null,
+                    content || null,
+                    keywords || null,
+                    newCoverFilename,
+                    newPdfFilename,
+                    newPdfOriginal,
+                    articleId
+                ]
+            );
+
+            await client.query('DELETE FROM academy_article_tags WHERE article_id = $1', [articleId]);
+            const resolvedTagIds = await resolveAcademyTagIds(client, rawTagIds);
+            for (const tagId of resolvedTagIds) {
+                await client.query(
+                    'INSERT INTO academy_article_tags (article_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [articleId, tagId]
+                );
+            }
+
+            await client.query('COMMIT');
+
+            if (coverFile && existing.cover_filename) {
+                await safeUnlink(path.join(academyDirectory, existing.cover_filename));
+            }
+            if (pdfFile && existing.pdf_filename) {
+                await safeUnlink(path.join(academyDirectory, existing.pdf_filename));
+            }
+
+            res.status(200).json({ message: 'Cikk frissítve.' });
+        } catch (dbErr) {
+            await client.query('ROLLBACK');
+            if (coverFile) {
+                await safeUnlink(path.join(academyDirectory, coverFile.filename));
+            }
+            if (pdfFile) {
+                await safeUnlink(path.join(academyDirectory, pdfFile.filename));
+            }
+            console.error('Hiba az akadémia cikk frissítésekor:', dbErr);
+            res.status(500).json({ message: 'Nem sikerült frissíteni a cikket.' });
+        } finally {
+            client.release();
+        }
+    });
+});
+
+app.delete('/api/academy/articles/:id', authenticateToken, isAdmin, async (req, res) => {
+    const articleId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(articleId)) {
+        return res.status(400).json({ message: 'Érvénytelen cikk azonosító.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT cover_filename, pdf_filename FROM academy_articles WHERE id = $1',
+            [articleId]
+        );
+        const article = rows[0];
+        if (!article) {
+            return res.status(404).json({ message: 'A cikk nem található.' });
+        }
+
+        await db.query('DELETE FROM academy_articles WHERE id = $1', [articleId]);
+
+        if (article.cover_filename) {
+            await safeUnlink(path.join(academyDirectory, article.cover_filename));
+        }
+        if (article.pdf_filename) {
+            await safeUnlink(path.join(academyDirectory, article.pdf_filename));
+        }
+
+        res.status(200).json({ message: 'Cikk törölve.' });
+    } catch (err) {
+        console.error('Hiba az akadémia cikk törlésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült törölni a cikket.' });
+    }
+});
+
+app.get('/api/academy/articles/:id/download', async (req, res) => {
+    const articleId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(articleId)) {
+        return res.status(400).json({ message: 'Érvénytelen cikk azonosító.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT pdf_filename, pdf_original_filename FROM academy_articles WHERE id = $1',
+            [articleId]
+        );
+        const article = rows[0];
+        if (!article || !article.pdf_filename) {
+            return res.status(404).json({ message: 'A PDF nem található.' });
+        }
+
+        const resolvedPath = path.normalize(path.join(academyDirectory, article.pdf_filename));
+        if (!resolvedPath.startsWith(academyDirectory)) {
+            return res.status(400).json({ message: 'Érvénytelen fájl útvonal.' });
+        }
+
+        await fs.promises.access(resolvedPath);
+        const downloadName = article.pdf_original_filename || 'kutatas.pdf';
+        return res.download(resolvedPath, downloadName);
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return res.status(404).json({ message: 'A PDF nem található.' });
+        }
+        console.error('Hiba az akadémia PDF letöltésekor:', err);
+        res.status(500).json({ message: 'Nem sikerült letölteni a PDF-et.' });
     }
 });
 

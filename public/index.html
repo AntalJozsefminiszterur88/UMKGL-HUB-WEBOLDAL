@@ -397,235 +397,146 @@
         </div>
       </section>
 
-      <!-- Akadémia -->
+                  <!-- Akadémia -->
       <section id="akademia">
-    <div class="hub-container">
-
-        <!-- FŐOLDAL / KÖNYVTÁR NÉZET -->
-        <div id="library-view">
+        <div class="hub-container">
+          <div id="academyLibraryView">
             <div class="hub-header">
-                <div class="hub-title">UMKGL Akadémia</div>
-                <div class="hub-subtitle">
-                    Hivatalos kutatási dokumentumok, elemzések és tényfeltáró jelentések gyűjteménye.
-                    <br>Tudományos igényességgel, Discord stílusban.
-                </div>
+              <div class="hub-title">UMKGL Akadémia</div>
+              <div class="hub-subtitle">
+                Hivatalos kutatási dokumentumok, elemzések és tényfeltáró jelentések gyűjteménye.
+                <br>Tudományos igényességgel, Discord stílusban.
+              </div>
+              <div class="hub-actions">
+                <button id="academyCreateBtn" class="primary-button" type="button" style="display: none;">Új cikk</button>
+              </div>
             </div>
 
-            <div class="filter-bar">
-                <button class="filter-btn active" onclick="filterCards('all')">Összes</button>
-                <button class="filter-btn" onclick="filterCards('political')">Politológia</button>
-                <button class="filter-btn" onclick="filterCards('media')">Médiakutatás</button>
-                <button class="filter-btn" onclick="filterCards('tech')">Technológia</button>
-            </div>
+            <div id="academyFilters" class="filter-bar"></div>
 
-            <div class="research-grid">
+            <div id="academyGrid" class="research-grid"></div>
+            <p id="academyEmptyState" class="programs-empty" style="display: none;">Még nincs elérhető cikk.</p>
+          </div>
 
-                <!-- KÁRTYA 1: GULYÁS -->
-                <article class="research-card" onclick="openArticle('gulyas')">
-                    <div class="card-header">
-                        <span class="category-badge" style="border-color: var(--danger); color: #ffaeb0;">Politológia</span>
-                        <i class="fas fa-landmark card-icon"></i>
-                    </div>
-                    <div class="card-body">
-                        <div class="card-meta">2024. MÁRCIUS • ESETTANULMÁNY</div>
-                        <h3 class="card-title">A Gulyás-Magyar Interakció: Politikai kríziskommunikáció elemzése</h3>
-                        <p class="card-abstract">
-                            Részletes vizsgálata a 2024. februári "kegyelmi botrány" utáni eseményeknek. A tanulmány feltárja az összefüggést Gulyás Gergely miniszter váratlan gerincműtétje és Magyar Péter Partizán-interjúja között, elemzi a "diplomáciai betegség" elméletét és a lojalitás vs. barátság kérdéskörét a NER-ben.
-                        </p>
-                        <div class="card-footer">
-                            <span class="read-more">Olvass tovább <i class="fas fa-arrow-right"></i></span>
-                        </div>
-                    </div>
-                </article>
-
-                <!-- KÁRTYA 2: DOGGYANDI -->
-                <article class="research-card" onclick="openArticle('doggyandi')">
-                    <div class="card-header">
-                        <span class="category-badge" style="border-color: var(--success); color: #9dfcb6;">Médiakutatás</span>
-                        <i class="fas fa-virus card-icon"></i>
-                    </div>
-                    <div class="card-body">
-                        <div class="card-meta">2025. JÚNIUS • TÉNYFELTÁRÁS</div>
-                        <h3 class="card-title">Online Stigma és Dezinformáció: A "DoggyAndi-jelenség"</h3>
-                        <p class="card-abstract">
-                            Hogyan terjednek egészségügyi álhírek a gaming közösségekben? Ez a kutatás a Tabár-Szabó Andrea (DoggyAndi) körül kialakult HIV/AIDS pletykákat vizsgálja tudományos módszertannal, cáfolva azokat a nyilvános adatok és az orvostudomány tényei alapján.
-                        </p>
-                        <div class="card-footer">
-                            <span class="read-more">Olvass tovább <i class="fas fa-arrow-right"></i></span>
-                        </div>
-                    </div>
-                </article>
-
-                <!-- KÁRTYA 3: PLACEHOLDER (Hogy látszódjon a grid) -->
-                <article class="research-card" style="opacity: 0.6; cursor: not-allowed;">
-                    <div class="card-header">
-                        <span class="category-badge">Archívum</span>
-                        <i class="fas fa-lock card-icon"></i>
-                    </div>
-                    <div class="card-body">
-                        <div class="card-meta">TBA • TITKOSÍTOTT</div>
-                        <h3 class="card-title">Minecraft Szerver Gazdaságtan</h3>
-                        <p class="card-abstract">
-                            Hamarosan érkező tanulmány a virtuális valuták inflációjáról és a kereskedelmi útvonalak hatásáról a játékosok viselkedésére.
-                        </p>
-                        <div class="card-footer">
-                            <span class="read-more">Hamarosan...</span>
-                        </div>
-                    </div>
-                </article>
-
-            </div>
-        </div>
-
-        <!-- CIKK OLVASÓ NÉZET: GULYÁS -->
-        <div id="article-gulyas" class="reader-view">
+          <div id="academyReaderView" class="reader-view">
             <div class="back-nav">
-                <button class="back-btn" onclick="closeArticle()"><i class="fas fa-arrow-left"></i> Vissza a Könyvtárhoz</button>
+              <button class="back-btn" id="academyBackBtn" type="button"><i class="fas fa-arrow-left"></i> Vissza a Könyvtárhoz</button>
             </div>
 
             <div class="article-layout">
-                <!-- Sidebar -->
-                <aside class="article-meta-sidebar">
-                    <div class="meta-group">
-                        <span class="meta-label">Szerző</span>
-                        <div class="meta-value">Politikai Elemző Unit</div>
-                    </div>
-                    <div class="meta-group">
-                        <span class="meta-label">Dátum</span>
-                        <div class="meta-value">2024. Március 28.</div>
-                    </div>
-                    <div class="meta-group">
-                        <span class="meta-label">Kulcsszavak</span>
-                        <div class="meta-value">NER, Válság, Kommunikáció</div>
-                    </div>
-                    <div class="meta-group">
-                        <span class="meta-label">Tartalomjegyzék</span>
-                        <ul class="toc-list">
-                            <li class="toc-item">Bevezetés: A februári bomba</li>
-                            <li class="toc-item">A műtét időzítése</li>
-                            <li class="toc-item">Politikai következmények</li>
-                        </ul>
-                    </div>
-                    <button class="download-btn"><i class="fas fa-file-pdf"></i> PDF Letöltése</button>
-                </aside>
-
-                <!-- Content -->
-                <div class="article-content">
-                    <div class="article-header">
-                        <span class="category-badge" style="background: var(--danger); color: white;">Politikai Elemzés</span>
-                        <h1 class="article-title">Gulyás Gergely 2024-es gerincműtétje és Magyar Péter Partizán-interjúja: Összefüggések</h1>
-                        <div class="article-subtitle">Hogyan hatott a kegyelmi botrány a kormányzati kommunikációra?</div>
-                    </div>
-
-                    <div class="article-body">
-                        <div class="highlight-box">
-                            <strong>Kutatási Kérdés:</strong> Volt-e ok-okozati összefüggés Gulyás Gergely eltűnése és barátja, Magyar Péter színrelépése között? A "diplomáciai betegség" elméletének vizsgálata.
-                        </div>
-
-                        <h2>1. Bevezetés: A Februári Bomba</h2>
-                        <p>
-                            2024. február 11-én Magyar Péter, Varga Judit volt férje, a Partizán műsorában éles kritikát fogalmazott meg a kormány belső körei ellen. Ez az esemény ("kegyelmi botrány") dominálta a közbeszédet. Ezzel párhuzamosan Gulyás Gergely miniszter váratlanul eltűnt a nyilvánosság elől.
-                        </p>
-
-                        <h2>2. A Műtét Rejtélye</h2>
-                        <p>
-                            Február végén a Miniszterelnökség bejelentette: Gulyás sürgősségi gerincműtéten esett át. Saját elmondása szerint <em>"a műtét sikeres volt, de utána újra kellett tanulnom járni"</em>. Bár a közvélemény szkeptikus volt, és sokan azt hitték, hogy a miniszter csak kerüli a kényes kérdéseket barátja árulásával kapcsolatban, a rehabilitáció hossza és a fizikai állapot (járókeret) valós orvosi beavatkozást igazol.
-                        </p>
-
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Esemény</th>
-                                    <th>Időpont</th>
-                                    <th>Jelentőség</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>Magyar Péter Interjú</td>
-                                    <td>Február 11.</td>
-                                    <td>A botrány kirobbanása</td>
-                                </tr>
-                                <tr>
-                                    <td>Gulyás Műtétje</td>
-                                    <td>Február 25.</td>
-                                    <td>Kivonulás a nyilvánosságból</td>
-                                </tr>
-                                <tr>
-                                    <td>Visszatérés</td>
-                                    <td>Április 11.</td>
-                                    <td>Elhatárolódás a baráttól</td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <h2>3. Konklúzió</h2>
-                        <p>
-                            Gulyás Gergely lojalitása a kormány felé megkérdőjelezhetetlen maradt. Visszatérésekor egyértelművé tette: bár 20 éves barátság fűzte Magyarhoz, az általa tett lépéseket (különösen a felesége titkos rögzítését) elfogadhatatlannak tartja. A "kommunikációs karantén" részben tudatos lehetett, de az egészségügyi ok volt a döntő tényező.
-                        </p>
-                    </div>
+              <aside class="article-meta-sidebar">
+                <div class="meta-group">
+                  <span class="meta-label">Dátum</span>
+                  <div class="meta-value" id="academyMetaDate"></div>
                 </div>
+                <div class="meta-group">
+                  <span class="meta-label">Kulcsszavak</span>
+                  <div class="meta-value" id="academyMetaKeywords"></div>
+                </div>
+                <div class="meta-group">
+                  <span class="meta-label">Tag-ek</span>
+                  <div class="meta-value" id="academyMetaTags"></div>
+                </div>
+                <div class="meta-group" id="academyPdfInfo" style="display: none;">
+                  <span class="meta-label">Teljes kutatás</span>
+                  <div class="meta-value" id="academyPdfLabel"></div>
+                </div>
+                <button class="download-btn" id="academyDownloadBtn" type="button" style="display: none;">
+                  <i class="fas fa-file-pdf"></i> PDF Letöltése
+                </button>
+              </aside>
+
+              <div class="article-content">
+                <div class="article-header">
+                  <div id="academyHeaderTags" class="academy-tag-row"></div>
+                  <h1 class="article-title" id="academyArticleTitle"></h1>
+                  <div class="article-subtitle" id="academyArticleSubtitle"></div>
+                </div>
+
+                <div class="article-body" id="academyArticleBody"></div>
+              </div>
             </div>
+          </div>
         </div>
 
-        <!-- CIKK OLVASÓ NÉZET: DOGGYANDI -->
-        <div id="article-doggyandi" class="reader-view">
-            <div class="back-nav">
-                <button class="back-btn" onclick="closeArticle()"><i class="fas fa-arrow-left"></i> Vissza a Könyvtárhoz</button>
+        <div id="academyEditorModal" class="modal-overlay" style="display: none;">
+          <div class="upload-modal-content academy-editor">
+            <div class="upload-modal-header">
+              <h3 class="upload-modal-title" id="academyEditorTitle">Új cikk</h3>
+              <button class="close-btn" id="academyEditorCloseBtn" aria-label="Bezárás">&times;</button>
             </div>
 
-            <div class="article-layout">
-                <aside class="article-meta-sidebar">
-                    <div class="meta-group">
-                        <span class="meta-label">Kutató</span>
-                        <div class="meta-value">Fact-Check Team</div>
-                    </div>
-                    <div class="meta-group">
-                        <span class="meta-label">Dátum</span>
-                        <div class="meta-value">2025. Június 20.</div>
-                    </div>
-                    <button class="download-btn"><i class="fas fa-file-pdf"></i> PDF Letöltése</button>
-                </aside>
-
-                <div class="article-content">
-                    <div class="article-header">
-                        <span class="category-badge" style="background: var(--success); color: white;">Médiakutatás</span>
-                        <h1 class="article-title">DoggyAndi és az online pletykák: Tudományos elemzés</h1>
-                    </div>
-
-                    <div class="article-body">
-                        <div class="highlight-box" style="border-color: var(--success); background: rgba(59, 165, 92, 0.1);">
-                            <strong>Összefoglaló:</strong> A kutatás célja a "DoggyAndi" nevű tartalomgyártót érintő HIV/AIDS pletykák hitelességének vizsgálata volt. Az eredmények alapján a vádak alaptalanok.
-                        </div>
-
-                        <h2>A Problémafelvetés</h2>
-                        <p>
-                            Az internetes közösségekben, különösen a fiatalabb (Z generációs) demográfiai csoportokban gyakori a dezinformáció gyors terjedése. A vizsgált esetben egy népszerű Minecraft videós magánéletével kapcsolatos súlyos egészségügyi spekulációk (AIDS) jelentek meg fórumokon (pl. Gyakorikérdések.hu), különösen a 2020-as párkapcsolati szakítása után.
-                        </p>
-
-                        <h2>Tényellenőrzés</h2>
-                        <p>
-                            A kutatás során nem találtunk semmilyen hiteles orvosi dokumentációt vagy nyilatkozatot, ami alátámasztaná a pletykákat. Ellenkezőleg:
-                        </p>
-                        <ul>
-                            <li>Az alany aktív életmódot folytat (utazások, nyilvános szereplések).</li>
-                            <li>A HIV nem diagnosztizálható videós tartalmak alapján.</li>
-                            <li>A pletykák forrása anonim és gyakran rosszindulatú kommentekre vezethető vissza.</li>
-                        </ul>
-
-                        <h2>Etikai vonatkozások</h2>
-                        <p>
-                            Fontos hangsúlyozni a GDPR és a magánszféra védelmének elveit. Egy közszereplőnek sem kötelessége nyilvánosságra hozni az egészségügyi állapotát, különösen stigmatizáló vádakkal szemben. A tudományos konszenzus szerint az ilyen pletykák terjesztése káros és etikátlan.
-                        </p>
-                    </div>
+            <form id="academyEditorForm" class="academy-editor-form">
+              <div class="academy-editor-grid">
+                <div class="form-group">
+                  <label for="academyTitleInput">Cím</label>
+                  <input id="academyTitleInput" type="text" class="uniform-control" required />
                 </div>
-            </div>
-        </div>
+                <div class="form-group">
+                  <label for="academySubtitleInput">Alcím</label>
+                  <input id="academySubtitleInput" type="text" class="uniform-control" />
+                </div>
+              </div>
 
-    </div>
+              <div class="form-group">
+                <label for="academySummaryInput">Rövid leírás</label>
+                <textarea id="academySummaryInput" rows="3" class="uniform-control"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="academyKeywordsInput">Kulcsszavak</label>
+                <input id="academyKeywordsInput" type="text" class="uniform-control" placeholder="pl. NER, válság, kommunikáció" />
+              </div>
+
+              <div class="form-group">
+                <label for="academyContentInput">Tartalom</label>
+                <textarea id="academyContentInput" rows="10" class="uniform-control"></textarea>
+              </div>
+
+              <div class="academy-editor-grid">
+                <div class="academy-editor-tile">
+                  <div class="tile-header">
+                    <label for="academyCoverInput">Borítókép</label>
+                    <span class="tile-hint">PNG, JPG vagy WEBP</span>
+                  </div>
+                  <label class="ghost-button" for="academyCoverInput">Kép kiválasztása</label>
+                  <input type="file" id="academyCoverInput" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;" />
+                  <div class="academy-cover-preview">
+                    <img id="academyCoverPreview" alt="Borítókép előnézet" />
+                  </div>
+                </div>
+                <div class="academy-editor-tile">
+                  <div class="tile-header">
+                    <label for="academyPdfInput">PDF</label>
+                    <span class="tile-hint">Teljes kutatás</span>
+                  </div>
+                  <input type="file" id="academyPdfInput" accept="application/pdf" />
+                  <p id="academyPdfName" class="program-file-name">Nincs kiválasztva PDF.</p>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="academyTagSelect">Tag-ek</label>
+                <select id="academyTagSelect" class="uniform-control" multiple size="6"></select>
+              </div>
+
+              <div id="academyTagCreateRow" class="academy-tag-create" style="display: none;">
+                <input type="text" id="academyTagNameInput" class="uniform-control" placeholder="Új tag neve" />
+                <input type="color" id="academyTagColorInput" value="#5865f2" />
+                <button type="button" id="academyTagCreateBtn" class="secondary-btn">Tag létrehozása</button>
+                <span id="academyTagCreateStatus" class="academy-tag-status"></span>
+              </div>
+
+              <div class="academy-editor-actions">
+                <button type="button" id="academyEditorCancelBtn" class="secondary-btn">Mégse</button>
+                <button type="submit" id="academyEditorSaveBtn" class="primary-btn">Mentés</button>
+              </div>
+            </form>
+          </div>
+        </div>
       </section>
 
-      <!-- Szavazás -->
+<!-- Szavazás -->
       <section id="szavazas">
         <h2>Szavazások</h2>
         <div id="pollCreator" class="poll-card">

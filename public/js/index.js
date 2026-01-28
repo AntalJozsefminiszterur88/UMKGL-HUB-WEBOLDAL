@@ -55,6 +55,44 @@
     const closeProgramUploadModalBtn = document.getElementById("closeProgramUploadModal");
     const cancelProgramUploadBtn = document.getElementById("cancelProgramUploadBtn");
     const submitProgramUploadBtn = document.getElementById("submitProgramUploadBtn");
+    const academySection = document.getElementById("akademia");
+    const academyLibraryView = document.getElementById("academyLibraryView");
+    const academyGrid = document.getElementById("academyGrid");
+    const academyFilters = document.getElementById("academyFilters");
+    const academyEmptyState = document.getElementById("academyEmptyState");
+    const academyCreateBtn = document.getElementById("academyCreateBtn");
+    const academyReaderView = document.getElementById("academyReaderView");
+    const academyBackBtn = document.getElementById("academyBackBtn");
+    const academyMetaDate = document.getElementById("academyMetaDate");
+    const academyMetaKeywords = document.getElementById("academyMetaKeywords");
+    const academyMetaTags = document.getElementById("academyMetaTags");
+    const academyPdfInfo = document.getElementById("academyPdfInfo");
+    const academyPdfLabel = document.getElementById("academyPdfLabel");
+    const academyDownloadBtn = document.getElementById("academyDownloadBtn");
+    const academyHeaderTags = document.getElementById("academyHeaderTags");
+    const academyArticleTitle = document.getElementById("academyArticleTitle");
+    const academyArticleSubtitle = document.getElementById("academyArticleSubtitle");
+    const academyArticleBody = document.getElementById("academyArticleBody");
+    const academyEditorModal = document.getElementById("academyEditorModal");
+    const academyEditorForm = document.getElementById("academyEditorForm");
+    const academyEditorTitle = document.getElementById("academyEditorTitle");
+    const academyTitleInput = document.getElementById("academyTitleInput");
+    const academySubtitleInput = document.getElementById("academySubtitleInput");
+    const academySummaryInput = document.getElementById("academySummaryInput");
+    const academyKeywordsInput = document.getElementById("academyKeywordsInput");
+    const academyContentInput = document.getElementById("academyContentInput");
+    const academyCoverInput = document.getElementById("academyCoverInput");
+    const academyCoverPreview = document.getElementById("academyCoverPreview");
+    const academyPdfInput = document.getElementById("academyPdfInput");
+    const academyPdfName = document.getElementById("academyPdfName");
+    const academyTagSelect = document.getElementById("academyTagSelect");
+    const academyEditorCancelBtn = document.getElementById("academyEditorCancelBtn");
+    const academyEditorCloseBtn = document.getElementById("academyEditorCloseBtn");
+    const academyEditorSaveBtn = document.getElementById("academyEditorSaveBtn");
+    const academyTagNameInput = document.getElementById("academyTagNameInput");
+    const academyTagColorInput = document.getElementById("academyTagColorInput");
+    const academyTagCreateBtn = document.getElementById("academyTagCreateBtn");
+    const academyTagCreateStatus = document.getElementById("academyTagCreateStatus");
 
     const SESSION_KEYS = {
       token: "token",
@@ -69,6 +107,14 @@
     let programImageCropper = null;
     let programImageObjectUrl = null;
     let editingProgram = null;
+    let academyArticles = [];
+    let academyTags = [];
+    let academyActiveTag = "all";
+    let academyLoadedOnce = false;
+    let academyTagsLoaded = false;
+    let academyCoverObjectUrl = null;
+    let editingAcademyArticle = null;
+    let activeAcademyArticle = null;
 
     function isPollSectionActive() {
       return pollSection?.classList.contains("active");
@@ -2239,6 +2285,7 @@
         }
 
         updateProgramAdminControls();
+        updateAcademyAdminControls();
 
         if (createTagWrapper) {
           createTagWrapper.style.display = isAdmin ? "block" : "none";
@@ -2360,6 +2407,7 @@
       }
       updateAdminNavVisibility();
       updateProgramAdminControls();
+      updateAcademyAdminControls();
       updateFileTransferNavVisibility();
       updateClipAccessUI();
       updatePollCreatorState(false);
@@ -3847,6 +3895,7 @@
         updateFileTransferNavVisibility();
         updateClipAccessUI();
         updatePollCreatorState();
+        updateAcademyAdminControls();
 
         const activeSection = document.querySelector("main section.active");
         const activeId = activeSection ? activeSection.id : "";
@@ -3862,6 +3911,10 @@
 
         if (activeId === "szavazas") {
           loadPolls();
+        }
+
+        if (activeId === "akademia") {
+          loadAcademyData(true);
         }
       }
 
@@ -4187,6 +4240,671 @@
           if (button) {
             button.disabled = false;
             button.textContent = originalText || "✕";
+          }
+        }
+      }
+
+      function escapeHtml(value) {
+        if (value === null || value === undefined) {
+          return "";
+        }
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function normalizeAcademyTags(tags) {
+        if (Array.isArray(tags)) {
+          return tags;
+        }
+        if (!tags) {
+          return [];
+        }
+        if (typeof tags === "string") {
+          try {
+            const parsed = JSON.parse(tags);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (error) {
+            return [];
+          }
+        }
+        return [];
+      }
+
+      function formatAcademyContent(rawContent) {
+        const safe = typeof rawContent === "string" ? rawContent.trim() : "";
+        if (!safe) {
+          return "";
+        }
+        if (/<[a-z][\s\S]*>/i.test(safe)) {
+          return safe;
+        }
+        return safe
+          .split(/\n{2,}/)
+          .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br>")}</p>`)
+          .join("");
+      }
+
+      function renderAcademyFilters() {
+        if (!academyFilters) {
+          return;
+        }
+        if (academyActiveTag !== "all" && !academyTags.some((tag) => String(tag.id) === String(academyActiveTag))) {
+          academyActiveTag = "all";
+        }
+
+        academyFilters.innerHTML = "";
+
+        const allBtn = document.createElement("button");
+        allBtn.type = "button";
+        allBtn.className = "filter-btn";
+        if (academyActiveTag === "all") {
+          allBtn.classList.add("active");
+        }
+        allBtn.textContent = "Összes";
+        allBtn.addEventListener("click", () => {
+          academyActiveTag = "all";
+          renderAcademyFilters();
+          renderAcademyGrid();
+        });
+        academyFilters.appendChild(allBtn);
+
+        academyTags.forEach((tag) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "filter-btn";
+          if (academyActiveTag === String(tag.id)) {
+            btn.classList.add("active");
+          }
+          btn.textContent = tag.name;
+          btn.addEventListener("click", () => {
+            academyActiveTag = String(tag.id);
+            renderAcademyFilters();
+            renderAcademyGrid();
+          });
+          academyFilters.appendChild(btn);
+        });
+      }
+
+      function renderAcademyTagSelect(selectedIds = []) {
+        if (!academyTagSelect) {
+          return;
+        }
+        const selected = new Set((selectedIds || []).map((id) => String(id)));
+        academyTagSelect.innerHTML = "";
+        academyTags.forEach((tag) => {
+          const option = document.createElement("option");
+          option.value = String(tag.id);
+          option.textContent = tag.name;
+          option.selected = selected.has(String(tag.id));
+          academyTagSelect.appendChild(option);
+        });
+      }
+
+      function createAcademyTagChip(tag, options = {}) {
+        const chip = document.createElement("span");
+        chip.className = "tag-chip";
+        chip.textContent = tag?.name || "Tag";
+        chip.style.setProperty("--tag-color", normalizeColor(tag?.color));
+        if (options.clickable === false) {
+          chip.style.cursor = "default";
+        }
+        chip.dataset.tagId = String(tag?.id || "");
+        return chip;
+      }
+
+      function renderAcademyGrid() {
+        if (!academyGrid) {
+          return;
+        }
+        const filtered = academyActiveTag === "all"
+          ? academyArticles
+          : academyArticles.filter((article) =>
+              normalizeAcademyTags(article.tags).some((tag) => String(tag.id) === String(academyActiveTag))
+            );
+
+        academyGrid.innerHTML = "";
+
+        if (!filtered.length) {
+          if (academyEmptyState) {
+            academyEmptyState.style.display = "block";
+          }
+          return;
+        }
+        if (academyEmptyState) {
+          academyEmptyState.style.display = "none";
+        }
+
+        filtered.forEach((article) => {
+          const tags = normalizeAcademyTags(article.tags);
+          const card = document.createElement("article");
+          card.className = "research-card";
+          if (isAdminUser()) {
+            card.classList.add("research-card--admin");
+          }
+
+          const header = document.createElement("div");
+          header.className = "card-header";
+          if (article?.cover_filename) {
+            header.classList.add("has-cover");
+            header.style.backgroundImage = `url(/uploads/akademia/${article.cover_filename})`;
+          }
+
+          const badge = document.createElement("span");
+          badge.className = "category-badge";
+          const primaryTag = tags[0];
+          badge.textContent = primaryTag?.name || "Akadémia";
+          if (primaryTag?.color) {
+            badge.style.borderColor = normalizeColor(primaryTag.color);
+            badge.style.color = normalizeColor(primaryTag.color);
+          }
+          header.appendChild(badge);
+
+          const icon = document.createElement("i");
+          icon.className = "fas fa-book-open card-icon";
+          header.appendChild(icon);
+          card.appendChild(header);
+
+          const body = document.createElement("div");
+          body.className = "card-body";
+
+          const meta = document.createElement("div");
+          meta.className = "card-meta";
+          meta.textContent = formatDate(article?.created_at);
+
+          const title = document.createElement("h3");
+          title.className = "card-title";
+          title.textContent = article?.title || "Cím nélkül";
+
+          const abstract = document.createElement("p");
+          abstract.className = "card-abstract";
+          abstract.textContent = article?.summary || "Nincs rövid leírás.";
+
+          const footer = document.createElement("div");
+          footer.className = "card-footer";
+
+          const tagsWrap = document.createElement("div");
+          tagsWrap.className = "academy-card-tags";
+          if (tags.length) {
+            tags.forEach((tag) => {
+              const chip = createAcademyTagChip(tag, { clickable: false });
+              tagsWrap.appendChild(chip);
+            });
+          }
+
+          const readMore = document.createElement("span");
+          readMore.className = "read-more";
+          readMore.innerHTML = 'Olvass tovább <i class="fas fa-arrow-right"></i>';
+
+          footer.appendChild(tagsWrap);
+          footer.appendChild(readMore);
+
+          body.appendChild(meta);
+          body.appendChild(title);
+          body.appendChild(abstract);
+          body.appendChild(footer);
+          card.appendChild(body);
+
+          card.addEventListener("click", () => {
+            if (isAdminUser()) {
+              openAcademyEditor(article);
+            } else {
+              openAcademyReader(article);
+            }
+          });
+
+          if (isAdminUser()) {
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.className = "research-card__delete";
+            deleteBtn.textContent = "X";
+            deleteBtn.setAttribute("aria-label", "Cikk törlése");
+            deleteBtn.addEventListener("click", (event) => {
+              event.stopPropagation();
+              handleAcademyDelete(article.id, card, deleteBtn);
+            });
+            card.appendChild(deleteBtn);
+          }
+
+          academyGrid.appendChild(card);
+        });
+      }
+
+      function renderAcademyTagValue(target, tags, emptyText = "Nincs megadva") {
+        if (!target) {
+          return;
+        }
+        target.innerHTML = "";
+        if (!tags.length) {
+          if (emptyText) {
+            target.textContent = emptyText;
+          }
+          return;
+        }
+        tags.forEach((tag) => {
+          const chip = createAcademyTagChip(tag, { clickable: false });
+          target.appendChild(chip);
+        });
+      }
+
+      function openAcademyReader(article) {
+        if (!academyLibraryView || !academyReaderView) {
+          return;
+        }
+        activeAcademyArticle = article;
+        academyLibraryView.style.display = "none";
+        academyReaderView.classList.add("active");
+
+        if (academyArticleTitle) {
+          academyArticleTitle.textContent = article?.title || "";
+        }
+        if (academyArticleSubtitle) {
+          academyArticleSubtitle.textContent = article?.subtitle || "";
+          academyArticleSubtitle.style.display = article?.subtitle ? "block" : "none";
+        }
+        if (academyArticleBody) {
+          academyArticleBody.innerHTML = formatAcademyContent(article?.content || "");
+        }
+
+        if (academyMetaDate) {
+          academyMetaDate.textContent = formatDate(article?.created_at);
+        }
+        if (academyMetaKeywords) {
+          academyMetaKeywords.textContent = article?.keywords ? article.keywords : "Nincs megadva";
+        }
+
+        const tags = normalizeAcademyTags(article?.tags);
+        renderAcademyTagValue(academyMetaTags, tags);
+        renderAcademyTagValue(academyHeaderTags, tags, "");
+
+        if (academyPdfInfo && academyDownloadBtn) {
+          if (article?.pdf_filename) {
+            academyPdfInfo.style.display = "block";
+            if (academyPdfLabel) {
+              academyPdfLabel.textContent = article?.pdf_original_filename || article?.pdf_filename || "PDF";
+            }
+            const pdfMetaLabel = academyPdfInfo.querySelector(".meta-label");
+            if (pdfMetaLabel) {
+              pdfMetaLabel.textContent = "Teljes kutatás:";
+            }
+            academyDownloadBtn.style.display = "flex";
+          } else {
+            academyPdfInfo.style.display = "none";
+            academyDownloadBtn.style.display = "none";
+          }
+        }
+
+        window.scrollTo(0, 0);
+      }
+
+      function closeAcademyReader() {
+        if (!academyLibraryView || !academyReaderView) {
+          return;
+        }
+        activeAcademyArticle = null;
+        academyReaderView.classList.remove("active");
+        academyLibraryView.style.display = "block";
+        window.scrollTo(0, 0);
+      }
+
+      function resetAcademyEditor() {
+        if (academyEditorForm) {
+          academyEditorForm.reset();
+        }
+        if (academyPdfName) {
+          academyPdfName.textContent = "Nincs kiválasztva PDF.";
+        }
+        if (academyCoverPreview) {
+          academyCoverPreview.removeAttribute("src");
+        }
+        if (academyCoverInput) {
+          academyCoverInput.value = "";
+        }
+        if (academyPdfInput) {
+          academyPdfInput.value = "";
+        }
+        if (academyTagCreateStatus) {
+          academyTagCreateStatus.textContent = "";
+        }
+        if (academyCoverObjectUrl) {
+          URL.revokeObjectURL(academyCoverObjectUrl);
+          academyCoverObjectUrl = null;
+        }
+      }
+
+      async function loadAcademyTags(force = false) {
+        if (academyTagsLoaded && !force) {
+          renderAcademyFilters();
+          renderAcademyTagSelect();
+          return;
+        }
+        const previousSelection = academyTagSelect
+          ? Array.from(academyTagSelect.selectedOptions || []).map((option) => option.value)
+          : [];
+        try {
+          const response = await fetch("/api/academy/tags");
+          if (!response.ok) {
+            throw new Error("Nem sikerült lekérni a tag-eket.");
+          }
+          const payload = await response.json();
+          academyTags = Array.isArray(payload) ? payload.map((tag) => ({ ...tag, color: normalizeColor(tag.color) })) : [];
+          academyTagsLoaded = true;
+          renderAcademyFilters();
+          renderAcademyTagSelect(previousSelection);
+        } catch (error) {
+          console.error("Akadémia tag hiba:", error);
+          academyTags = [];
+          renderAcademyFilters();
+          renderAcademyTagSelect(previousSelection);
+        }
+      }
+
+      async function loadAcademyArticles() {
+        if (!academyGrid) {
+          return;
+        }
+        try {
+          const response = await fetch("/api/academy/articles");
+          if (!response.ok) {
+            throw new Error("Nem sikerült betölteni a cikkeket.");
+          }
+          const payload = await response.json();
+          academyArticles = Array.isArray(payload) ? payload : [];
+          renderAcademyGrid();
+        } catch (error) {
+          console.error("Akadémia cikk hiba:", error);
+          academyArticles = [];
+          renderAcademyGrid();
+        }
+      }
+
+      async function loadAcademyData(force = false) {
+        if (!academySection) {
+          return;
+        }
+        if (academyLoadedOnce && !force) {
+          updateAcademyAdminControls();
+          return;
+        }
+        academyLoadedOnce = true;
+        await loadAcademyTags(force);
+        await loadAcademyArticles();
+        updateAcademyAdminControls();
+      }
+
+      function updateAcademyAdminControls() {
+        const isAdmin = isAdminUser();
+        if (academyCreateBtn) {
+          academyCreateBtn.style.display = isAdmin ? "inline-flex" : "none";
+        }
+        const tagCreateRow = document.getElementById("academyTagCreateRow");
+        if (tagCreateRow) {
+          tagCreateRow.style.display = isAdmin ? "flex" : "none";
+        }
+        if (academyGrid && academyArticles.length) {
+          renderAcademyGrid();
+          return;
+        }
+        if (academyGrid) {
+          academyGrid.querySelectorAll(".research-card").forEach((card) => {
+            card.classList.toggle("research-card--admin", isAdmin);
+          });
+        }
+      }
+
+      function openAcademyEditor(article = null) {
+        if (!academyEditorModal || !academyEditorForm) {
+          return;
+        }
+        if (!isAdminUser()) {
+          alert("Csak admin szerkesztheti a cikkeket.");
+          return;
+        }
+
+        editingAcademyArticle = article;
+        if (academyEditorTitle) {
+          academyEditorTitle.textContent = article ? "Cikk szerkesztése" : "Új cikk";
+        }
+        if (academyEditorSaveBtn) {
+          academyEditorSaveBtn.textContent = article ? "Frissítés" : "Mentés";
+        }
+
+        if (academyTitleInput) {
+          academyTitleInput.value = article?.title || "";
+        }
+        if (academySubtitleInput) {
+          academySubtitleInput.value = article?.subtitle || "";
+        }
+        if (academySummaryInput) {
+          academySummaryInput.value = article?.summary || "";
+        }
+        if (academyKeywordsInput) {
+          academyKeywordsInput.value = article?.keywords || "";
+        }
+        if (academyContentInput) {
+          academyContentInput.value = article?.content || "";
+        }
+        if (academyCoverPreview) {
+          if (article?.cover_filename) {
+            academyCoverPreview.src = `/uploads/akademia/${article.cover_filename}`;
+          } else {
+            academyCoverPreview.removeAttribute("src");
+          }
+        }
+        if (academyPdfName) {
+          academyPdfName.textContent = article?.pdf_original_filename || "Nincs kiválasztva PDF.";
+        }
+        if (academyCoverInput) {
+          academyCoverInput.value = "";
+        }
+        if (academyPdfInput) {
+          academyPdfInput.value = "";
+        }
+
+        loadAcademyTags(true).then(() => {
+          const selectedIds = normalizeAcademyTags(article?.tags).map((tag) => tag.id);
+          renderAcademyTagSelect(selectedIds);
+        });
+
+        if (academyEditorModal) {
+          academyEditorModal.style.display = "flex";
+          academyEditorModal.classList.add("modal-overlay--visible");
+        }
+      }
+
+      function closeAcademyEditor() {
+        if (academyEditorModal) {
+          academyEditorModal.classList.remove("modal-overlay--visible");
+          academyEditorModal.style.display = "none";
+        }
+        editingAcademyArticle = null;
+        resetAcademyEditor();
+      }
+
+      async function handleAcademyDelete(articleId, card, button) {
+        if (!isAdminUser()) {
+          alert("Csak admin törölhet cikket.");
+          return;
+        }
+        if (!confirm("Biztosan törlöd ezt a cikket?")) {
+          return;
+        }
+
+        const originalText = button?.textContent;
+        if (button) {
+          button.disabled = true;
+          button.textContent = "...";
+        }
+
+        try {
+          const response = await fetch(`/api/academy/articles/${articleId}`, {
+            method: "DELETE",
+            headers: buildAuthHeaders(),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(payload?.message || "Nem sikerült törölni a cikket.");
+          }
+          if (card) {
+            card.remove();
+          }
+          academyArticles = academyArticles.filter((item) => item.id !== articleId);
+          renderAcademyGrid();
+        } catch (error) {
+          console.error("Cikk törlési hiba:", error);
+          alert(error.message || "Nem sikerült törölni a cikket.");
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = originalText || "X";
+          }
+        }
+      }
+
+      async function handleAcademyDownload(article) {
+        if (!article?.id) {
+          return;
+        }
+        try {
+          const response = await fetch(`/api/academy/articles/${article.id}/download`);
+          if (!response.ok) {
+            throw new Error("Nem sikerült letölteni a PDF-et.");
+          }
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = objectUrl;
+          a.download = article?.pdf_original_filename || "kutatas.pdf";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(objectUrl);
+        } catch (error) {
+          console.error("PDF letöltési hiba:", error);
+          alert(error.message || "Nem sikerült letölteni a PDF-et.");
+        }
+      }
+
+      async function handleAcademySave(event) {
+        event.preventDefault();
+        if (!isAdminUser()) {
+          alert("Csak admin menthet cikket.");
+          return;
+        }
+
+        const title = academyTitleInput?.value?.trim();
+        if (!title) {
+          alert("A cím megadása kötelező.");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("title", title);
+        formData.append("subtitle", academySubtitleInput?.value?.trim() || "");
+        formData.append("summary", academySummaryInput?.value?.trim() || "");
+        formData.append("keywords", academyKeywordsInput?.value?.trim() || "");
+        formData.append("content", academyContentInput?.value || "");
+
+        const selectedTags = academyTagSelect
+          ? Array.from(academyTagSelect.selectedOptions || []).map((option) => Number(option.value)).filter(Number.isFinite)
+          : [];
+        formData.append("tags", JSON.stringify(selectedTags));
+
+        if (academyCoverInput?.files?.length) {
+          formData.append("cover", academyCoverInput.files[0]);
+        }
+        if (academyPdfInput?.files?.length) {
+          formData.append("pdf", academyPdfInput.files[0]);
+        }
+
+        const isEditMode = Boolean(editingAcademyArticle?.id);
+        const endpoint = isEditMode ? `/api/academy/articles/${editingAcademyArticle.id}` : "/api/academy/articles";
+        const method = isEditMode ? "PUT" : "POST";
+
+        const originalText = academyEditorSaveBtn?.textContent;
+        if (academyEditorSaveBtn) {
+          academyEditorSaveBtn.disabled = true;
+          academyEditorSaveBtn.textContent = isEditMode ? "Frissítés..." : "Mentés...";
+        }
+
+        try {
+          const response = await fetch(endpoint, {
+            method,
+            headers: buildAuthHeaders(),
+            body: formData,
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(payload?.message || "Nem sikerült menteni a cikket.");
+          }
+          closeAcademyEditor();
+          await loadAcademyData(true);
+        } catch (error) {
+          console.error("Cikk mentési hiba:", error);
+          alert(error.message || "Nem sikerült menteni a cikket.");
+        } finally {
+          if (academyEditorSaveBtn) {
+            academyEditorSaveBtn.disabled = false;
+            academyEditorSaveBtn.textContent = originalText || "Mentés";
+          }
+        }
+      }
+
+      async function handleAcademyTagCreate() {
+        if (!isAdminUser()) {
+          return;
+        }
+        const name = academyTagNameInput?.value?.trim();
+        if (!name) {
+          if (academyTagCreateStatus) {
+            academyTagCreateStatus.textContent = "Add meg a tag nevét.";
+          }
+          return;
+        }
+        const color = normalizeColor(academyTagColorInput?.value);
+        if (academyTagCreateBtn) {
+          academyTagCreateBtn.disabled = true;
+        }
+        if (academyTagCreateStatus) {
+          academyTagCreateStatus.textContent = "Mentés...";
+        }
+
+        try {
+          const response = await fetch("/api/academy/tags", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...buildAuthHeaders() },
+            body: JSON.stringify({ name, color }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(payload?.message || "Nem sikerült létrehozni a taget.");
+          }
+          const createdId = payload?.id;
+          if (academyTagNameInput) {
+            academyTagNameInput.value = "";
+          }
+          if (academyTagCreateStatus) {
+            academyTagCreateStatus.textContent = "Tag létrehozva.";
+          }
+          await loadAcademyTags(true);
+          if (createdId && academyTagSelect) {
+            Array.from(academyTagSelect.options || []).forEach((option) => {
+              if (String(option.value) === String(createdId)) {
+                option.selected = true;
+              }
+            });
+          }
+        } catch (error) {
+          console.error("Tag létrehozási hiba:", error);
+          if (academyTagCreateStatus) {
+            academyTagCreateStatus.textContent = error.message || "Nem sikerült létrehozni a taget.";
+          }
+        } finally {
+          if (academyTagCreateBtn) {
+            academyTagCreateBtn.disabled = false;
           }
         }
       }
@@ -5977,6 +6695,75 @@
         });
       }
 
+      if (academyCreateBtn) {
+        academyCreateBtn.addEventListener("click", () => openAcademyEditor());
+      }
+
+      if (academyBackBtn) {
+        academyBackBtn.addEventListener("click", closeAcademyReader);
+      }
+
+      if (academyDownloadBtn) {
+        academyDownloadBtn.addEventListener("click", () => {
+          if (activeAcademyArticle) {
+            handleAcademyDownload(activeAcademyArticle);
+          }
+        });
+      }
+
+      if (academyEditorForm) {
+        academyEditorForm.addEventListener("submit", handleAcademySave);
+      }
+
+      if (academyEditorCancelBtn) {
+        academyEditorCancelBtn.addEventListener("click", closeAcademyEditor);
+      }
+
+      if (academyEditorCloseBtn) {
+        academyEditorCloseBtn.addEventListener("click", closeAcademyEditor);
+      }
+
+      if (academyEditorModal) {
+        academyEditorModal.addEventListener("click", (event) => {
+          if (event.target === academyEditorModal) {
+            closeAcademyEditor();
+          }
+        });
+      }
+
+      if (academyCoverInput) {
+        academyCoverInput.addEventListener("change", () => {
+          const file = academyCoverInput.files?.[0];
+          if (academyCoverObjectUrl) {
+            URL.revokeObjectURL(academyCoverObjectUrl);
+            academyCoverObjectUrl = null;
+          }
+          if (!file) {
+            if (academyCoverPreview) {
+              academyCoverPreview.removeAttribute("src");
+            }
+            return;
+          }
+          academyCoverObjectUrl = URL.createObjectURL(file);
+          if (academyCoverPreview) {
+            academyCoverPreview.src = academyCoverObjectUrl;
+          }
+        });
+      }
+
+      if (academyPdfInput) {
+        academyPdfInput.addEventListener("change", () => {
+          const file = academyPdfInput.files?.[0];
+          if (academyPdfName) {
+            academyPdfName.textContent = file?.name || editingAcademyArticle?.pdf_original_filename || "Nincs kiválasztva PDF.";
+          }
+        });
+      }
+
+      if (academyTagCreateBtn) {
+        academyTagCreateBtn.addEventListener("click", handleAcademyTagCreate);
+      }
+
       function showSection(target, shouldPushState = true) {
         const navLinks = getAccessibleNavLinks();
         const sections = document.querySelectorAll("main section");
@@ -6030,6 +6817,11 @@
           loadPrograms();
         }
 
+        if (target === "akademia") {
+          closeAcademyReader();
+          loadAcademyData();
+        }
+
         if (shouldPushState) {
           history.pushState(null, "", `#${target}`);
         }
@@ -6063,32 +6855,17 @@
 
     
         function openArticle(articleId) {
-            // 1. Grid elrejtése
-            document.getElementById('library-view').style.display = 'none';
-            // 2. Minden cikk elrejtése (biztonság kedvéért)
-            document.querySelectorAll('.reader-view').forEach(el => el.classList.remove('active'));
-            // 3. Kiválasztott cikk megjelenítése
-            document.getElementById('article-' + articleId).classList.add('active');
-            // 4. Görgetés a tetejére
-            window.scrollTo(0, 0);
+            const article = academyArticles.find((item) => String(item.id) === String(articleId));
+            if (article) {
+                openAcademyReader(article);
+            }
         }
 
         function closeArticle() {
-            // 1. Cikkek elrejtése
-            document.querySelectorAll('.reader-view').forEach(el => el.classList.remove('active'));
-            // 2. Grid megjelenítése
-            document.getElementById('library-view').style.display = 'block';
-            // 3. Görgetés a tetejére
-            window.scrollTo(0, 0);
+            closeAcademyReader();
         }
 
-        function filterCards(category) {
-            // Gombok frissítése
-            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-
-            // Kártyák szűrése
-            /* (Ez csak egy vizuális demo logika, élesben lehet dataset alapján) */
-            alert("A szűrés funkció a demóban csak vizuális elem. A teljes kódban itt valósulna meg a DOM szűrés.");
+        function filterCards() {
+            // Legacy no-op (dynamic filters handled by renderAcademyFilters)
         }
   

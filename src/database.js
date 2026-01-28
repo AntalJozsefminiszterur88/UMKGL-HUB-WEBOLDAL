@@ -116,6 +116,71 @@ async function initializeDatabase() {
     `);
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS academy_articles (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        subtitle TEXT,
+        summary TEXT,
+        content TEXT,
+        keywords TEXT,
+        cover_filename TEXT,
+        pdf_filename TEXT,
+        pdf_original_filename TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS subtitle TEXT'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS summary TEXT'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS content TEXT'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS keywords TEXT'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS cover_filename TEXT'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS pdf_filename TEXT'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS pdf_original_filename TEXT'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()'
+    );
+    await client.query(
+      'ALTER TABLE academy_articles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()'
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS academy_tags (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        color TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(
+      'ALTER TABLE academy_tags ADD COLUMN IF NOT EXISTS color TEXT'
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS academy_article_tags (
+        article_id INTEGER NOT NULL REFERENCES academy_articles(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES academy_tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (article_id, tag_id)
+      )
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS programs (
         id SERIAL PRIMARY KEY,
         name TEXT,
