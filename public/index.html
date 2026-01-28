@@ -513,6 +513,16 @@
                   <input type="file" id="academyPdfInput" accept="application/pdf" />
                   <p id="academyPdfName" class="program-file-name">Nincs kiválasztva PDF.</p>
                 </div>
+                <div class="academy-editor-tile">
+                  <div class="tile-header">
+                    <label for="academyInlineImageInput">Beágyazott kép</label>
+                    <span class="tile-hint">PNG / JPG / GIF / WEBP</span>
+                  </div>
+                  <input type="file" id="academyInlineImageInput" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" />
+                  <input type="text" id="academyInlineImageAlt" class="uniform-control" placeholder="Kép leírása (alt) - opcionális" />
+                  <button type="button" id="academyInlineImageUploadBtn" class="secondary-btn">Feltöltés és beszúrás</button>
+                  <span id="academyInlineImageStatus" class="academy-tag-status"></span>
+                </div>
               </div>
 
               <div class="form-group">
@@ -661,6 +671,37 @@
         <div class="avatar-cropper-footer">
           <button type="button" id="avatarCropperCancel" class="ghost-button">Mégse</button>
           <button type="button" id="avatarCropperSave" class="primary-button">Mentés</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="academyCoverCropperModal" class="avatar-cropper-modal cover-cropper-modal" aria-hidden="true">
+      <div class="avatar-cropper-dialog" role="dialog" aria-modal="true" aria-labelledby="academyCoverCropperTitle">
+        <div class="avatar-cropper-header">
+          <h3 id="academyCoverCropperTitle">Borítókép szerkesztése</h3>
+        </div>
+        <div class="avatar-cropper-body">
+          <div class="avatar-cropper-canvas">
+            <img id="academyCoverCropperImage" src="" alt="Borítókép kivágás" />
+          </div>
+          <div class="avatar-zoom-control">
+            <span class="zoom-icon" aria-hidden="true">🔍</span>
+            <input
+              type="range"
+              id="academyCoverZoomRange"
+              class="avatar-zoom-range"
+              min="0.5"
+              max="3"
+              step="0.01"
+              value="1"
+              aria-label="Nagyítás"
+            />
+            <span class="zoom-icon" aria-hidden="true" style="font-size: 1.1rem;">🔎</span>
+          </div>
+        </div>
+        <div class="avatar-cropper-footer">
+          <button type="button" id="academyCoverCropperCancel" class="ghost-button">Mégse</button>
+          <button type="button" id="academyCoverCropperSave" class="primary-button">Mentés</button>
         </div>
       </div>
     </div>

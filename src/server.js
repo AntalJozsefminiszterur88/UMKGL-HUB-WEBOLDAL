@@ -439,6 +439,16 @@ const academyFileFilter = (_req, file, cb) => {
 
 const uploadAcademyFiles = multer({ storage: academyStorage, fileFilter: academyFileFilter });
 
+const academyImageFileFilter = (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+    return allowed.includes(ext)
+        ? cb(null, true)
+        : cb(new Error('Csak PNG, JPG, WEBP vagy GIF képfájl tölthető fel.'));
+};
+
+const uploadAcademyImage = multer({ storage: academyStorage, fileFilter: academyImageFileFilter });
+
 function getNumberSetting(value, defaultValue) {
     const parsed = Number(value);
     if (Number.isFinite(parsed) && parsed > 0) {
@@ -1290,6 +1300,17 @@ app.post('/api/academy/tags', authenticateToken, isAdmin, async (req, res) => {
         console.error('Hiba az akadémia tag létrehozása során:', err);
         res.status(500).json({ message: 'Nem sikerült létrehozni az akadémia taget.' });
     }
+});
+
+app.post('/api/academy/images', authenticateToken, isAdmin, uploadAcademyImage.single('image'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'Nem sikerült a kép feltöltése.' });
+    }
+
+    return res.status(201).json({
+        filename: req.file.filename,
+        url: `/uploads/akademia/${req.file.filename}`
+    });
 });
 
 app.get('/api/academy/articles', async (_req, res) => {
