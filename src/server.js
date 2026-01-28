@@ -1419,7 +1419,6 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
         const content = (req.body.content || '').trim();
         const keywords = (req.body.keywords || '').trim();
         const inlineImages = sanitizeAcademyInlineImages(req.body.inline_images);
-        const inlineImages = sanitizeAcademyInlineImages(req.body.inline_images);
 
         if (!title) {
             if (coverFile) {
