@@ -7,9 +7,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const ffmpeg = require('fluent-ffmpeg');
+const axios = require('axios');
 const crypto = require('crypto');
 const { Server } = require('socket.io');
 const db = require('./database');
+const cinemaScraper = require('../cinema-scraper');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
 const DEFAULT_TAG_COLOR = '#5865F2';
@@ -24,6 +26,24 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
 const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const BOT_API_URL = process.env.BOT_API_URL;
+const DEFAULT_UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
+const RADNAI_URL = 'https://radnaimark.hu/';
+const BOT_RADNAI_ALERT_URL = process.env.BOT_RADNAI_ALERT_URL;
+const RADNAI_CHECK_INTERVAL_MS = 60000;
+const RADNAI_FETCH_TIMEOUT_MS = 15000;
+const RADNAI_FETCH_MAX_ATTEMPTS = 3;
+const RADNAI_FETCH_RETRY_DELAY_MS = 2500;
+const RADNAI_ALERT_REQUEST_TIMEOUT_MS = 12000;
+const RADNAI_ALERT_MAX_ATTEMPTS = 2;
+const RADNAI_ALERT_RETRY_DELAY_MS = 1500;
+const RADNAI_OUTAGE_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+const RADNAI_LOG_RETENTION_DAYS = 1;
+const RADNAI_LOG_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const RADNAI_MONITOR_DEFAULT_ENABLED = process.env.RADNAI_MONITOR_ENABLED !== 'false';
+const RADNAI_MONITOR_DATA_DIR = process.env.RADNAI_MONITOR_DATA_DIR
+    || path.join(DEFAULT_UPLOADS_DIR, 'log', 'radnai-monitor');
+const RADNAI_MONITOR_STATE_FILE = path.join(RADNAI_MONITOR_DATA_DIR, 'state.json');
+const RADNAI_MONITOR_LOG_DIR = path.join(RADNAI_MONITOR_DATA_DIR, 'logs');
 const server = http.createServer(app);
 server.setTimeout(0); // Added to prevent timeouts during large uploads
 const io = new Server(server);
@@ -34,7 +54,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Fájlfeltöltés beállítása a videókhoz
-const uploadsRootDirectory = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
+const uploadsRootDirectory = DEFAULT_UPLOADS_DIR;
 const clipsDirectory = path.join(uploadsRootDirectory, 'klippek');
 const clipsOriginalDirectory = path.join(clipsDirectory, 'eredeti');
 const clips720pDirectory = path.join(clipsDirectory, '720p');
@@ -60,6 +80,20 @@ ensureDirectoryExists(clips1440pDirectory);
 ensureDirectoryExists(thumbnailsDirectory);
 
 let isProcessing = false;
+let isArchiveProcessing = false;
+let cachedMovies = [];
+let lastRadnaiHash = null;
+let lastRadnaiCheck = null;
+let lastRadnaiStatus = 'ok';
+let lastRadnaiFailureReason = null;
+let radnaiConsecutiveFailures = 0;
+let radnaiOutageActive = false;
+let lastRadnaiOutageAlertAt = null;
+let radnaiMonitoringEnabled = RADNAI_MONITOR_DEFAULT_ENABLED;
+let isRadnaiCheckInProgress = false;
+let radnaiMonitorInterval = null;
+let radnaiCleanupInterval = null;
+let isRadnaiMonitorStarting = false;
 
 async function getUploadFileSize(filename) {
     if (!filename) {
@@ -85,10 +119,52 @@ async function getVideoFileSize(filename) {
 const programImagesDirectory = path.join(uploadsRootDirectory, 'programs', 'images');
 const programFilesDirectory = path.join(uploadsRootDirectory, 'programs', 'files');
 const academyDirectory = path.join(uploadsRootDirectory, 'akademia');
-
+const archiveDirectory = path.join(uploadsRootDirectory, 'archivum');
+const archiveVideosDirectory = path.join(archiveDirectory, 'videok');
+const archiveVideosOriginalDirectory = path.join(archiveVideosDirectory, 'eredeti');
+const archiveVideos720pDirectory = path.join(archiveVideosDirectory, '720p');
+const archiveVideoChunkTempDirectory = path.join(archiveVideosDirectory, '_chunk_uploads');
+const archiveCategoryMap = {
+    kepek: {
+        key: 'kepek',
+        label: 'Képek',
+        dir: path.join(archiveDirectory, 'kepek'),
+        allowedExtensions: ['.png', '.jpg', '.jpeg', '.webp', '.gif'],
+    },
+    videok: {
+        key: 'videok',
+        label: 'Videók',
+        dir: path.join(archiveDirectory, 'videok'),
+        allowedExtensions: ['.mp4', '.mkv', '.mov', '.webm', '.ogg'],
+    },
+    hang: {
+        key: 'hang',
+        label: 'Hang',
+        dir: path.join(archiveDirectory, 'hang'),
+        allowedExtensions: ['.mp3', '.wav', '.ogg', '.m4a', '.flac'],
+    },
+    dokumentumok: {
+        key: 'dokumentumok',
+        label: 'Dokumentumok',
+        dir: path.join(archiveDirectory, 'dokumentumok'),
+        allowedExtensions: ['.pdf'],
+    },
+};
+const archiveVideoAllowedExtensions = new Set(
+    (archiveCategoryMap.videok?.allowedExtensions || [])
+        .map((ext) => String(ext).toLowerCase())
+);
 ensureDirectoryExists(programImagesDirectory);
 ensureDirectoryExists(programFilesDirectory);
 ensureDirectoryExists(academyDirectory);
+ensureDirectoryExists(archiveDirectory);
+ensureDirectoryExists(archiveVideosDirectory);
+ensureDirectoryExists(archiveVideosOriginalDirectory);
+ensureDirectoryExists(archiveVideos720pDirectory);
+ensureDirectoryExists(archiveVideoChunkTempDirectory);
+Object.values(archiveCategoryMap).forEach((category) => {
+    ensureDirectoryExists(category.dir);
+});
 
 function normalizeHexColor(value) {
     if (!value || typeof value !== 'string') {
@@ -106,7 +182,13 @@ async function ensureTagColorColumn() {
     }
 }
 
-ensureTagColorColumn();
+async function ensureArchiveTagColorColumn() {
+    try {
+        await db.query('ALTER TABLE archive_tags ADD COLUMN IF NOT EXISTS color TEXT');
+    } catch (err) {
+        console.error('Nem sikerĂĽlt biztosĂ­tani a color oszlopot az archive_tags tĂˇblĂˇban:', err);
+    }
+}
 
 function parseAcademyTagIds(value) {
     if (!value) {
@@ -227,6 +309,31 @@ function getVideoHeight(filePath) {
     });
 }
 
+function getVideoDuration(filePath) {
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
+            if (err) {
+                return resolve(null);
+            }
+
+            const formatDuration = Number.parseFloat(metadata.format?.duration);
+            if (Number.isFinite(formatDuration) && formatDuration > 0) {
+                return resolve(formatDuration);
+            }
+
+            const streamDuration = (metadata.streams || [])
+                .map((stream) => Number.parseFloat(stream?.duration))
+                .find((duration) => Number.isFinite(duration) && duration > 0);
+
+            if (Number.isFinite(streamDuration) && streamDuration > 0) {
+                return resolve(streamDuration);
+            }
+
+            return resolve(null);
+        });
+    });
+}
+
 function determineOriginalQualityLabel(videoHeight) {
     if (!Number.isFinite(videoHeight)) {
         return null;
@@ -271,6 +378,30 @@ function determineTargetResolutions(videoHeight) {
     return [];
 }
 
+function buildFfmpegErrorMessage(err, stderrLines = []) {
+    const normalizedLines = Array.isArray(stderrLines)
+        ? stderrLines
+            .map((line) => (typeof line === 'string' ? line.trim() : ''))
+            .filter(Boolean)
+        : [];
+    const lastLines = normalizedLines.slice(-8);
+    const detail = lastLines.join(' | ');
+    const baseMessage = err?.message || 'Ismeretlen ffmpeg hiba.';
+    const merged = detail ? `${baseMessage} | stderr: ${detail}` : baseMessage;
+    return merged.slice(0, 900);
+}
+
+function normalizeProcessingErrorMessage(err, fallbackMessage) {
+    const rawMessage = typeof err === 'string'
+        ? err
+        : err?.message;
+    const normalized = (rawMessage || fallbackMessage || 'Ismeretlen feldolgozasi hiba.').toString().trim();
+    if (!normalized) {
+        return 'Ismeretlen feldolgozasi hiba.';
+    }
+    return normalized.slice(0, 900);
+}
+
 async function transcodeVideoToHeight(inputPath, outputDir, originalFilename, targetHeight) {
     const currentHeight = await getVideoHeight(inputPath);
     if (!currentHeight || currentHeight <= targetHeight) {
@@ -278,8 +409,8 @@ async function transcodeVideoToHeight(inputPath, outputDir, originalFilename, ta
     }
 
     const targetOutputDir = outputDir || path.dirname(inputPath);
-    const parsedOriginal = path.parse(originalFilename || inputPath);
-    const extension = parsedOriginal.ext || path.extname(inputPath) || '.mp4';
+    const sourceExtension = path.extname(inputPath || '').toLowerCase();
+    const extension = sourceExtension || '.mp4';
     const baseName = path.parse(inputPath).name;
     const outputFilename = `${baseName}_${targetHeight}p${extension}`;
     const outputPath = path.join(targetOutputDir, outputFilename);
@@ -287,6 +418,8 @@ async function transcodeVideoToHeight(inputPath, outputDir, originalFilename, ta
     await fs.promises.mkdir(targetOutputDir, { recursive: true });
 
     return new Promise((resolve, reject) => {
+        const ffmpegStderr = [];
+
         ffmpeg(inputPath)
             .outputOptions(['-map_metadata 0', '-movflags +faststart'])
             .videoFilters(`scale=-2:${targetHeight}:flags=lanczos`)
@@ -294,7 +427,16 @@ async function transcodeVideoToHeight(inputPath, outputDir, originalFilename, ta
             .audioCodec('aac')
             .output(outputPath)
             .on('end', () => resolve({ skipped: false, outputPath }))
-            .on('error', (err) => reject(err))
+            .on('stderr', (line) => {
+                if (typeof line !== 'string') {
+                    return;
+                }
+                ffmpegStderr.push(line);
+                if (ffmpegStderr.length > 40) {
+                    ffmpegStderr.shift();
+                }
+            })
+            .on('error', (err) => reject(new Error(buildFfmpegErrorMessage(err, ffmpegStderr))))
             .run();
     });
 }
@@ -360,30 +502,223 @@ function extractEmbeddedHash(filePath) {
     });
 }
 
-function buildThumbnailFilename(baseName, videoId) {
+function buildThumbnailFilename(baseName, videoId, variantTag = '') {
     const safeBaseName = (baseName || 'thumbnail')
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '')
         .replace(/[^a-zA-Z0-9_-]/g, '')
         .trim() || 'thumbnail';
     const suffix = Number.isFinite(videoId) ? `-${videoId}` : '';
-    return `${safeBaseName}${suffix}.jpg`;
+    const normalizedVariant = String(variantTag || '')
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .trim();
+    const variantSuffix = normalizedVariant ? `-${normalizedVariant}` : '';
+    return `${safeBaseName}${suffix}${variantSuffix}.jpg`;
 }
 
-async function generateThumbnailForVideo(videoPath, baseName, videoId) {
-    const outputFilename = buildThumbnailFilename(baseName, videoId);
+function normalizeThumbnailSeekSeconds(seekSeconds, durationSeconds) {
+    const safeSeek = Number.isFinite(seekSeconds) && seekSeconds >= 0 ? seekSeconds : 0;
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+        return safeSeek;
+    }
+
+    const maxSeek = Math.max(durationSeconds - 0.2, 0);
+    return Math.max(Math.min(safeSeek, maxSeek), 0);
+}
+
+function isFrameLikelyBlackFrame(frameStats) {
+    if (!frameStats || typeof frameStats !== 'object') {
+        return false;
+    }
+
+    const averageLuma = Number(frameStats.averageLuma);
+    const darkRatio = Number(frameStats.darkRatio);
+
+    if (!Number.isFinite(averageLuma) || !Number.isFinite(darkRatio)) {
+        return false;
+    }
+
+    if (darkRatio >= 0.985) {
+        return true;
+    }
+
+    if (darkRatio >= 0.95 && averageLuma <= 20) {
+        return true;
+    }
+
+    return averageLuma <= 10;
+}
+
+function buildThumbnailSeekCandidates(durationSeconds, options = {}) {
+    const randomize = options?.randomize === true;
+    const preferredSeekSeconds = options?.preferredSeekSeconds;
+
+    const candidates = [];
+    const addCandidate = (value) => {
+        const normalized = normalizeThumbnailSeekSeconds(value, durationSeconds);
+        if (!Number.isFinite(normalized)) {
+            return;
+        }
+        const key = normalized.toFixed(3);
+        if (!candidates.some((entry) => entry.key === key)) {
+            candidates.push({ key, value: normalized });
+        }
+    };
+
+    if (Number.isFinite(preferredSeekSeconds)) {
+        addCandidate(preferredSeekSeconds);
+    }
+
+    if (!randomize) {
+        addCandidate(1);
+    }
+
+    if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
+        if (randomize) {
+            for (let i = 0; i < 8; i += 1) {
+                const randomRatio = 0.08 + (Math.random() * 0.84);
+                addCandidate(durationSeconds * randomRatio);
+            }
+        }
+
+        addCandidate(durationSeconds * 0.2);
+        addCandidate(durationSeconds * 0.35);
+        addCandidate(durationSeconds * 0.5);
+        addCandidate(durationSeconds * 0.7);
+        addCandidate(durationSeconds * 0.85);
+    } else {
+        addCandidate(1);
+    }
+
+    if (randomize) {
+        addCandidate(1);
+    }
+
+    return candidates.map((entry) => entry.value);
+}
+
+function sampleVideoFrameLuma(videoPath, seekSeconds) {
+    const safeSeek = Number.isFinite(seekSeconds) && seekSeconds >= 0 ? seekSeconds : 0;
+
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        const ffmpegStderr = [];
+        let settled = false;
+
+        const settle = (handler, value) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            handler(value);
+        };
+
+        const stream = ffmpeg(videoPath)
+            .seekInput(safeSeek)
+            .frames(1)
+            .noAudio()
+            .outputOptions([
+                '-vf scale=64:36:flags=fast_bilinear,format=gray',
+                '-pix_fmt gray',
+                '-f rawvideo',
+            ])
+            .on('stderr', (line) => {
+                if (typeof line !== 'string') {
+                    return;
+                }
+                ffmpegStderr.push(line);
+                if (ffmpegStderr.length > 40) {
+                    ffmpegStderr.shift();
+                }
+            })
+            .on('error', (err) => settle(reject, new Error(buildFfmpegErrorMessage(err, ffmpegStderr))))
+            .pipe();
+
+        stream.on('data', (chunk) => chunks.push(chunk));
+        stream.on('error', (err) => settle(reject, err));
+        stream.on('end', () => {
+            const frameData = Buffer.concat(chunks);
+            if (!frameData.length) {
+                return settle(resolve, null);
+            }
+
+            let darkPixels = 0;
+            let lumaSum = 0;
+            const totalPixels = frameData.length;
+
+            for (const value of frameData) {
+                lumaSum += value;
+                if (value <= 18) {
+                    darkPixels += 1;
+                }
+            }
+
+            const averageLuma = totalPixels > 0 ? lumaSum / totalPixels : 0;
+            const darkRatio = totalPixels > 0 ? darkPixels / totalPixels : 0;
+
+            return settle(resolve, { averageLuma, darkRatio });
+        });
+    });
+}
+
+function renderThumbnailFrame(videoPath, outputPath, seekSeconds) {
+    const safeSeek = Number.isFinite(seekSeconds) && seekSeconds >= 0 ? seekSeconds : 0;
+
+    return new Promise((resolve, reject) => {
+        const ffmpegStderr = [];
+
+        ffmpeg(videoPath)
+            .seekInput(safeSeek)
+            .frames(1)
+            .outputOptions('-q:v 2')
+            .on('stderr', (line) => {
+                if (typeof line !== 'string') {
+                    return;
+                }
+                ffmpegStderr.push(line);
+                if (ffmpegStderr.length > 40) {
+                    ffmpegStderr.shift();
+                }
+            })
+            .on('end', resolve)
+            .on('error', (err) => reject(new Error(buildFfmpegErrorMessage(err, ffmpegStderr))))
+            .save(outputPath);
+    });
+}
+
+async function generateThumbnailForVideo(videoPath, baseName, videoId, options = {}) {
+    const outputFilename = buildThumbnailFilename(baseName, videoId, options?.variantTag);
     await fs.promises.mkdir(thumbnailsDirectory, { recursive: true });
     const outputPath = path.join(thumbnailsDirectory, outputFilename);
 
-    return new Promise((resolve, reject) => {
-        ffmpeg(videoPath)
-            .seekInput('00:00:01')
-            .frames(1)
-            .outputOptions('-q:v 2')
-            .on('end', () => resolve(path.posix.join('thumbnails', outputFilename)))
-            .on('error', reject)
-            .save(outputPath);
-    });
+    const durationSeconds = await getVideoDuration(videoPath);
+    const preferredSeekSeconds = options?.preferredSeekSeconds;
+    const useStrictPreferredSeek = options?.strictPreferredSeek === true && Number.isFinite(preferredSeekSeconds);
+    if (useStrictPreferredSeek) {
+        const exactSeek = normalizeThumbnailSeekSeconds(preferredSeekSeconds, durationSeconds);
+        await renderThumbnailFrame(videoPath, outputPath, exactSeek);
+        return path.posix.join('thumbnails', outputFilename);
+    }
+
+    const seekCandidates = buildThumbnailSeekCandidates(durationSeconds, options);
+
+    let selectedSeek = seekCandidates[0] || normalizeThumbnailSeekSeconds(1, durationSeconds);
+
+    for (const candidateSeek of seekCandidates) {
+        try {
+            const frameStats = await sampleVideoFrameLuma(videoPath, candidateSeek);
+            if (!isFrameLikelyBlackFrame(frameStats)) {
+                selectedSeek = candidateSeek;
+                break;
+            }
+        } catch (analysisErr) {
+            console.warn('Nem sikerult elemezni a thumbnail frame-et (' + videoPath + '):', analysisErr);
+        }
+    }
+
+    await renderThumbnailFrame(videoPath, outputPath, selectedSeek);
+
+    return path.posix.join('thumbnails', outputFilename);
 }
 
 const storage = multer.diskStorage({
@@ -435,6 +770,70 @@ async function deleteVideoRecord(video) {
     }
 
     await db.query('DELETE FROM videos WHERE id = $1', [video.id]);
+}
+
+function resolveArchiveFolderNameFromFilename(filename) {
+    const normalizedPath = String(filename || '').replace(/\\/g, '/');
+    const segments = normalizedPath.split('/').filter(Boolean);
+    const originalIndex = segments.indexOf('eredeti');
+    if (originalIndex >= 0 && originalIndex + 1 < segments.length) {
+        return segments[originalIndex + 1];
+    }
+
+    if (segments.length >= 2) {
+        return segments[segments.length - 2];
+    }
+
+    return null;
+}
+
+function resolveArchiveVideoFolder(video) {
+    const direct = normalizeArchiveFolderName(video?.folder_name || '');
+    if (direct) {
+        return direct;
+    }
+    const fromPath = normalizeArchiveFolderName(resolveArchiveFolderNameFromFilename(video?.filename || ''));
+    if (fromPath) {
+        return fromPath;
+    }
+    return 'egyeb';
+}
+
+function buildArchiveVideoResolutionOutputPaths(video, targetHeight) {
+    const parsedFilename = path.parse(video?.filename || '');
+    const extension = parsedFilename.ext || path.extname(video?.original_name || '') || '.mp4';
+    const technicalBaseName = parsedFilename.name || 'video';
+    const folderName = resolveArchiveVideoFolder(video);
+    const targetLabel = `${targetHeight}p`;
+    const baseDir = targetHeight === 720 ? archiveVideos720pDirectory : archiveVideosOriginalDirectory;
+    const outputDir = path.join(baseDir, folderName);
+    const outputFilename = `${technicalBaseName}_${targetLabel}${extension}`;
+    const outputPath = path.join(outputDir, outputFilename);
+
+    return { outputDir, outputPath, outputFilename, targetLabel };
+}
+
+async function deleteArchiveVideoRecord(video) {
+    if (!video || !video.id) {
+        return;
+    }
+
+    const targets = [];
+    if (video.filename) {
+        targets.push(path.join(uploadsRootDirectory, video.filename));
+        const { outputPath } = buildArchiveVideoResolutionOutputPaths(video, 720);
+        targets.push(outputPath);
+    }
+
+    if (video.thumbnail_filename) {
+        targets.push(path.join(uploadsRootDirectory, video.thumbnail_filename));
+    }
+
+    for (const target of targets) {
+        await safeUnlink(target);
+    }
+
+    await db.query('DELETE FROM archive_videos WHERE id = $1', [video.id]);
 }
 
 const programStorage = multer.diskStorage({
@@ -491,6 +890,85 @@ const academyImageFileFilter = (_req, file, cb) => {
 
 const uploadAcademyImage = multer({ storage: academyStorage, fileFilter: academyImageFileFilter });
 
+const archiveStorage = multer.diskStorage({
+    destination: (req, _file, cb) => {
+        const categoryInfo = resolveArchiveCategory(req.params.category);
+        const folderPath = resolveArchiveFolderPath(categoryInfo, req.params.folder);
+        if (!categoryInfo || !folderPath) {
+            return cb(new Error('Érvénytelen archívum kategória vagy mappa.'));
+        }
+        ensureDirectoryExists(folderPath);
+        req.archiveTargetDir = folderPath;
+        cb(null, folderPath);
+    },
+    filename: (req, file, cb) => {
+        const targetDir = req.archiveTargetDir;
+        const safeName = buildArchiveFilename(targetDir, file.originalname);
+        cb(null, safeName);
+    }
+});
+
+const archiveFileFilter = (req, file, cb) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    if (!categoryInfo) {
+        return cb(new Error('Ismeretlen archívum kategória.'));
+    }
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (categoryInfo.allowedExtensions.includes(ext)) {
+        return cb(null, true);
+    }
+    return cb(new Error('Nem engedélyezett fájltípus.'));
+};
+
+const uploadArchiveFiles = multer({ storage: archiveStorage, fileFilter: archiveFileFilter });
+
+const archiveVideoStorage = multer.diskStorage({
+    destination: (req, _file, cb) => {
+        const categoryInfo = resolveArchiveCategory('videok');
+        const folderPath = resolveArchiveFolderPath(categoryInfo, req.params.folder);
+        if (!categoryInfo || !folderPath) {
+            return cb(new Error('Érvénytelen videó mappa.'));
+        }
+        ensureDirectoryExists(folderPath);
+        req.archiveVideoTargetDir = folderPath;
+        return cb(null, folderPath);
+    },
+    filename: (_req, file, cb) => {
+        const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
+        cb(null, uniqueName);
+    }
+});
+
+const archiveVideoFileFilter = (_req, file, cb) => {
+    if (getArchiveVideoExtension(file.originalname)) {
+        return cb(null, true);
+    }
+    return cb(new Error('Nem engedelyezett videoformatum.'));
+};
+
+const uploadArchiveVideos = multer({ storage: archiveVideoStorage, fileFilter: archiveVideoFileFilter });
+
+const archiveVideoChunkStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+        ensureDirectoryExists(archiveVideoChunkTempDirectory);
+        cb(null, archiveVideoChunkTempDirectory);
+    },
+    filename: (req, _file, cb) => {
+        const uploadId = normalizeArchiveChunkUploadId(req.body?.uploadId) || `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+        const chunkIndex = Number.parseInt(req.body?.chunkIndex, 10);
+        cb(null, `${uploadId}-${Number.isInteger(chunkIndex) ? chunkIndex : 'x'}-${Math.round(Math.random() * 1e9)}.part`);
+    }
+});
+
+const uploadArchiveVideoChunks = multer({
+    storage: archiveVideoChunkStorage,
+    limits: {
+        files: 1,
+        fileSize: 25 * 1024 * 1024,
+    },
+});
+
+
 function getNumberSetting(value, defaultValue) {
     const parsed = Number(value);
     if (Number.isFinite(parsed) && parsed > 0) {
@@ -537,11 +1015,30 @@ function authenticateToken(req, res, next) {
     });
 }
 
-function isAdmin(req, res, next) {
-    if (!req.user || !req.user.isAdmin) {
-        return res.status(403).json({ message: 'Admin access required.' });
+async function isAdmin(req, res, next) {
+    const userId = req.user && req.user.id;
+    if (!userId) {
+        return res.status(401).json({ message: 'Authentication required.' });
     }
-    next();
+
+    try {
+        const { rows } = await db.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+        const user = rows[0];
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        if (Number(user.is_admin) !== 1) {
+            return res.status(403).json({ message: 'Admin access required.' });
+        }
+
+        req.user.isAdmin = true;
+        return next();
+    } catch (err) {
+        console.error('Error checking admin permission:', err);
+        return res.status(500).json({ message: 'Failed to verify admin permission.' });
+    }
 }
 
 async function ensureClipViewPermission(req, res, next) {
@@ -570,6 +1067,325 @@ async function ensureClipViewPermission(req, res, next) {
         return next();
     } catch (err) {
         console.error('Hiba a klipekhez való jogosultság ellenőrzésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jogosultságot.' });
+    }
+}
+
+function formatForPico(movieData) {
+    const source = Array.isArray(movieData) ? movieData : [];
+
+    return source
+        .slice(0, 20)
+        .map((movie) => ({
+            c: (movie?.cinema || '').toString(),
+            t: (movie?.title || '').toString().slice(0, 25),
+            ti: (movie?.times || '').toString(),
+        }));
+}
+
+function resolveArchiveCategory(category) {
+    if (!category) {
+        return null;
+    }
+    const key = String(category).toLowerCase();
+    return archiveCategoryMap[key] || null;
+}
+
+function getArchiveVideoExtension(filename) {
+    const ext = path.extname(String(filename || '')).toLowerCase();
+    return archiveVideoAllowedExtensions.has(ext) ? ext : null;
+}
+
+function normalizeArchiveFolderName(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+    if (trimmed.length > 80) {
+        return null;
+    }
+    if (/[<>:"/\\|?*\x00-\x1F]/.test(trimmed)) {
+        return null;
+    }
+    if (trimmed.includes('..')) {
+        return null;
+    }
+    if (/[.\s]$/.test(trimmed)) {
+        return null;
+    }
+    return trimmed;
+}
+
+function getArchiveCategoryFolderRoot(categoryInfo) {
+    if (!categoryInfo) {
+        return null;
+    }
+    if (categoryInfo.key === 'videok') {
+        return archiveVideosOriginalDirectory;
+    }
+    return categoryInfo.dir;
+}
+
+function resolveArchiveFolderPath(categoryInfo, folderName) {
+    const safeName = normalizeArchiveFolderName(folderName);
+    const folderRoot = getArchiveCategoryFolderRoot(categoryInfo);
+    if (!safeName || !folderRoot) {
+        return null;
+    }
+    const folderPath = path.normalize(path.join(folderRoot, safeName));
+    if (!folderPath.startsWith(folderRoot)) {
+        return null;
+    }
+    return folderPath;
+}
+
+function resolveArchive720pFolderPath(folderName) {
+    const safeName = normalizeArchiveFolderName(folderName);
+    if (!safeName) {
+        return null;
+    }
+    const folderPath = path.normalize(path.join(archiveVideos720pDirectory, safeName));
+    if (!folderPath.startsWith(archiveVideos720pDirectory)) {
+        return null;
+    }
+    return folderPath;
+}
+
+function buildArchiveFileUrl(categoryKey, folderName, filename) {
+    const parts = categoryKey === 'videok'
+        ? ['uploads', 'archivum', categoryKey, 'eredeti', folderName, filename]
+        : ['uploads', 'archivum', categoryKey, folderName, filename];
+    const encoded = parts.map((part) => encodeURIComponent(part));
+    return `/${encoded.join('/')}`;
+}
+
+function buildArchiveFilename(targetDir, originalName) {
+    const normalized = normalizeFilename(originalName || '');
+    const parsed = path.parse(normalized);
+    const rawBase = parsed.name || 'file';
+    const safeBase = rawBase.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim() || 'file';
+    const safeExt = (parsed.ext || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '').toLowerCase();
+    let candidate = `${safeBase}${safeExt}`;
+    let counter = 1;
+    while (fs.existsSync(path.join(targetDir, candidate))) {
+        candidate = `${safeBase} (${counter})${safeExt}`;
+        counter += 1;
+    }
+    return candidate;
+}
+
+
+function normalizeArchiveChunkUploadId(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+    if (!/^[a-zA-Z0-9_-]{8,120}$/.test(trimmed)) {
+        return null;
+    }
+    return trimmed;
+}
+
+function parseArchiveTagIds(value) {
+    if (!value) {
+        return [];
+    }
+    if (Array.isArray(value)) {
+        return Array.from(new Set(value
+            .map((id) => Number.parseInt(id, 10))
+            .filter((id) => Number.isInteger(id))));
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return [];
+        }
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+                return Array.from(new Set(parsed
+                    .map((id) => Number.parseInt(id, 10))
+                    .filter((id) => Number.isInteger(id))));
+            }
+        } catch (err) {
+            // Fallback to CSV list.
+        }
+        return Array.from(new Set(trimmed
+            .split(',')
+            .map((id) => Number.parseInt(id.trim(), 10))
+            .filter((id) => Number.isInteger(id))));
+    }
+    return [];
+}
+
+async function resolveValidArchiveTagIds(tagIds) {
+    const uniqueTagIds = Array.from(new Set((tagIds || [])
+        .map((id) => Number.parseInt(id, 10))
+        .filter((id) => Number.isInteger(id))));
+    if (!uniqueTagIds.length) {
+        return [];
+    }
+    const { rows } = await db.query('SELECT id FROM archive_tags WHERE id = ANY($1)', [uniqueTagIds]);
+    return Array.from(new Set((rows || [])
+        .map((row) => Number.parseInt(row.id, 10))
+        .filter((id) => Number.isInteger(id))));
+}
+
+async function readArchiveChunkState(statePath) {
+    try {
+        const raw = await fs.promises.readFile(statePath, 'utf8');
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return null;
+        }
+        throw err;
+    }
+}
+
+async function writeArchiveChunkState(statePath, state) {
+    await fs.promises.writeFile(statePath, JSON.stringify(state), 'utf8');
+}
+
+async function appendChunkToStagingFile(stagingPath, chunkPath) {
+    const buffer = await fs.promises.readFile(chunkPath);
+    await fs.promises.appendFile(stagingPath, buffer);
+}
+
+async function cleanupArchiveChunkUpload(uploadId) {
+    const safeUploadId = normalizeArchiveChunkUploadId(uploadId);
+    if (!safeUploadId) {
+        return;
+    }
+    const stagingPath = path.join(archiveVideoChunkTempDirectory, `${safeUploadId}.upload`);
+    const statePath = path.join(archiveVideoChunkTempDirectory, `${safeUploadId}.json`);
+    await safeUnlink(stagingPath);
+    await safeUnlink(statePath);
+}
+
+async function ensureArchiveChunkCleanup(maxAgeMs = 24 * 60 * 60 * 1000) {
+    try {
+        const entries = await fs.promises.readdir(archiveVideoChunkTempDirectory, { withFileTypes: true });
+        const now = Date.now();
+        for (const entry of entries) {
+            if (!entry.isFile()) {
+                continue;
+            }
+            if (!entry.name.endsWith('.json')) {
+                continue;
+            }
+            const uploadId = entry.name.slice(0, -5);
+            const statePath = path.join(archiveVideoChunkTempDirectory, entry.name);
+            const state = await readArchiveChunkState(statePath);
+            const createdAt = Number(state?.createdAt) || 0;
+            if (!createdAt || now - createdAt > maxAgeMs) {
+                await cleanupArchiveChunkUpload(uploadId);
+            }
+        }
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error('Hiba a regi archiv chunk feltoltesek torlesekor:', err);
+        }
+    }
+}
+async function createArchiveVideoRecord({ folderName, storedFilename, originalName, uploaderId, filePath, tagIds }) {
+    const contentCreatedAt = await getVideoCreationDate(filePath);
+    const client = await db.pool.connect();
+    try {
+        await client.query('BEGIN');
+        const insertResult = await client.query(
+            `INSERT INTO archive_videos (folder_name, filename, original_name, uploader_id, content_created_at, processing_status)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id`,
+            [folderName, storedFilename, originalName, uploaderId, contentCreatedAt, 'pending']
+        );
+        const videoId = Number.parseInt(insertResult.rows[0]?.id, 10);
+
+        if (videoId && Array.isArray(tagIds) && tagIds.length) {
+            for (const tagId of tagIds) {
+                await client.query(
+                    'INSERT INTO archive_video_tags (video_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [videoId, tagId]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+        return videoId;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+async function ensureArchiveViewPermission(req, res, next) {
+    const userId = req.user && req.user.id;
+
+    if (!userId) {
+        return res.status(401).json({ message: 'Bejelentkezés szükséges.' });
+    }
+
+    if (req.user.isAdmin) {
+        return next();
+    }
+
+    try {
+        const { rows } = await db.query('SELECT can_view_archive, can_edit_archive FROM users WHERE id = $1', [userId]);
+        const user = rows[0];
+
+        if (!user) {
+            return res.status(404).json({ message: 'A felhasználó nem található.' });
+        }
+
+        const canEditArchive = Number(user.can_edit_archive) === 1;
+        const canViewArchive = Number(user.can_view_archive) === 1 || canEditArchive;
+
+        if (!canViewArchive) {
+            return res.status(403).json({ message: 'Nincs jogosultság az archívum megtekintéséhez.' });
+        }
+
+        return next();
+    } catch (err) {
+        console.error('Hiba az archívum jogosultság ellenőrzésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jogosultságot.' });
+    }
+}
+
+async function ensureArchiveEditPermission(req, res, next) {
+    const userId = req.user && req.user.id;
+
+    if (!userId) {
+        return res.status(401).json({ message: 'Bejelentkezés szükséges.' });
+    }
+
+    if (req.user.isAdmin) {
+        return next();
+    }
+
+    try {
+        const { rows } = await db.query('SELECT can_edit_archive FROM users WHERE id = $1', [userId]);
+        const user = rows[0];
+
+        if (!user) {
+            return res.status(404).json({ message: 'A felhasználó nem található.' });
+        }
+
+        if (Number(user.can_edit_archive) !== 1) {
+            return res.status(403).json({ message: 'Nincs jogosultság az archívum szerkesztéséhez.' });
+        }
+
+        return next();
+    } catch (err) {
+        console.error('Hiba az archívum szerkesztési jogosultság ellenőrzésekor:', err);
         return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jogosultságot.' });
     }
 }
@@ -890,7 +1706,7 @@ app.post('/login', async (req, res) => {
     }
 
     try {
-        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, profile_picture_filename, preferred_quality FROM users WHERE username = $1', [username]);
+        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, can_view_archive, can_edit_archive, profile_picture_filename, preferred_quality FROM users WHERE username = $1', [username]);
         const user = rows[0];
 
         if (!user) {
@@ -907,6 +1723,8 @@ app.post('/login', async (req, res) => {
         const token = generateAuthToken(payload);
 
         const canViewClips = isAdmin || Number(user.can_view_clips) === 1;
+        const canEditArchive = isAdmin || Number(user.can_edit_archive) === 1;
+        const canViewArchive = isAdmin || Number(user.can_view_archive) === 1 || canEditArchive;
 
         res.status(200).json({
             message: 'Sikeres bejelentkezés.',
@@ -915,6 +1733,8 @@ app.post('/login', async (req, res) => {
             isAdmin,
             canTransfer: Number(user.can_transfer) === 1,
             canViewClips,
+            canViewArchive,
+            canEditArchive,
             profile_picture_filename: user.profile_picture_filename,
             preferred_quality: user.preferred_quality || '1080p'
         });
@@ -928,9 +1748,42 @@ app.post('/logout', (req, res) => {
     res.status(200).json({ message: 'Sikeres kijelentkezés.' });
 });
 
+app.post('/api/pico/refresh-movies', async (_req, res) => {
+    try {
+        const result = await cinemaScraper.getAllMovies();
+        cachedMovies = Array.isArray(result?.data) ? result.data : [];
+        return res.status(200).json({ message: 'Cache updated.' });
+    } catch (err) {
+        console.error('Hiba a mozi cache frissitese kozben:', err);
+        return res.status(500).json({ message: 'Nem sikerult frissiteni a movie cache-t.' });
+    }
+});
+
+app.get('/api/pico/movies', (_req, res) => {
+    return res.status(200).json(formatForPico(cachedMovies));
+});
+
+app.get('/api/admin/fetch-movies', authenticateToken, isAdmin, async (_req, res) => {
+    try {
+        const result = await cinemaScraper.getAllMovies();
+        cachedMovies = Array.isArray(result?.data) ? result.data : [];
+
+        return res.status(200).json({
+            movieData: cachedMovies,
+            logs: Array.isArray(result?.logs) ? result.logs : [],
+        });
+    } catch (err) {
+        console.error('Hiba a mozi adatok admin lekerdezese soran:', err);
+        return res.status(500).json({
+            movieData: [],
+            logs: ['Hiba tortent a Cinema City adatok lekerdezese kozben.'],
+        });
+    }
+});
+
 app.get('/api/profile', authenticateToken, async (req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, can_view_clips, profile_picture_filename, preferred_quality FROM users WHERE id = $1', [req.user.id]);
+        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, can_view_clips, can_view_archive, can_edit_archive, profile_picture_filename, preferred_quality FROM users WHERE id = $1', [req.user.id]);
         const user = rows[0];
 
         if (!user) {
@@ -938,12 +1791,16 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
         }
 
         const isAdminUser = user.is_admin === 1;
+        const canEditArchive = isAdminUser || Number(user.can_edit_archive) === 1;
+        const canViewArchive = isAdminUser || Number(user.can_view_archive) === 1 || canEditArchive;
         res.status(200).json({
             id: user.id,
             username: user.username,
             isAdmin: isAdminUser,
             canTransfer: Number(user.can_transfer) === 1,
             canViewClips: isAdminUser || Number(user.can_view_clips) === 1,
+            canViewArchive,
+            canEditArchive,
             profile_picture_filename: user.profile_picture_filename,
             preferred_quality: user.preferred_quality || '1080p'
         });
@@ -972,7 +1829,7 @@ app.post('/api/profile/update-quality', authenticateToken, async (req, res) => {
 
 app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
     try {
-        const query = 'SELECT id, username, can_upload, can_transfer, can_view_clips, max_file_size_mb, max_videos, upload_count FROM users';
+        const query = 'SELECT id, username, can_upload, can_transfer, can_view_clips, can_view_archive, can_edit_archive, max_file_size_mb, max_videos, upload_count FROM users';
         const { rows } = await db.query(query);
         res.status(200).json(rows);
     } catch (err) {
@@ -989,14 +1846,21 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
         return res.status(200).json({ message: 'Nincs frissítendő jogosultság.' });
     }
 
-    const updates = req.body.map(item => ({
-        userId: Number.parseInt(item.userId, 10),
-        canUpload: item.canUpload ? 1 : 0,
-        canTransfer: item.canTransfer ? 1 : 0,
-        canViewClips: item.canViewClips ? 1 : 0,
-        maxFileSizeMb: Number(item.maxFileSizeMb),
-        maxVideos: Number(item.maxVideos)
-    }));
+    const updates = req.body.map(item => {
+        const canEditArchive = item.canEditArchive ? 1 : 0;
+        const canViewArchive = (item.canViewArchive ? 1 : 0) || canEditArchive;
+
+        return ({
+            userId: Number.parseInt(item.userId, 10),
+            canUpload: item.canUpload ? 1 : 0,
+            canTransfer: item.canTransfer ? 1 : 0,
+            canViewClips: item.canViewClips ? 1 : 0,
+            canViewArchive,
+            canEditArchive,
+            maxFileSizeMb: Number(item.maxFileSizeMb),
+            maxVideos: Number(item.maxVideos)
+        });
+    });
 
     // Simple validation (can be improved)
     if (updates.some(u => isNaN(u.userId) || isNaN(u.maxFileSizeMb) || isNaN(u.maxVideos))) {
@@ -1008,8 +1872,17 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
         await client.query('BEGIN');
         for (const update of updates) {
             const result = await client.query(
-                'UPDATE users SET can_upload = $1, can_transfer = $2, can_view_clips = $3, max_file_size_mb = $4, max_videos = $5 WHERE id = $6',
-                [update.canUpload, update.canTransfer, update.canViewClips, Math.round(update.maxFileSizeMb), Math.round(update.maxVideos), update.userId]
+                'UPDATE users SET can_upload = $1, can_transfer = $2, can_view_clips = $3, can_view_archive = $4, can_edit_archive = $5, max_file_size_mb = $6, max_videos = $7 WHERE id = $8',
+                [
+                    update.canUpload,
+                    update.canTransfer,
+                    update.canViewClips,
+                    update.canViewArchive,
+                    update.canEditArchive,
+                    Math.round(update.maxFileSizeMb),
+                    Math.round(update.maxVideos),
+                    update.userId
+                ]
             );
             if (result.rowCount === 0) {
                 throw new Error(`A ${update.userId} azonosítójú felhasználó nem található.`);
@@ -1665,6 +2538,921 @@ app.get('/api/academy/articles/:id/download', async (req, res) => {
     }
 });
 
+app.get('/api/archive/:category/folders', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    if (!categoryInfo) {
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+
+    try {
+        const folderRoot = getArchiveCategoryFolderRoot(categoryInfo) || categoryInfo.dir;
+        const entries = await fs.promises.readdir(folderRoot, { withFileTypes: true });
+        const folders = entries
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name)
+            .sort((a, b) => a.localeCompare(b, 'hu'));
+        return res.status(200).json({ folders });
+    } catch (err) {
+        console.error('Hiba az archívum mappák lekérdezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült betölteni a mappákat.' });
+    }
+});
+
+app.post('/api/archive/:category/folders', authenticateToken, ensureArchiveEditPermission, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    const folderName = normalizeArchiveFolderName(req.body?.name);
+    if (!categoryInfo) {
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+    if (!folderName) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    const folderPath = resolveArchiveFolderPath(categoryInfo, folderName);
+    if (!folderPath) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    try {
+        await fs.promises.mkdir(folderPath, { recursive: false });
+        if (categoryInfo.key === 'videok') {
+            const folder720Path = resolveArchive720pFolderPath(folderName);
+            if (folder720Path) {
+                await fs.promises.mkdir(folder720Path, { recursive: true });
+            }
+        }
+        return res.status(201).json({ message: 'Mappa létrehozva.', name: folderName });
+    } catch (err) {
+        if (err.code === 'EEXIST') {
+            return res.status(409).json({ message: 'A mappa már létezik.' });
+        }
+        console.error('Hiba az archívum mappa létrehozásakor:', err);
+        return res.status(500).json({ message: 'Nem sikerült létrehozni a mappát.' });
+    }
+});
+
+app.patch('/api/archive/:category/folders/rename', authenticateToken, isAdmin, ensureArchiveEditPermission, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    const oldName = normalizeArchiveFolderName(req.body?.oldName);
+    const newName = normalizeArchiveFolderName(req.body?.newName);
+
+    if (!categoryInfo) {
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+    if (!oldName || !newName) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+    if (oldName === newName) {
+        return res.status(400).json({ message: 'Az új mappanév megegyezik a jelenlegivel.' });
+    }
+
+    const sourcePath = resolveArchiveFolderPath(categoryInfo, oldName);
+    const targetPath = resolveArchiveFolderPath(categoryInfo, newName);
+    if (!sourcePath || !targetPath) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    try {
+        const sourceStat = await fs.promises.stat(sourcePath);
+        if (!sourceStat.isDirectory()) {
+            return res.status(404).json({ message: 'A mappa nem található.' });
+        }
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return res.status(404).json({ message: 'A mappa nem található.' });
+        }
+        console.error('Hiba az archívum mappa ellenőrzésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült átnevezni a mappát.' });
+    }
+
+    try {
+        await fs.promises.access(targetPath, fs.constants.F_OK);
+        return res.status(409).json({ message: 'A cél mappa már létezik.' });
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error('Hiba az archívum célmappa ellenőrzésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült átnevezni a mappát.' });
+        }
+    }
+
+    if (categoryInfo.key === 'videok') {
+        const target720Path = resolveArchive720pFolderPath(newName);
+        if (target720Path) {
+            try {
+                await fs.promises.access(target720Path, fs.constants.F_OK);
+                return res.status(409).json({ message: 'A c�l mappa m�r l�tezik.' });
+            } catch (err) {
+                if (err.code !== 'ENOENT') {
+                    console.error('Hiba az arch�v 720p c�lmappa ellen�rz�sekor:', err);
+                    return res.status(500).json({ message: 'Nem siker�lt �tnevezni a mapp�t.' });
+                }
+            }
+        }
+    }
+
+    try {
+        await fs.promises.rename(sourcePath, targetPath);
+        if (categoryInfo.key === 'videok') {
+            const source720Path = resolveArchive720pFolderPath(oldName);
+            const target720Path = resolveArchive720pFolderPath(newName);
+
+            if (source720Path && target720Path) {
+                try {
+                    await fs.promises.rename(source720Path, target720Path);
+                } catch (rename720Err) {
+                    if (rename720Err.code === 'ENOENT') {
+                        await fs.promises.mkdir(target720Path, { recursive: true });
+                    } else {
+                        throw rename720Err;
+                    }
+                }
+            }
+
+            const { rows: movedRows } = await db.query(
+                'SELECT id, filename FROM archive_videos WHERE folder_name = $1',
+                [oldName]
+            );
+
+            const oldPrefix = `archivum/videok/eredeti/${oldName}/`;
+            const newPrefix = `archivum/videok/eredeti/${newName}/`;
+            for (const video of movedRows) {
+                const filename = typeof video.filename === 'string' ? video.filename : '';
+                const updatedFilename = filename.startsWith(oldPrefix)
+                    ? `${newPrefix}${filename.slice(oldPrefix.length)}`
+                    : filename;
+                await db.query(
+                    'UPDATE archive_videos SET folder_name = $1, filename = $2 WHERE id = $3',
+                    [newName, updatedFilename, video.id]
+                );
+            }
+        }
+        return res.status(200).json({ message: 'Mappa átnevezve.', oldName, newName });
+    } catch (err) {
+        console.error('Hiba az archívum mappa átnevezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült átnevezni a mappát.' });
+    }
+});
+
+app.delete('/api/archive/:category/folders', authenticateToken, isAdmin, ensureArchiveEditPermission, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    const folderName = normalizeArchiveFolderName(req.body?.name);
+    if (!categoryInfo) {
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+    if (!folderName) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    const folderPath = resolveArchiveFolderPath(categoryInfo, folderName);
+    if (!folderPath) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    try {
+        await fs.promises.rm(folderPath, { recursive: true, force: true });
+        if (categoryInfo.key === 'videok') {
+            const folder720Path = resolveArchive720pFolderPath(folderName);
+            if (folder720Path) {
+                await fs.promises.rm(folder720Path, { recursive: true, force: true });
+            }
+
+            const { rows } = await db.query(
+                'SELECT id, thumbnail_filename FROM archive_videos WHERE folder_name = $1',
+                [folderName]
+            );
+            for (const video of rows) {
+                if (video.thumbnail_filename) {
+                    await safeUnlink(path.join(uploadsRootDirectory, video.thumbnail_filename));
+                }
+            }
+            await db.query('DELETE FROM archive_videos WHERE folder_name = $1', [folderName]);
+        }
+        return res.status(200).json({ message: 'Mappa törölve.' });
+    } catch (err) {
+        console.error('Hiba az archívum mappa törlésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült törölni a mappát.' });
+    }
+});
+
+app.get('/api/archive/:category/folders/:folder/files', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    if (!categoryInfo) {
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+
+    const folderPath = resolveArchiveFolderPath(categoryInfo, req.params.folder);
+    if (!folderPath) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    try {
+        const entries = await fs.promises.readdir(folderPath, { withFileTypes: true });
+        const files = [];
+        for (const entry of entries) {
+            if (!entry.isFile()) {
+                continue;
+            }
+            const filePath = path.join(folderPath, entry.name);
+            const stats = await fs.promises.stat(filePath);
+            files.push({
+                name: entry.name,
+                url: buildArchiveFileUrl(categoryInfo.key, req.params.folder, entry.name),
+                size: stats.size,
+                updated_at: stats.mtime,
+            });
+        }
+        files.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+        return res.status(200).json({ files });
+    } catch (err) {
+        console.error('Hiba az archívum fájlok lekérdezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült betölteni a fájlokat.' });
+    }
+});
+
+app.post('/api/archive/:category/folders/:folder/files', authenticateToken, ensureArchiveEditPermission, (req, res, next) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    if (!categoryInfo) {
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+    if (categoryInfo.key === 'videok') {
+        return res.status(400).json({ message: 'Videók feltöltéséhez használd az archív videó feltöltő felületet.' });
+    }
+    const uploader = uploadArchiveFiles.array('files', 20);
+    uploader(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ message: err.message || 'Feltöltési hiba.' });
+        }
+        return next();
+    });
+}, (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    if (!categoryInfo) {
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    if (!folderName) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    const items = files.map((file) => ({
+        name: file.filename,
+        url: buildArchiveFileUrl(categoryInfo.key, folderName, file.filename),
+        size: file.size,
+    }));
+
+    return res.status(201).json({ message: 'Fájlok feltöltve.', items });
+});
+
+app.get('/api/archive/videos/tags', authenticateToken, ensureArchiveViewPermission, async (_req, res) => {
+    try {
+        const { rows } = await db.query(
+            'SELECT id, name, COALESCE(color, $1) AS color, created_at FROM archive_tags ORDER BY name ASC',
+            [DEFAULT_TAG_COLOR]
+        );
+        return res.status(200).json(rows || []);
+    } catch (err) {
+        console.error('Hiba az archív videó címkék lekérdezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült lekérdezni az archív videó címkéket.' });
+    }
+});
+
+app.post('/api/archive/videos/tags', authenticateToken, isAdmin, async (req, res) => {
+    const { name, color } = req.body || {};
+    const trimmedName = (name || '').trim();
+    const normalizedColor = normalizeHexColor(color);
+
+    if (!trimmedName) {
+        return res.status(400).json({ message: 'A címke neve nem lehet üres.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'INSERT INTO archive_tags (name, color) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING RETURNING id, name, color, created_at',
+            [trimmedName, normalizedColor]
+        );
+        if (!rows[0]) {
+            return res.status(409).json({ message: 'A címke már létezik.' });
+        }
+        return res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error('Hiba az archív videó címke létrehozásakor:', err);
+        return res.status(500).json({ message: 'Nem sikerült létrehozni a címkét.' });
+    }
+});
+
+app.delete('/api/archive/videos/tags/:tagId', authenticateToken, isAdmin, async (req, res) => {
+    const tagId = Number.parseInt(req.params.tagId, 10);
+    if (!tagId) {
+        return res.status(400).json({ message: 'Érvénytelen címke azonosító.' });
+    }
+
+    try {
+        const result = await db.query('DELETE FROM archive_tags WHERE id = $1', [tagId]);
+        if (!result.rowCount) {
+            return res.status(404).json({ message: 'A címke nem található.' });
+        }
+        return res.status(200).json({ message: 'Címke törölve.' });
+    } catch (err) {
+        console.error('Hiba az archív videó címke törlésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült törölni a címkét.' });
+    }
+});
+
+app.get('/api/archive/videos/folders/:folder', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    if (!folderName) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    try {
+        const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+        const allowedLimits = [12, 24, 40, 80];
+        const requestedLimit = Number.parseInt(req.query.limit, 10);
+        const limit = allowedLimits.includes(requestedLimit) ? requestedLimit : 24;
+        const search = (req.query.search || '').trim();
+        const tagFilters = Array.isArray(req.query.tag)
+            ? req.query.tag
+            : typeof req.query.tag === 'string' && req.query.tag.length
+                ? req.query.tag.split(',')
+                : [];
+        const tagIds = Array.from(new Set(tagFilters
+            .map((value) => Number.parseInt(value, 10))
+            .filter((value) => Number.isInteger(value))));
+        const sortOrder = req.query.sort === 'oldest' ? 'ASC' : 'DESC';
+
+        const filters = ['archive_videos.folder_name = $1'];
+        const params = [folderName];
+
+        if (search) {
+            const idx = params.push(`%${search}%`);
+            filters.push(`(archive_videos.original_name ILIKE $${idx} OR archive_videos.filename ILIKE $${idx})`);
+        }
+
+        if (tagIds.length) {
+            const tagArrayIdx = params.push(tagIds);
+            const tagCountIdx = params.push(tagIds.length);
+            filters.push(`archive_videos.id IN (
+                SELECT video_id
+                FROM archive_video_tags
+                WHERE tag_id = ANY($${tagArrayIdx}::int[])
+                GROUP BY video_id
+                HAVING COUNT(DISTINCT tag_id) = $${tagCountIdx}
+            )`);
+        }
+
+        const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+        const countQuery = `SELECT COUNT(*) FROM archive_videos ${whereClause}`;
+        const { rows: countRows } = await db.query(countQuery, params);
+        const totalItems = Number(countRows[0]?.count || 0);
+        const totalPages = totalItems > 0 ? Math.ceil(totalItems / limit) : 0;
+        const currentPage = totalPages > 0 ? Math.min(page, totalPages) : 1;
+        const offset = (currentPage - 1) * limit;
+
+        const dataParams = params.slice();
+        dataParams.push(limit, offset);
+
+        const dataQuery = `
+            WITH filtered_videos AS (
+                SELECT archive_videos.*, users.username
+                FROM archive_videos
+                LEFT JOIN users ON archive_videos.uploader_id = users.id
+                ${whereClause}
+                ORDER BY archive_videos.content_created_at ${sortOrder}
+                LIMIT $${dataParams.length - 1}
+                OFFSET $${dataParams.length}
+            )
+            SELECT fv.id, fv.folder_name, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at,
+                   fv.thumbnail_filename, fv.has_720p, fv.original_quality, fv.processing_status, fv.processing_error,
+                   COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
+            FROM filtered_videos fv
+            LEFT JOIN archive_video_tags avt ON avt.video_id = fv.id
+            LEFT JOIN archive_tags t ON avt.tag_id = t.id
+            GROUP BY fv.id, fv.folder_name, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p, fv.original_quality, fv.processing_status, fv.processing_error
+            ORDER BY fv.content_created_at ${sortOrder};
+        `;
+
+        const { rows } = await db.query(dataQuery, dataParams);
+        return res.status(200).json({
+            data: rows || [],
+            pagination: {
+                totalItems,
+                totalPages,
+                currentPage,
+            },
+        });
+    } catch (err) {
+        console.error('Hiba az archív videók lekérdezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült lekérdezni az archív videókat.' });
+    }
+});
+
+app.post('/api/archive/videos/folders/:folder/upload-chunk', authenticateToken, ensureArchiveEditPermission, (req, res, next) => {
+    const uploader = uploadArchiveVideoChunks.single('chunk');
+    uploader(req, res, (err) => {
+        if (err) {
+            if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(413).json({ message: 'A chunk merete tul nagy. Probald kisebb darabokban.' });
+            }
+            return res.status(400).json({ message: err.message || 'Chunk feltoltesi hiba.' });
+        }
+        return next();
+    });
+}, async (req, res) => {
+    await ensureArchiveChunkCleanup();
+
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    if (!folderName) {
+        if (req.file?.path) {
+            await safeUnlink(req.file.path);
+        }
+        return res.status(400).json({ message: 'Ervenytelen mappanev.' });
+    }
+
+    if (!req.file) {
+        return res.status(400).json({ message: 'Nincs chunk feltoltve.' });
+    }
+
+    const safeUploadId = normalizeArchiveChunkUploadId(req.body?.uploadId);
+    if (!safeUploadId) {
+        await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Ervenytelen feltoltes azonosito.' });
+    }
+
+    const chunkIndex = Number.parseInt(req.body?.chunkIndex, 10);
+    const totalChunks = Number.parseInt(req.body?.totalChunks, 10);
+    const reportedTotalSize = Number.parseInt(req.body?.totalSize, 10);
+    if (!Number.isInteger(chunkIndex) || chunkIndex < 0 || !Number.isInteger(totalChunks) || totalChunks <= 0 || totalChunks > 20000) {
+        await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Ervenytelen chunk metadata.' });
+    }
+    if (chunkIndex >= totalChunks) {
+        await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Hibas chunk index.' });
+    }
+
+    const categoryInfo = resolveArchiveCategory('videok');
+    const folderPath = resolveArchiveFolderPath(categoryInfo, folderName);
+    if (!categoryInfo || !folderPath) {
+        await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Ervenytelen video mappa.' });
+    }
+
+    const normalizedOriginalName = normalizeFilename(req.body?.originalName || req.file.originalname || 'video.mp4');
+    const originalVideoExtension = getArchiveVideoExtension(normalizedOriginalName);
+    if (!originalVideoExtension) {
+        await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Nem engedelyezett videofajl-kiterjesztes.' });
+    }
+    const customName = typeof req.body?.name === 'string' ? normalizeFilename(req.body.name) : '';
+    const normalizedCustomName = stripKnownVideoExtension(customName);
+    const normalizedDisplayName = stripKnownVideoExtension(normalizedOriginalName);
+    const sanitizedOriginalName = (normalizedCustomName || normalizedDisplayName || normalizedOriginalName || 'video').slice(0, 255);
+
+    const requestedTagIds = parseArchiveTagIds(req.body?.tags);
+
+    const statePath = path.join(archiveVideoChunkTempDirectory, `${safeUploadId}.json`);
+    const stagingPath = path.join(archiveVideoChunkTempDirectory, `${safeUploadId}.upload`);
+
+    try {
+        const validTagIds = await resolveValidArchiveTagIds(requestedTagIds);
+
+        let state = await readArchiveChunkState(statePath);
+        if (!state) {
+            state = {
+                uploadId: safeUploadId,
+                uploaderId: req.user.id,
+                folderName,
+                totalChunks,
+                lastChunkIndex: -1,
+                originalName: normalizedOriginalName,
+                displayName: sanitizedOriginalName,
+                tagIds: validTagIds,
+                totalSize: Number.isFinite(reportedTotalSize) && reportedTotalSize > 0 ? reportedTotalSize : 0,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+            };
+        }
+
+        if (Number.parseInt(state.uploaderId, 10) !== Number.parseInt(req.user.id, 10)) {
+            await safeUnlink(req.file.path);
+            return res.status(403).json({ message: 'Ez a feltoltes masik felhasznalohoz tartozik.' });
+        }
+        if (state.folderName !== folderName || Number.parseInt(state.totalChunks, 10) !== totalChunks) {
+            await safeUnlink(req.file.path);
+            return res.status(409).json({ message: 'A feltoltes adatai nem egyeznek a korabbi chunkokkal.' });
+        }
+        if (state.originalName !== normalizedOriginalName) {
+            await safeUnlink(req.file.path);
+            return res.status(409).json({ message: 'A feltoltes eredeti fajlneve nem valtozhat meg chunkonkent.' });
+        }
+        if (!getArchiveVideoExtension(state.originalName)) {
+            await safeUnlink(req.file.path);
+            await cleanupArchiveChunkUpload(safeUploadId);
+            return res.status(400).json({ message: 'Nem engedelyezett videofajl-kiterjesztes.' });
+        }
+
+        const expectedChunkIndex = Number.parseInt(state.lastChunkIndex, 10) + 1;
+        if (chunkIndex !== expectedChunkIndex) {
+            await safeUnlink(req.file.path);
+            return res.status(409).json({
+                message: 'Hibas chunk sorrend. Probald ujra a feltoltest.',
+                expectedChunkIndex,
+            });
+        }
+
+        await appendChunkToStagingFile(stagingPath, req.file.path);
+        await safeUnlink(req.file.path);
+
+        state.lastChunkIndex = chunkIndex;
+        state.updatedAt = Date.now();
+        state.displayName = sanitizedOriginalName;
+        state.tagIds = validTagIds;
+        if (Number.isFinite(reportedTotalSize) && reportedTotalSize > 0) {
+            state.totalSize = reportedTotalSize;
+        }
+        await writeArchiveChunkState(statePath, state);
+
+        if (chunkIndex < totalChunks - 1) {
+            return res.status(200).json({
+                message: 'Chunk feltoltve.',
+                completed: false,
+                chunkIndex,
+                totalChunks,
+            });
+        }
+
+        ensureDirectoryExists(folderPath);
+        const finalFilename = buildArchiveFilename(folderPath, state.originalName || normalizedOriginalName);
+        const finalPath = path.join(folderPath, finalFilename);
+
+        await fs.promises.rename(stagingPath, finalPath);
+
+        const detectedHeight = await getVideoHeight(finalPath);
+        if (!Number.isFinite(detectedHeight)) {
+            await safeUnlink(finalPath);
+            await safeUnlink(statePath);
+            return res.status(400).json({ message: 'A feltoltott fajl nem ervenyes video.' });
+        }
+
+        const storedFilename = path.posix.join('archivum', 'videok', 'eredeti', folderName, finalFilename);
+        let videoId = null;
+        try {
+            videoId = await createArchiveVideoRecord({
+                folderName,
+                storedFilename,
+                originalName: sanitizedOriginalName,
+                uploaderId: req.user.id,
+                filePath: finalPath,
+                tagIds: validTagIds,
+            });
+        } catch (dbErr) {
+            await safeUnlink(finalPath);
+            throw dbErr;
+        }
+
+        await safeUnlink(statePath);
+
+        res.status(201).json({
+            message: 'Archiv video sikeresen feltoltve.',
+            videoIds: Number.isInteger(videoId) ? [videoId] : [],
+            completed: true,
+        });
+
+        setImmediate(() => {
+            processArchiveVideoQueue();
+        });
+    } catch (err) {
+        console.error('Hiba az archiv chunk feltoltes soran:', err);
+        if (req.file?.path) {
+            await safeUnlink(req.file.path);
+        }
+        return res.status(500).json({ message: 'Nem sikerult feldolgozni a chunk feltoltest.' });
+    }
+});
+
+app.post('/api/archive/videos/folders/:folder/upload', authenticateToken, ensureArchiveEditPermission, (req, res, next) => {
+    const uploader = uploadArchiveVideos.array('videos', 100);
+    uploader(req, res, (err) => {
+        if (err) {
+            if (err instanceof multer.MulterError) {
+                if (err.code === 'LIMIT_FILE_SIZE') {
+                    return res.status(413).json({ message: 'A video fajl tul nagy a jelenlegi feltoltesi limithez.' });
+                }
+                return res.status(400).json({ message: err.message || 'Feltoltesi hiba.' });
+            }
+            return res.status(400).json({ message: err.message || 'Feltoltesi hiba.' });
+        }
+        return next();
+    });
+}, async (req, res) => {
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    if (!folderName) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) {
+        return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
+    }
+
+    const parseTagIds = (value) => {
+        if (!value) {
+            return [];
+        }
+        if (Array.isArray(value)) {
+            return value.map((id) => Number.parseInt(id, 10)).filter((id) => Number.isInteger(id));
+        }
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return [];
+            }
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) {
+                    return parsed.map((id) => Number.parseInt(id, 10)).filter((id) => Number.isInteger(id));
+                }
+            } catch (err) {
+                // Fallback to CSV list.
+            }
+            return trimmed
+                .split(',')
+                .map((id) => Number.parseInt(id.trim(), 10))
+                .filter((id) => Number.isInteger(id));
+        }
+        return [];
+    };
+
+    let metadataList = [];
+    try {
+        const rawMetadata = req.body?.metadata;
+        if (typeof rawMetadata === 'string' && rawMetadata.trim()) {
+            const parsed = JSON.parse(rawMetadata);
+            if (Array.isArray(parsed)) {
+                metadataList = parsed;
+            }
+        }
+    } catch (err) {
+        return res.status(400).json({ message: 'Érvénytelen metadata formátum.' });
+    }
+
+    const fallbackTagIds = parseTagIds(req.body?.tags);
+    const requestedTagIds = new Set(fallbackTagIds);
+    metadataList.forEach((meta) => {
+        parseTagIds(meta?.tags).forEach((tagId) => requestedTagIds.add(tagId));
+    });
+
+    let validTagIds = new Set();
+    if (requestedTagIds.size) {
+        try {
+            const { rows } = await db.query('SELECT id FROM archive_tags WHERE id = ANY($1)', [Array.from(requestedTagIds)]);
+            validTagIds = new Set((rows || []).map((row) => Number(row.id)));
+        } catch (err) {
+            console.error('Hiba az archív videó címkék ellenőrzésekor:', err);
+            return res.status(500).json({ message: 'Nem sikerült ellenőrizni a címkéket.' });
+        }
+    }
+
+    const normalizeSelectedTags = (tagIds) => Array.from(new Set(tagIds.filter((id) => validTagIds.has(id))));
+    const uploaderId = req.user.id;
+    const createdVideos = [];
+    const client = await db.pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        for (const [index, file] of files.entries()) {
+            const metadata = metadataList[index] || {};
+            const normalizedOriginalName = normalizeFilename(file.originalname);
+            const customName = typeof metadata.name === 'string' ? normalizeFilename(metadata.name) : '';
+            const normalizedCustomName = stripKnownVideoExtension(customName);
+            const normalizedDisplayName = stripKnownVideoExtension(normalizedOriginalName);
+            const sanitizedOriginalName = (normalizedCustomName || normalizedDisplayName || normalizedOriginalName || file.filename).slice(0, 255);
+            const filePath = path.join(archiveVideosOriginalDirectory, folderName, file.filename);
+            const contentCreatedAt = await getVideoCreationDate(filePath);
+            const tagsFromMeta = normalizeSelectedTags(parseTagIds(metadata.tags));
+            const tags = tagsFromMeta.length ? tagsFromMeta : normalizeSelectedTags(fallbackTagIds);
+            const storedFilename = path.posix.join('archivum', 'videok', 'eredeti', folderName, file.filename);
+
+            const insertResult = await client.query(
+                `INSERT INTO archive_videos (folder_name, filename, original_name, uploader_id, content_created_at, processing_status)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING id`,
+                [folderName, storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt, 'pending']
+            );
+            const videoId = insertResult.rows[0]?.id;
+
+            if (videoId && tags.length) {
+                for (const tagId of tags) {
+                    await client.query(
+                        'INSERT INTO archive_video_tags (video_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                        [videoId, tagId]
+                    );
+                }
+            }
+
+
+            if (videoId) {
+                createdVideos.push({
+                    id: videoId,
+                    filename: storedFilename,
+                    thumbnail_filename: null,
+                });
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({
+            message: 'Archív videók sikeresen feltöltve.',
+            videoIds: createdVideos.map((video) => video.id),
+        });
+
+        setImmediate(() => {
+            processArchiveVideoQueue();
+        });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Hiba az archív videó feltöltésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült menteni az archív videó adatait.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/archive/videos/cancel', authenticateToken, ensureArchiveEditPermission, async (req, res) => {
+    const rawIds = Array.isArray(req.body?.videoIds) ? req.body.videoIds : [];
+    const videoIds = Array.from(new Set(rawIds.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)));
+
+    if (!videoIds.length) {
+        return res.status(400).json({ message: 'Nincs törlendő videó.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT id, folder_name, filename, original_name, thumbnail_filename, uploader_id FROM archive_videos WHERE id = ANY($1)',
+            [videoIds]
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({ message: 'A megadott videók nem találhatók.' });
+        }
+
+        const deletable = rows.filter((video) => video.uploader_id === req.user.id || req.user.isAdmin);
+        if (!deletable.length) {
+            return res.status(403).json({ message: 'Nincs jogosultság a videók törléséhez.' });
+        }
+
+        const deletedVideoIds = [];
+        for (const video of deletable) {
+            await deleteArchiveVideoRecord(video);
+            deletedVideoIds.push(video.id);
+        }
+
+        return res.status(200).json({
+            message: 'Feltöltés megszakítva, archív videók törölve.',
+            deletedVideoIds,
+        });
+    } catch (err) {
+        console.error('Hiba az archív videó feltöltés megszakítása során:', err);
+        return res.status(500).json({ message: 'Nem sikerült törölni a videókat.' });
+    }
+});
+
+app.delete('/api/archive/videos/:id', authenticateToken, isAdmin, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT id, folder_name, filename, original_name, thumbnail_filename FROM archive_videos WHERE id = $1',
+            [videoId]
+        );
+        const video = rows[0];
+
+        if (!video) {
+            return res.status(404).json({ message: 'A videó nem található.' });
+        }
+
+        await deleteArchiveVideoRecord(video);
+        return res.status(200).json({ message: 'Archív videó sikeresen törölve.' });
+    } catch (err) {
+        console.error('Hiba az archív videó törlésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült törölni a videót.' });
+    }
+});
+
+app.patch('/api/archive/videos/:id/title', authenticateToken, isAdmin, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+    }
+
+    const rawTitle = (req.body?.title || req.body?.original_name || '').toString();
+    const normalizedTitle = normalizeFilename(rawTitle).trim();
+
+    if (!normalizedTitle) {
+        return res.status(400).json({ message: 'Az új cím megadása kötelező.' });
+    }
+
+    const truncatedTitle = normalizedTitle.slice(0, 255);
+
+    try {
+        const { rows } = await db.query(
+            'UPDATE archive_videos SET original_name = $1 WHERE id = $2 RETURNING id, original_name',
+            [truncatedTitle, videoId]
+        );
+        if (!rows.length) {
+            return res.status(404).json({ message: 'A videó nem található.' });
+        }
+        return res.status(200).json({
+            message: 'Archív videó cím frissítve.',
+            id: rows[0].id,
+            original_name: rows[0].original_name,
+        });
+    } catch (err) {
+        console.error('Hiba az archív videó cím frissítésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült frissíteni az archív videó címét.' });
+    }
+});
+
+app.post('/api/archive/videos/:id/thumbnail/regenerate', authenticateToken, isAdmin, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Ervenytelen video azonosito.' });
+    }
+
+    const rawSeekSeconds = req.body?.seekSeconds;
+    const hasRequestedSeek =
+        rawSeekSeconds !== undefined &&
+        rawSeekSeconds !== null &&
+        String(rawSeekSeconds).trim() !== '';
+    let requestedSeekSeconds = null;
+    if (hasRequestedSeek) {
+        const parsedSeek = Number.parseFloat(rawSeekSeconds);
+        if (!Number.isFinite(parsedSeek) || parsedSeek < 0) {
+            return res.status(400).json({ message: 'Ervenytelen seekSeconds ertek.' });
+        }
+        requestedSeekSeconds = parsedSeek;
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT id, filename, thumbnail_filename FROM archive_videos WHERE id = $1',
+            [videoId]
+        );
+        const video = rows[0];
+
+        if (!video) {
+            return res.status(404).json({ message: 'A video nem talalhato.' });
+        }
+
+        const videoPath = path.join(uploadsRootDirectory, video.filename || '');
+        if (!videoPath.startsWith(uploadsRootDirectory)) {
+            return res.status(400).json({ message: 'Ervenytelen video utvonal.' });
+        }
+
+        const hasVideoFile = await fileExists(videoPath);
+        if (!hasVideoFile) {
+            return res.status(404).json({ message: 'A forras videofajl nem talalhato.' });
+        }
+
+        const baseName = path.parse(video.filename || '').name || ('archive-' + video.id);
+        const variantTag = 'regen' + Date.now() + '-' + Math.round(Math.random() * 1e6);
+        const thumbnailOptions = {
+            variantTag,
+        };
+        if (hasRequestedSeek) {
+            thumbnailOptions.preferredSeekSeconds = requestedSeekSeconds;
+            thumbnailOptions.strictPreferredSeek = true;
+        } else {
+            thumbnailOptions.randomize = true;
+        }
+
+        const newThumbnailFilename = await generateThumbnailForVideo(videoPath, baseName, video.id, thumbnailOptions);
+
+        await db.query('UPDATE archive_videos SET thumbnail_filename = $1 WHERE id = $2', [newThumbnailFilename, video.id]);
+
+        if (video.thumbnail_filename && video.thumbnail_filename !== newThumbnailFilename) {
+            await safeUnlink(path.join(uploadsRootDirectory, video.thumbnail_filename));
+        }
+
+        return res.status(200).json({
+            message: hasRequestedSeek
+                ? 'Indexkep sikeresen frissitve a kivalasztott kepkockarol.'
+                : 'Indexkep sikeresen ujrageneralva.',
+            thumbnail_filename: newThumbnailFilename,
+        });
+    } catch (err) {
+        console.error('Hiba az archiv indexkep ujrageneralasakor:', err);
+        return res.status(500).json({ message: 'Nem sikerult ujrageneralni az indexkepet.' });
+    }
+});
+
 app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, res) => {
     try {
         const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
@@ -1950,6 +3738,111 @@ app.get('/api/admin/processing-status', authenticateToken, isAdmin, async (_req,
     } catch (err) {
         console.error('Hiba a feldolgozási állapot lekérdezésekor:', err);
         res.status(500).json({ message: 'Nem sikerült lekérdezni a feldolgozási állapotot.' });
+    }
+});
+
+app.post('/api/admin/radnai-test', authenticateToken, isAdmin, async (req, res) => {
+    const targetUrl = resolveRadnaiAlertUrl();
+    if (!targetUrl) {
+        return res.status(500).json({
+            message: 'A Radnai riasztasi vegpont nincs konfigur�lva.',
+            details: 'Allitsd be a BOT_API_URL vagy BOT_RADNAI_ALERT_URL kornyezeti valtozot.',
+        });
+    }
+
+    const requestedType = typeof req.body?.type === 'string'
+        ? req.body.type.trim().toLowerCase()
+        : 'change';
+
+    if (!['change', 'outage'].includes(requestedType)) {
+        return res.status(400).json({
+            message: 'Ervenytelen tipus. Hasznald: change vagy outage.',
+            receivedType: requestedType || null,
+        });
+    }
+
+    const payload = requestedType === 'outage'
+        ? {
+            type: 'outage',
+            error: typeof req.body?.error === 'string' && req.body.error.trim()
+                ? req.body.error.trim()
+                : 'Manual outage test from admin endpoint.',
+        }
+        : { type: 'change' };
+
+    try {
+        const botResponse = await sendRadnaiAlertRequest(payload);
+        if (!botResponse.ok) {
+            return res.status(botResponse.status).json({
+                message: 'Nem sikerult elkuldeni a teszt riasztast a Discord botnak.',
+                details: botResponse.bodyText || undefined,
+                target: botResponse.url,
+                status: botResponse.status,
+                attempt: botResponse.attempt || undefined,
+                type: requestedType,
+            });
+        }
+
+        return res.status(200).json({
+            message: 'Teszt riasztas sikeresen elkuldve a Discord botnak.',
+            details: botResponse.bodyText || undefined,
+            target: botResponse.url,
+            status: botResponse.status,
+            attempt: botResponse.attempt || undefined,
+            type: requestedType,
+        });
+    } catch (err) {
+        console.error('Hiba a Radnai teszt riasztas kuldese soran:', err);
+        return res.status(502).json({
+            message: 'Nem sikerult kommunikalni a Discord bottal a Radnai teszt soran.',
+            details: err?.message || 'Ismeretlen hiba',
+            target: targetUrl,
+            type: requestedType,
+        });
+    }
+});
+
+app.get('/api/admin/radnai-status', authenticateToken, isAdmin, async (_req, res) => {
+    return res.status(200).json({
+        monitorEnabled: radnaiMonitoringEnabled,
+        lastCheck: lastRadnaiCheck ? lastRadnaiCheck.toISOString() : null,
+        status: lastRadnaiStatus,
+        hash: lastRadnaiHash,
+        failureReason: lastRadnaiFailureReason,
+        consecutiveFailures: radnaiConsecutiveFailures,
+        outageActive: radnaiOutageActive,
+        lastOutageAlertAt: lastRadnaiOutageAlertAt ? lastRadnaiOutageAlertAt.toISOString() : null,
+    });
+});
+
+app.post('/api/admin/radnai-monitor', authenticateToken, isAdmin, async (req, res) => {
+    const requestedEnabled = req.body?.enabled;
+    if (typeof requestedEnabled !== 'boolean') {
+        return res.status(400).json({
+            message: 'Az enabled mező kötelező és boolean típusú kell legyen.',
+        });
+    }
+
+    try {
+        await setRadnaiMonitoringEnabled(requestedEnabled, 'admin-api');
+        if (requestedEnabled) {
+            checkRadnaiWebsiteForChanges({ force: true }).catch((err) => {
+                console.error('Hiba a Radnai monitor bekapcsolas utani azonnali check kozben:', err);
+            });
+        }
+
+        return res.status(200).json({
+            message: requestedEnabled ? 'A Radnai figyeles bekapcsolva.' : 'A Radnai figyeles kikapcsolva.',
+            monitorEnabled: radnaiMonitoringEnabled,
+            status: lastRadnaiStatus,
+            lastCheck: lastRadnaiCheck ? lastRadnaiCheck.toISOString() : null,
+        });
+    } catch (err) {
+        console.error('Hiba a Radnai figyeles allapot valtasakor:', err);
+        return res.status(500).json({
+            message: 'Nem sikerult valtani a Radnai figyeles allapotat.',
+            details: err?.message || 'Ismeretlen hiba',
+        });
     }
 });
 
@@ -2675,6 +4568,19 @@ function normalizeFilename(originalName) {
     return trimmedName;
 }
 
+function stripKnownVideoExtension(value) {
+    const normalized = normalizeFilename(value || '').trim();
+    if (!normalized) {
+        return '';
+    }
+    const ext = getArchiveVideoExtension(normalized);
+    if (!ext) {
+        return normalized;
+    }
+    const withoutExt = normalized.slice(0, -ext.length).trim();
+    return withoutExt || normalized;
+}
+
 function sanitizeFolderName(name) {
     if (!name || typeof name !== 'string') {
         return 'egyeb';
@@ -2843,6 +4749,119 @@ async function processVideoQueue() {
     }
 }
 
+async function processArchiveVideoQueue() {
+    if (isArchiveProcessing) {
+        return;
+    }
+
+    isArchiveProcessing = true;
+    let currentVideo = null;
+
+    try {
+        const { rows } = await db.query(
+            "SELECT id, folder_name, filename, original_name, thumbnail_filename FROM archive_videos WHERE processing_status = 'pending' ORDER BY id ASC LIMIT 1"
+        );
+
+        currentVideo = rows[0];
+        if (!currentVideo) {
+            return;
+        }
+
+        await db.query(
+            "UPDATE archive_videos SET processing_status = 'processing', processing_error = NULL WHERE id = $1",
+            [currentVideo.id]
+        );
+
+        try {
+            const videoPath = path.join(uploadsRootDirectory, currentVideo.filename);
+            let thumbnailFilename = currentVideo.thumbnail_filename;
+            const thumbnailPath = thumbnailFilename ? path.join(uploadsRootDirectory, thumbnailFilename) : null;
+            let processingError = null;
+
+            if (!thumbnailPath || !(await fileExists(thumbnailPath))) {
+                try {
+                    thumbnailFilename = await generateThumbnailForVideo(
+                        videoPath,
+                        path.parse(currentVideo.filename).name,
+                        currentVideo.id
+                    );
+                    await db.query('UPDATE archive_videos SET thumbnail_filename = $1 WHERE id = $2', [thumbnailFilename, currentVideo.id]);
+                } catch (thumbErr) {
+                    console.error(`Hiba az archiv video indexkep generalasakor (${currentVideo.id}):`, thumbErr);
+                }
+            }
+
+            try {
+                await optimizeVideoForFaststart(videoPath);
+            } catch (optErr) {
+                console.error(`Hiba a(z) ${currentVideo.id} archív videó faststart optimalizálása során:`, optErr);
+            }
+
+            const videoHeight = await getVideoHeight(videoPath);
+            const originalQuality = determineOriginalQualityLabel(videoHeight);
+            const targets = determineTargetResolutions(videoHeight);
+            let has720p = 0;
+            const { outputPath, outputDir } = buildArchiveVideoResolutionOutputPaths(currentVideo, 720);
+
+            try {
+                const stats = await fs.promises.stat(outputPath);
+                if (stats.isFile() && stats.size > 0) {
+                    has720p = 1;
+                }
+            } catch (statErr) {
+                if (statErr.code !== 'ENOENT') {
+                    console.error(`Nem sikerült ellenőrizni a 720p archív videót (${currentVideo.id}):`, statErr);
+                }
+            }
+
+            if (!has720p && targets.includes(720)) {
+                await fs.promises.mkdir(outputDir, { recursive: true });
+                try {
+                    const result = await transcodeVideoToHeight(
+                        videoPath,
+                        outputDir,
+                        currentVideo.original_name || currentVideo.filename,
+                        720
+                    );
+                    if (!result.skipped) {
+                        has720p = 1;
+                    }
+                } catch (transcodeErr) {
+                    console.error(`Hiba a 720p archív verzió készítésekor (${currentVideo.id}):`, transcodeErr);
+                    processingError = normalizeProcessingErrorMessage(
+                        transcodeErr,
+                        'Nem sikerult letrehozni a 720p verziot.'
+                    );
+                }
+            }
+
+            const nextStatus = processingError ? 'error' : 'done';
+            await db.query(
+                'UPDATE archive_videos SET has_720p = $1, original_quality = $2, processing_status = $3, processing_error = $4 WHERE id = $5',
+                [has720p, originalQuality, nextStatus, processingError, currentVideo.id]
+            );
+        } catch (processErr) {
+            console.error(`Hiba a(z) ${currentVideo?.id} archív videó feldolgozása során:`, processErr);
+            const processingError = normalizeProcessingErrorMessage(
+                processErr,
+                'Nem sikerult feldolgozni az archiv videot.'
+            );
+            await db.query(
+                "UPDATE archive_videos SET processing_status = 'error', processing_error = $2 WHERE id = $1",
+                [currentVideo.id, processingError]
+            );
+        }
+    } catch (err) {
+        console.error('Hiba az archív videó feldolgozási sor kezelése során:', err);
+    } finally {
+        isArchiveProcessing = false;
+    }
+
+    if (currentVideo) {
+        await processArchiveVideoQueue();
+    }
+}
+
 app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadSettings, (req, res, next) => {
     const limits = { files: 100 };
     if (req.uploadSettings && Number.isFinite(req.uploadSettings.maxFileSizeBytes)) {
@@ -2901,8 +4920,9 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
             const normalizedOriginalName = normalizeFilename(originalname);
             const metadata = metadataList[index] || {};
             const customName = typeof metadata.name === 'string' ? normalizeFilename(metadata.name) : '';
-            const parsedName = path.parse(customName || normalizedOriginalName).name.trim();
-            const sanitizedOriginalName = parsedName || normalizedOriginalName;
+            const normalizedCustomName = stripKnownVideoExtension(customName);
+            const normalizedDisplayName = stripKnownVideoExtension(normalizedOriginalName);
+            const sanitizedOriginalName = normalizedCustomName || normalizedDisplayName || normalizedOriginalName;
             const tagsForFile = normalizeTagIds(metadata.tags);
             const filePath = path.join(clipsOriginalDirectory, file.filename);
             const embeddedHash = await extractEmbeddedHash(filePath);
@@ -3497,12 +5517,563 @@ app.post('/api/profile/update-password', authenticateToken, async (req, res) => 
 });
 
 // 6. A szerver elindítása
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function toIsoStringOrNull(value) {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+        return null;
+    }
+    return value.toISOString();
+}
+
+function parseDateOrNull(value) {
+    if (!value) {
+        return null;
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getDateKey(date = new Date()) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        return null;
+    }
+    return date.toISOString().slice(0, 10);
+}
+
+function getRadnaiLogFilePath(date = new Date()) {
+    const dateKey = getDateKey(date) || 'unknown';
+    return path.join(RADNAI_MONITOR_LOG_DIR, `radnai-monitor-${dateKey}.log`);
+}
+
+function getRadnaiHashCheckLogFilePath(date = new Date()) {
+    const dateKey = getDateKey(date) || 'unknown';
+    return path.join(RADNAI_MONITOR_LOG_DIR, `radnai-hash-check-${dateKey}.log`);
+}
+
+function getRadnaiLogDatePart(filename) {
+    const match = String(filename || '').match(/^(?:radnai-monitor|radnai-hash-check)-(\d{4}-\d{2}-\d{2})\.log$/);
+    return match ? match[1] : null;
+}
+
+async function ensureRadnaiMonitorStorage() {
+    await fs.promises.mkdir(RADNAI_MONITOR_DATA_DIR, { recursive: true });
+    await fs.promises.mkdir(RADNAI_MONITOR_LOG_DIR, { recursive: true });
+}
+
+async function appendRadnaiMonitorEvent(level, event, details = {}) {
+    try {
+        await ensureRadnaiMonitorStorage();
+        const entry = {
+            timestamp: new Date().toISOString(),
+            level: String(level || 'info'),
+            event: String(event || 'unknown'),
+            details: details && typeof details === 'object' ? details : { value: details },
+        };
+        await fs.promises.appendFile(getRadnaiLogFilePath(), `${JSON.stringify(entry)}\n`, 'utf8');
+    } catch (err) {
+        console.error('Hiba a Radnai monitor log irasakor:', err);
+    }
+}
+
+async function appendRadnaiHashCheckResult(details = {}) {
+    try {
+        await ensureRadnaiMonitorStorage();
+        const entry = {
+            timestamp: new Date().toISOString(),
+            event: 'hash-check-result',
+            details: details && typeof details === 'object' ? details : { value: details },
+        };
+        await fs.promises.appendFile(getRadnaiHashCheckLogFilePath(), `${JSON.stringify(entry)}\n`, 'utf8');
+    } catch (err) {
+        console.error('Hiba a Radnai hash-check log irasakor:', err);
+    }
+}
+
+async function cleanupOldRadnaiMonitorLogs() {
+    try {
+        await ensureRadnaiMonitorStorage();
+        const files = await fs.promises.readdir(RADNAI_MONITOR_LOG_DIR);
+        const now = new Date();
+        const todayKey = getDateKey(now);
+        const allKeysToKeep = new Set([todayKey].filter(Boolean));
+
+        for (const filename of files) {
+            const datePart = getRadnaiLogDatePart(filename);
+            if (!datePart) {
+                continue;
+            }
+            const filePath = path.join(RADNAI_MONITOR_LOG_DIR, filename);
+            const fileDate = parseDateOrNull(`${datePart}T00:00:00.000Z`);
+            if (!fileDate) {
+                await fs.promises.unlink(filePath).catch(() => {});
+                continue;
+            }
+
+            const ageDays = Math.floor((now.getTime() - fileDate.getTime()) / (24 * 60 * 60 * 1000));
+            if (ageDays >= RADNAI_LOG_RETENTION_DAYS && !allKeysToKeep.has(datePart)) {
+                await fs.promises.unlink(filePath).catch(() => {});
+            }
+        }
+    } catch (err) {
+        console.error('Hiba a Radnai monitor naplo takaritasakor:', err);
+    }
+}
+
+async function loadRadnaiMonitorState() {
+    try {
+        await ensureRadnaiMonitorStorage();
+        const raw = await fs.promises.readFile(RADNAI_MONITOR_STATE_FILE, 'utf8');
+        const parsed = JSON.parse(raw || '{}');
+
+        lastRadnaiHash = typeof parsed.lastRadnaiHash === 'string' ? parsed.lastRadnaiHash : null;
+        lastRadnaiCheck = parseDateOrNull(parsed.lastRadnaiCheck);
+        lastRadnaiStatus = typeof parsed.lastRadnaiStatus === 'string' ? parsed.lastRadnaiStatus : 'ok';
+        lastRadnaiFailureReason = typeof parsed.lastRadnaiFailureReason === 'string' ? parsed.lastRadnaiFailureReason : null;
+        radnaiConsecutiveFailures = Number.isFinite(Number(parsed.radnaiConsecutiveFailures))
+            ? Number(parsed.radnaiConsecutiveFailures)
+            : 0;
+        radnaiOutageActive = parsed.radnaiOutageActive === true;
+        lastRadnaiOutageAlertAt = parseDateOrNull(parsed.lastRadnaiOutageAlertAt);
+        if (typeof parsed.radnaiMonitoringEnabled === 'boolean') {
+            radnaiMonitoringEnabled = parsed.radnaiMonitoringEnabled;
+        }
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error('Hiba a Radnai monitor allapot betoltesekor:', err);
+        }
+    }
+}
+
+async function persistRadnaiMonitorState() {
+    try {
+        await ensureRadnaiMonitorStorage();
+        const statePayload = {
+            lastRadnaiHash,
+            lastRadnaiCheck: toIsoStringOrNull(lastRadnaiCheck),
+            lastRadnaiStatus,
+            lastRadnaiFailureReason,
+            radnaiConsecutiveFailures,
+            radnaiOutageActive,
+            lastRadnaiOutageAlertAt: toIsoStringOrNull(lastRadnaiOutageAlertAt),
+            radnaiMonitoringEnabled,
+            updatedAt: new Date().toISOString(),
+        };
+        const tempFile = `${RADNAI_MONITOR_STATE_FILE}.tmp`;
+        await fs.promises.writeFile(tempFile, JSON.stringify(statePayload, null, 2), 'utf8');
+        await fs.promises.rename(tempFile, RADNAI_MONITOR_STATE_FILE);
+    } catch (err) {
+        console.error('Hiba a Radnai monitor allapot mentesekor:', err);
+    }
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, {
+            ...options,
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function shouldRetryStatus(status) {
+    return status === 429 || status >= 500;
+}
+
+async function setRadnaiMonitoringEnabled(enabled, source = 'unknown') {
+    const normalizedEnabled = enabled === true;
+    if (radnaiMonitoringEnabled === normalizedEnabled) {
+        return;
+    }
+
+    radnaiMonitoringEnabled = normalizedEnabled;
+
+    if (!normalizedEnabled) {
+        lastRadnaiStatus = 'disabled';
+        lastRadnaiFailureReason = null;
+        radnaiConsecutiveFailures = 0;
+        radnaiOutageActive = false;
+    } else {
+        lastRadnaiStatus = 'checking';
+        lastRadnaiFailureReason = null;
+        radnaiConsecutiveFailures = 0;
+        radnaiOutageActive = false;
+    }
+
+    await appendRadnaiMonitorEvent('info', normalizedEnabled ? 'monitor-enabled' : 'monitor-disabled', {
+        source,
+        changedAt: new Date().toISOString(),
+    });
+    await persistRadnaiMonitorState();
+}
+
+function resolveRadnaiAlertUrl() {
+    if (BOT_RADNAI_ALERT_URL) {
+        return BOT_RADNAI_ALERT_URL;
+    }
+
+    if (!BOT_API_URL) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(BOT_API_URL);
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+
+        if (normalizedPath.endsWith('/share-video')) {
+            parsed.pathname = `${normalizedPath.slice(0, -('/share-video'.length))}/alert-radnai`;
+        } else if (!normalizedPath || normalizedPath === '/') {
+            parsed.pathname = '/alert-radnai';
+        } else {
+            parsed.pathname = `${normalizedPath}/alert-radnai`;
+        }
+
+        parsed.search = '';
+        parsed.hash = '';
+        return parsed.toString();
+    } catch (_err) {
+        const normalizedBase = BOT_API_URL.replace(/\/+$/, '');
+        if (normalizedBase.endsWith('/share-video')) {
+            return `${normalizedBase.slice(0, -('/share-video'.length))}/alert-radnai`;
+        }
+        return `${normalizedBase}/alert-radnai`;
+    }
+}
+
+async function sendRadnaiAlertRequest(payload = {}) {
+    const targetUrl = resolveRadnaiAlertUrl();
+    if (!targetUrl) {
+        throw new Error('A Radnai riasztasi URL nincs konfiguralva.');
+    }
+
+    let lastError = null;
+    let lastResponse = null;
+
+    for (let attempt = 1; attempt <= RADNAI_ALERT_MAX_ATTEMPTS; attempt += 1) {
+        try {
+            const botResponse = await fetchWithTimeout(
+                targetUrl,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload || {}),
+                },
+                RADNAI_ALERT_REQUEST_TIMEOUT_MS
+            );
+
+            const bodyText = await botResponse.text().catch(() => '');
+            const responseInfo = {
+                ok: botResponse.ok,
+                status: botResponse.status,
+                statusText: botResponse.statusText,
+                bodyText,
+                url: targetUrl,
+                attempt,
+            };
+            lastResponse = responseInfo;
+
+            if (responseInfo.ok || !shouldRetryStatus(responseInfo.status) || attempt >= RADNAI_ALERT_MAX_ATTEMPTS) {
+                return responseInfo;
+            }
+        } catch (err) {
+            lastError = err;
+            if (attempt >= RADNAI_ALERT_MAX_ATTEMPTS) {
+                throw err;
+            }
+        }
+
+        await delay(RADNAI_ALERT_RETRY_DELAY_MS);
+    }
+
+    if (lastResponse) {
+        return lastResponse;
+    }
+
+    throw lastError || new Error('Ismeretlen hiba a Radnai riasztas kuldese soran.');
+}
+
+function buildRadnaiHash(htmlContent) {
+    return crypto.createHash('sha256').update(htmlContent).digest('hex');
+}
+
+function normalizeRadnaiHtmlForHash(htmlContent) {
+    const rawHtml = typeof htmlContent === 'string'
+        ? htmlContent
+        : JSON.stringify(htmlContent ?? '');
+
+    return rawHtml.replace(
+        /window\.__CF\$cv\$params=\{[^}]*\};/g,
+        'window.__CF$cv$params={};'
+    );
+}
+
+async function checkRadnaiWebsiteForChanges(options = {}) {
+    const forceCheck = options?.force === true;
+
+    if (!radnaiMonitoringEnabled && !forceCheck) {
+        return;
+    }
+
+    if (isRadnaiCheckInProgress) {
+        return;
+    }
+
+    isRadnaiCheckInProgress = true;
+    const checkStartDate = new Date();
+
+    try {
+        let htmlContent = '';
+        let lastFetchError = null;
+
+        for (let attempt = 1; attempt <= RADNAI_FETCH_MAX_ATTEMPTS; attempt += 1) {
+            try {
+                const response = await axios.get(RADNAI_URL, {
+                    timeout: RADNAI_FETCH_TIMEOUT_MS,
+                    responseType: 'text',
+                    validateStatus: () => true,
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        Pragma: 'no-cache',
+                    },
+                });
+
+                if (response.status < 200 || response.status >= 300) {
+                    throw new Error(`A radnaimark.hu ${response.status} HTTP kodot adott vissza.`);
+                }
+
+                htmlContent = typeof response.data === 'string'
+                    ? response.data
+                    : JSON.stringify(response.data ?? '');
+                lastFetchError = null;
+                break;
+            } catch (err) {
+                lastFetchError = err;
+                if (attempt < RADNAI_FETCH_MAX_ATTEMPTS) {
+                    await delay(RADNAI_FETCH_RETRY_DELAY_MS);
+                }
+            }
+        }
+
+        if (lastFetchError) {
+            throw lastFetchError;
+        }
+
+        const normalizedHtmlContent = normalizeRadnaiHtmlForHash(htmlContent);
+        const newHash = buildRadnaiHash(normalizedHtmlContent);
+        const previousHash = lastRadnaiHash;
+        const wasOutageActive = radnaiOutageActive;
+        const hashChanged = Boolean(previousHash && previousHash !== newHash);
+
+        await appendRadnaiHashCheckResult({
+            checkedAt: checkStartDate.toISOString(),
+            previousHash,
+            hash: newHash,
+            changed: hashChanged,
+            firstCheck: !previousHash,
+            htmlLength: htmlContent.length,
+            normalizedHtmlLength: normalizedHtmlContent.length,
+        });
+
+        lastRadnaiHash = newHash;
+        lastRadnaiCheck = checkStartDate;
+        lastRadnaiStatus = 'ok';
+        lastRadnaiFailureReason = null;
+        radnaiConsecutiveFailures = 0;
+        radnaiOutageActive = false;
+
+        if (wasOutageActive) {
+            await appendRadnaiMonitorEvent('info', 'site-recovered', {
+                checkedAt: checkStartDate.toISOString(),
+            });
+        }
+
+        if (hashChanged) {
+            try {
+                const alertResponse = await sendRadnaiAlertRequest({
+                    type: 'change',
+                });
+
+                if (!alertResponse.ok) {
+                    console.error(
+                        `A Radnai valtozasriasztas elkuldese sikertelen volt. Status: ${alertResponse.status}, target: ${alertResponse.url}, details: ${alertResponse.bodyText || '-'}`
+                    );
+                    await appendRadnaiMonitorEvent('error', 'content-change-alert-failed', {
+                        checkedAt: checkStartDate.toISOString(),
+                        status: alertResponse.status,
+                        target: alertResponse.url,
+                        details: alertResponse.bodyText || '',
+                        attempt: alertResponse.attempt || null,
+                    });
+                } else {
+                    await appendRadnaiMonitorEvent('info', 'content-change-alert-sent', {
+                        checkedAt: checkStartDate.toISOString(),
+                        status: alertResponse.status,
+                        target: alertResponse.url,
+                        attempt: alertResponse.attempt || null,
+                    });
+                }
+            } catch (alertErr) {
+                console.error('Hiba a Radnai valtozasriasztas kuldese kozben:', alertErr);
+                await appendRadnaiMonitorEvent('error', 'content-change-alert-request-error', {
+                    checkedAt: checkStartDate.toISOString(),
+                    error: alertErr?.message || 'Ismeretlen hiba',
+                });
+            }
+        }
+
+        await persistRadnaiMonitorState();
+    } catch (err) {
+        const failureDate = new Date();
+        const failureMessage = err?.message || 'Ismeretlen hiba';
+        const wasOutageActive = radnaiOutageActive;
+
+        // Outage eseten szandekosan valtozatlanul hagyjuk a lastRadnaiHash erteket.
+        lastRadnaiCheck = failureDate;
+        lastRadnaiStatus = 'error';
+        lastRadnaiFailureReason = failureMessage;
+        radnaiConsecutiveFailures += 1;
+        radnaiOutageActive = true;
+
+        await appendRadnaiHashCheckResult({
+            checkedAt: failureDate.toISOString(),
+            status: 'fetch-error',
+            error: failureMessage,
+            consecutiveFailures: radnaiConsecutiveFailures,
+        });
+
+        console.error('Hiba a radnaimark.hu figyelese soran:', err);
+
+        const elapsedSinceLastOutageAlert = lastRadnaiOutageAlertAt
+            ? failureDate.getTime() - lastRadnaiOutageAlertAt.getTime()
+            : Number.POSITIVE_INFINITY;
+        const shouldSendOutageAlert = !wasOutageActive
+            || elapsedSinceLastOutageAlert >= RADNAI_OUTAGE_ALERT_COOLDOWN_MS;
+
+        if (shouldSendOutageAlert) {
+            lastRadnaiOutageAlertAt = failureDate;
+            try {
+                const alertResponse = await sendRadnaiAlertRequest({
+                    type: 'outage',
+                    error: failureMessage,
+                });
+
+                if (!alertResponse.ok) {
+                    console.error(
+                        `A Radnai leallasriasztas elkuldese sikertelen volt. Status: ${alertResponse.status}, target: ${alertResponse.url}, details: ${alertResponse.bodyText || '-'}`
+                    );
+                    await appendRadnaiMonitorEvent('error', 'outage-alert-failed', {
+                        checkedAt: failureDate.toISOString(),
+                        status: alertResponse.status,
+                        target: alertResponse.url,
+                        details: alertResponse.bodyText || '',
+                        attempt: alertResponse.attempt || null,
+                    });
+                } else {
+                    await appendRadnaiMonitorEvent('error', 'outage-alert-sent', {
+                        checkedAt: failureDate.toISOString(),
+                        status: alertResponse.status,
+                        target: alertResponse.url,
+                        attempt: alertResponse.attempt || null,
+                    });
+                }
+            } catch (alertErr) {
+                console.error('Hiba a Radnai leallasriasztas kuldese kozben:', alertErr);
+                await appendRadnaiMonitorEvent('error', 'outage-alert-request-error', {
+                    checkedAt: failureDate.toISOString(),
+                    error: alertErr?.message || 'Ismeretlen hiba',
+                });
+            }
+        }
+
+        if (radnaiConsecutiveFailures === 1 || radnaiConsecutiveFailures % 10 === 0) {
+            await appendRadnaiMonitorEvent('error', 'site-check-failed', {
+                checkedAt: failureDate.toISOString(),
+                error: failureMessage,
+                consecutiveFailures: radnaiConsecutiveFailures,
+                outageAlertAttempted: shouldSendOutageAlert,
+            });
+        }
+
+        await persistRadnaiMonitorState();
+    } finally {
+        isRadnaiCheckInProgress = false;
+    }
+}
+
+function startRadnaiMonitor() {
+    if (radnaiMonitorInterval || isRadnaiMonitorStarting) {
+        return;
+    }
+
+    isRadnaiMonitorStarting = true;
+
+    const runCheck = () => {
+        checkRadnaiWebsiteForChanges().catch((err) => {
+            console.error('Hiba az idozitett Radnai ellenorzes futtatasakor:', err);
+        });
+    };
+
+    Promise.resolve()
+        .then(async () => {
+            await ensureRadnaiMonitorStorage();
+            await loadRadnaiMonitorState();
+            if (!radnaiMonitoringEnabled && lastRadnaiStatus !== 'disabled') {
+                lastRadnaiStatus = 'disabled';
+                lastRadnaiFailureReason = null;
+                radnaiConsecutiveFailures = 0;
+                radnaiOutageActive = false;
+                await persistRadnaiMonitorState();
+            }
+            await cleanupOldRadnaiMonitorLogs();
+            await appendRadnaiMonitorEvent('info', 'monitor-started', {
+                status: lastRadnaiStatus,
+                hash: lastRadnaiHash,
+                lastCheck: toIsoStringOrNull(lastRadnaiCheck),
+                outageActive: radnaiOutageActive,
+                monitorEnabled: radnaiMonitoringEnabled,
+            });
+        })
+        .catch((err) => {
+            console.error('Hiba a Radnai monitor inicializalasakor:', err);
+        })
+        .finally(() => {
+            runCheck();
+
+            radnaiMonitorInterval = setInterval(() => {
+                runCheck();
+            }, RADNAI_CHECK_INTERVAL_MS);
+
+            if (!radnaiCleanupInterval) {
+                radnaiCleanupInterval = setInterval(() => {
+                    cleanupOldRadnaiMonitorLogs().catch((err) => {
+                        console.error('Hiba a Radnai monitor napi takaritasa kozben:', err);
+                    });
+                }, RADNAI_LOG_CLEANUP_INTERVAL_MS);
+            }
+
+            isRadnaiMonitorStarting = false;
+        });
+}
+
 async function startServer() {
     try {
         await db.initializeDatabase();
+        await ensureTagColorColumn();
+        await ensureArchiveTagColorColumn();
         await loadAppSettings();
         server.listen(PORT, () => {
             console.log(`A szerver sikeresen elindult és fut a http://localhost:${PORT} címen`);
+            setImmediate(() => {
+                processVideoQueue();
+                processArchiveVideoQueue();
+                startRadnaiMonitor();
+            });
         });
     } catch (err) {
         console.error('Nem sikerült elindítani a szervert:', err);
@@ -3511,3 +6082,4 @@ async function startServer() {
 }
 
 startServer();
+

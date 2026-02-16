@@ -29,7 +29,7 @@
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
       referrerpolicy="no-referrer"
     ></script>
-    <link rel="stylesheet" href="css/index.css?v=20260128-8">
+    <link rel="stylesheet" href="css/index.css?v=20260209-1">
   </head>
   <body>
     <header>
@@ -59,7 +59,7 @@
         >
         <a href="#klipek" data-section="klipek">Klippek</a>
         <a href="#akademia" data-section="akademia">Akadémia</a>
-        <a href="#szavazas" data-section="szavazas">Szavazás</a>
+        <a href="#archivum" data-section="archivum">Archívum</a>
         <a
           href="#programok"
           data-section="programok"
@@ -72,7 +72,7 @@
           id="adminNavBtn"
           data-requires-admin="true"
           style="display: none;"
-          >Admin Mód</a
+          >Admin Panel</a
         >
       </nav>
       <div class="auth-buttons">
@@ -550,32 +550,316 @@
         </div>
       </section>
 
-<!-- Szavazás -->
-      <section id="szavazas">
-        <h2>Szavazások</h2>
-        <div id="pollCreator" class="poll-card">
-          <h3>Új szavazás létrehozása</h3>
-          <p id="pollCreatorNotice" class="poll-hint"></p>
-          <form id="createPollForm">
-            <input
-              id="questionInput"
-              class="poll-text-input"
-              type="text"
-              placeholder="Kérdés"
-              required
-            />
-            <div id="optionsContainer" class="poll-options-inputs"></div>
-            <div class="poll-creator-actions">
-              <button type="button" id="addOptionBtn" class="poll-button poll-secondary-btn">
-                Új válaszlehetőség
+<!-- Archívum -->
+      <section id="archivum">
+        <div id="archivePermissionOverlay" class="permission-overlay" aria-hidden="true">
+          <div class="permission-overlay__content">
+            <h3>Az archívum csak jogosultsággal elérhető</h3>
+            <p>Jelentkezz be, és kérj "Archívum megtekintés" rangot az adminoktól.</p>
+          </div>
+        </div>
+        <div class="archive-content">
+          <div class="archive-shell">
+            <div class="archive-header">
+              <h2>Archívum</h2>
+              <p class="archive-subtitle">
+                Belső gyűjtemény képekkel, hangokkal, dokumentumokkal és videókkal
+              </p>
+            </div>
+
+            <div id="archiveCategoryGrid" class="archive-category-grid">
+              <button class="archive-category-card" type="button" data-archive-category="kepek">
+                <span class="archive-category-icon"><i class="fas fa-image"></i></span>
+                <span class="archive-category-text">
+                  <span class="archive-category-title">Képek</span>
+                  <span class="archive-category-desc">Fotók, galériák, vizuális anyagok.</span>
+                </span>
               </button>
-              <button type="submit" class="poll-button poll-primary-btn">
-                Szavazás létrehozása
+              <button class="archive-category-card" type="button" data-archive-category="hang">
+                <span class="archive-category-icon"><i class="fas fa-headphones"></i></span>
+                <span class="archive-category-text">
+                  <span class="archive-category-title">Hang</span>
+                  <span class="archive-category-desc">Zene, hangfelvételek, interjúk.</span>
+                </span>
+              </button>
+              <button class="archive-category-card" type="button" data-archive-category="dokumentumok">
+                <span class="archive-category-icon"><i class="fas fa-file-lines"></i></span>
+                <span class="archive-category-text">
+                  <span class="archive-category-title">Dokumentumok</span>
+                  <span class="archive-category-desc">PDF jelentések, jegyzetek.</span>
+                </span>
+              </button>
+              <button class="archive-category-card" type="button" data-archive-category="videok">
+                <span class="archive-category-icon"><i class="fas fa-film"></i></span>
+                <span class="archive-category-text">
+                  <span class="archive-category-title">Videók</span>
+                  <span class="archive-category-desc">Archív videók külön címkékkel.</span>
+                </span>
               </button>
             </div>
-          </form>
+
+            <div id="archiveBrowser" class="archive-browser" style="display: none;">
+              <div class="archive-browser-header">
+                <button id="archiveBackBtn" class="secondary-btn" type="button">
+                  <i class="fas fa-arrow-left"></i> Vissza a kategóriákhoz
+                </button>
+                <div class="archive-browser-title">
+                  <h3 id="archiveCategoryTitle">Archívum</h3>
+                  <span id="archiveCategoryHint">Válassz mappát a tartalmakhoz.</span>
+                </div>
+                <button id="archiveDeleteFolderBtn" class="secondary-btn archive-folder-delete-btn" type="button" style="display: none;">Mappa törlése</button>
+              </div>
+
+              <div class="archive-folder-toolbar">
+                <div id="archiveFolderRow" class="archive-folder-row"></div>
+                <div class="archive-folder-actions" data-archive-edit>
+                  <input
+                    id="archiveFolderNameInput"
+                    class="uniform-control archive-folder-input"
+                    type="text"
+                    placeholder="Új mappa neve"
+                  />
+                  <button id="archiveCreateFolderBtn" class="secondary-btn" type="button">Új mappa</button>
+                </div>
+              </div>
+
+              <div class="archive-upload-bar" data-archive-edit>
+                <input id="archiveUploadInput" type="file" style="display: none;" multiple />
+                <button id="archiveUploadBtn" class="primary-button" type="button">Fájlok feltöltése</button>
+                <button id="archiveRenameFolderBtn" class="secondary-btn" type="button" style="display: none;">Mappa átnevezése</button>
+                <span id="archiveUploadStatus" class="archive-status"></span>
+              </div>
+
+              <div id="archiveFolderEmpty" class="programs-empty" style="display: none;">
+                Nincs mappa ebben a kategóriában.
+              </div>
+              <div id="archiveVideoPanel" class="archive-video-panel" style="display: none;">
+                <div class="clips-header archive-video-header">
+                  <div>
+                    <h3>Videók</h3>
+                    <p id="archiveVideoPanelHint">Nyiss meg egy mappát az archív videók megjelenítéséhez.</p>
+                  </div>
+                  <button id="archiveShowUploadModalBtn" class="primary-button primary-button-margin" type="button">Feltöltés</button>
+                </div>
+
+                <div class="clip-filters archive-video-filters">
+                  <div class="filter-group" style="flex: 2;">
+                    <label for="archiveVideoSearchInput">Keresés cím vagy fájlnév alapján</label>
+                    <input
+                      id="archiveVideoSearchInput"
+                      class="uniform-control"
+                      type="search"
+                      placeholder="Pl. interjú"
+                    />
+                  </div>
+                  <div class="filter-group" style="flex: 2;">
+                    <label>Címke</label>
+                    <div class="tag-select-container" id="archiveTagSelectContainer">
+                      <div class="tag-select-box uniform-control">Válassz címkéket...</div>
+                      <div class="tag-dropdown"></div>
+                    </div>
+                  </div>
+                  <div class="filter-group">
+                    <label for="archiveSortOrderSelect">Rendezés</label>
+                    <select id="archiveSortOrderSelect" class="uniform-control">
+                      <option value="newest">Legújabb elöl</option>
+                      <option value="oldest">Legrégebbi elöl</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label for="archiveVideoQualitySelect">Minőség</label>
+                    <select id="archiveVideoQualitySelect" class="uniform-control">
+                      <option value="original">Eredeti / Max</option>
+                      <option value="1440p">2K - 1440p</option>
+                      <option value="1080p">Full HD - 1080p</option>
+                      <option value="720p">HD - 720p</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label for="archivePageSizeSelect">Videók száma / oldal</label>
+                    <select id="archivePageSizeSelect" class="uniform-control">
+                      <option value="12">12</option>
+                      <option value="24" selected>24</option>
+                      <option value="40">40</option>
+                      <option value="80">80</option>
+                    </select>
+                  </div>
+                  <div class="filter-group filter-group--actions">
+                    <label class="sr-only" for="archiveFilterResetBtn">Szűrők törlése</label>
+                    <button id="archiveFilterResetBtn" class="secondary-btn secondary-btn-szuro uniform-control">Szűrők törlése</button>
+                  </div>
+                </div>
+
+                <div id="archiveVideoGridContainer"></div>
+                <div id="archiveVideoPagination" class="pagination"></div>
+                <div id="archiveVideoToast" class="upload-toast clip-toast" aria-live="polite"></div>
+              </div>
+              <div id="archiveFileGrid" class="archive-file-grid"></div>
+              <div id="archiveFileEmpty" class="programs-empty" style="display: none;">
+                Nincs megjeleníthető fájl ebben a mappában.
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="pollList" class="poll-list"></div>
+
+        <div id="archiveImageModal" class="archive-viewer-modal" aria-hidden="true">
+          <div class="archive-viewer-content">
+            <div class="archive-viewer-header">
+              <h3 id="archiveImageTitle">Képnézet</h3>
+              <button id="archiveImageClose" class="archive-viewer-close" type="button" aria-label="Bezárás">&times;</button>
+            </div>
+            <div class="archive-viewer-body">
+              <div class="archive-image-stage">
+                <button id="archiveImagePrev" class="archive-image-nav archive-image-nav--prev" type="button" aria-label="Előző kép">
+                  <i class="fas fa-chevron-left"></i>
+                </button>
+                <img id="archiveImagePreview" alt="Archív kép" />
+                <button id="archiveImageNext" class="archive-image-nav archive-image-nav--next" type="button" aria-label="Következő kép">
+                  <i class="fas fa-chevron-right"></i>
+                </button>
+              </div>
+              <div class="archive-zoom-control">
+                <span>−</span>
+                <input id="archiveImageZoom" class="archive-zoom-range" type="range" min="1" max="3" step="0.01" value="1" />
+                <span>+</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="archiveDocModal" class="archive-viewer-modal" aria-hidden="true">
+          <div class="archive-viewer-content archive-doc-content">
+            <div class="archive-viewer-header">
+              <h3 id="archiveDocTitle">Dokumentum</h3>
+              <button id="archiveDocClose" class="archive-viewer-close" type="button" aria-label="Bezárás">&times;</button>
+            </div>
+            <div class="archive-viewer-body archive-doc-body">
+              <iframe id="archiveDocFrame" title="Dokumentum olvasó"></iframe>
+            </div>
+          </div>
+        </div>
+
+        <div id="archiveVideoUploadModal" class="modal-overlay" style="display: none;">
+          <div class="upload-modal-content">
+            <div class="upload-modal-header">
+              <h3 class="upload-modal-title">Archív videó feltöltése</h3>
+              <button class="close-btn" id="archiveCloseUploadModal" aria-label="Bezárás">&times;</button>
+            </div>
+
+            <div class="upload-modal-toolbar">
+              <button class="primary-btn" id="archiveAddFilesBtn">Fájlok hozzáadása</button>
+              <div class="toolbar-tags">
+                <label for="archiveGlobalTagSelect">Címkék mindhez</label>
+                <select id="archiveGlobalTagSelect" multiple size="8"></select>
+              </div>
+              <div id="archiveCreateTagWrapper" style="display: none;">
+                <div class="create-tag-row">
+                  <div class="tag-field-group">
+                    <input
+                      type="text"
+                      id="archiveNewTagName"
+                      placeholder="Új címke neve"
+                      class="new-tag-input"
+                    />
+                    <button id="archiveTagColorButton" type="button" class="tag-color-button">
+                      <span class="tag-color-swatch"></span>
+                      Szín
+                    </button>
+                  </div>
+                  <div class="tag-action-group">
+                    <button id="archiveDeleteTagButton" type="button" class="danger-btn">Törlés</button>
+                    <button id="archiveCreateTagButton" type="button">Hozzáadás</button>
+                  </div>
+                  <input type="color" id="archiveNewTagColor" class="tag-color-input" value="#5865f2" />
+                </div>
+                <small id="archiveCreateTagStatus"></small>
+              </div>
+            </div>
+
+            <input type="file" id="archiveVideoFileInput" accept="video/*" style="display: none;" multiple />
+
+            <button id="archiveAddMoreVideosBtn" class="secondary-btn add-more-btn" type="button" style="display: none;">
+              Videó hozzáadása
+            </button>
+
+            <div id="archiveUploadQueueContainer" class="upload-queue-container">
+              <div id="archiveDropZone" class="drop-zone">
+                <p>Húzd ide a videóidat vagy kattints a tallózáshoz</p>
+                <p id="archiveSelectedFileName">Nincs kiválasztott fájl.</p>
+              </div>
+            </div>
+
+            <div id="archiveUploadToast" class="upload-toast" aria-live="polite"></div>
+
+            <div class="upload-modal-footer">
+              <div>
+                <div id="archiveUploadSummary" class="upload-summary">Nincs kiválasztott fájl.</div>
+                <div id="archiveUploadStatusText" class="upload-status"></div>
+              </div>
+              <div class="upload-actions">
+                <button id="archiveCancelUploadBtn" class="secondary-btn" type="button">Mégse</button>
+                <button id="archiveUploadSubmitBtn" class="primary-btn" type="button" disabled>Feltöltés</button>
+              </div>
+            </div>
+
+            <div id="archiveUploadProgress" class="upload-progress" style="display: none;">
+              <div class="upload-progress-bar">
+                <div id="archiveUploadProgressFill" class="upload-progress-fill"></div>
+              </div>
+              <div class="upload-progress-meta">
+                <span id="archiveUploadProgressCount">0 / 0 videó</span>
+                <span id="archiveUploadProgressEta">Hátralévő idő: --</span>
+              </div>
+              <div id="archiveUploadProgressDetails" class="upload-progress-details"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="archiveThumbnailPickerModal" class="modal-overlay" style="display: none;" aria-hidden="true">
+          <div class="upload-modal-content archive-thumbnail-picker">
+            <div class="upload-modal-header">
+              <h3 class="upload-modal-title">Indexkep kivalasztasa</h3>
+              <button class="close-btn" id="archiveThumbnailPickerClose" type="button" aria-label="Bezaras">&times;</button>
+            </div>
+
+            <p id="archiveThumbnailPickerTitle" class="archive-thumbnail-picker__title"></p>
+
+            <div class="archive-thumbnail-picker__player">
+              <video
+                id="archiveThumbnailPickerVideo"
+                class="archive-thumbnail-picker__video"
+                controls
+                preload="metadata"
+                playsinline
+                webkit-playsinline
+              ></video>
+            </div>
+
+            <div class="archive-thumbnail-picker__timeline">
+              <div class="archive-thumbnail-picker__time">
+                <span id="archiveThumbnailCurrent">0:00.00</span>
+                <span id="archiveThumbnailDuration">0:00</span>
+              </div>
+              <input id="archiveThumbnailSlider" type="range" min="0" max="0" step="0.04" value="0" disabled />
+            </div>
+
+            <div class="archive-thumbnail-picker__toolbar">
+              <button id="archiveThumbnailStepBack" class="secondary-btn" type="button">-5 mp</button>
+              <button id="archiveThumbnailStepForward" class="secondary-btn" type="button">+5 mp</button>
+              <p id="archiveThumbnailPickerHint" class="archive-thumbnail-picker__hint">
+                Lejatszas kozben allitsd meg ott, amelyik kepkockat indexkepnek szeretned.
+              </p>
+            </div>
+
+            <div class="upload-modal-footer archive-thumbnail-picker__footer">
+              <div></div>
+              <div class="upload-action-buttons">
+                <button id="archiveThumbnailPickerCancel" class="secondary-btn" type="button">Megse</button>
+                <button id="archiveThumbnailPickerSave" class="primary-btn" type="button" disabled>Indexkep mentese</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
 <!-- Programok -->
@@ -593,14 +877,14 @@
       <section id="admin">
         <div class="admin-header">
           <div>
-            <h2>Felhasználók Kezelése</h2>
+            <h2>Admin Panel</h2>
             <p class="admin-description">
               Állítsd be felhasználónként, hogy ki tölthet fel, valamint a feltöltésekhez tartozó méret- és darabkorlátokat.
             </p>
           </div>
 
           <div class="admin-actions">
-            <button id="videoManagementBtn" class="secondary-btn" type="button">Videó Kezelés Felület</button>
+            <button id="videoManagementBtn" class="secondary-btn" type="button">Admin felület</button>
             <button id="discordPanelBtn" class="secondary-btn" type="button">Discord Panel</button>
           </div>
         </div>
@@ -745,10 +1029,12 @@
       </div>
     </div>
 
-  <script src="js/index.js?v=20260128-8"></script>
+  <script src="js/index.js?v=20260209-1"></script>
 
 
 
 
   </body>
 </html>
+
+

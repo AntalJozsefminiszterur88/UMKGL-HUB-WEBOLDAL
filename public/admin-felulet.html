@@ -1,0 +1,203 @@
+﻿<!DOCTYPE html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin felület</title>
+    <link rel="icon" type="image/png" href="program_icons/oldal_logo.png" />
+    <link rel="stylesheet" href="css/video-kezeles-felulet.css" />
+    <style>
+      .console-output,
+      .json-output {
+        background: #12151f;
+        border: 1px solid #2c3246;
+        border-radius: 8px;
+        color: #e6e8ee;
+        font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin: 0;
+        max-height: 260px;
+        min-height: 120px;
+        overflow: auto;
+        padding: 0.9rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .movie-results-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1rem;
+      }
+
+      .movie-card {
+        background-color: #2f3136;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        border: 1px solid #202225;
+      }
+
+      .movie-card__poster {
+        width: 100%;
+        aspect-ratio: 2 / 3;
+        object-fit: cover;
+        display: block;
+        background-color: #202225;
+      }
+
+      .movie-card__details {
+        padding: 0.75rem;
+      }
+
+      .movie-card__title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0 0 0.3rem 0;
+        color: #fff;
+      }
+
+      .movie-card__category,
+      .movie-card__times {
+        font-size: 0.85rem;
+        color: #b9bbbe;
+        margin: 0.2rem 0;
+      }
+
+      .movie-card__times strong {
+        color: #dcddde;
+      }
+
+      .radnai-alert {
+        margin-top: 0.75rem;
+        padding: 0.65rem 0.8rem;
+        border-radius: 8px;
+        border: 1px solid #3d475f;
+        background: #1b2130;
+        color: #d9e1f3;
+        font-size: 0.9rem;
+      }
+
+      .radnai-alert--success {
+        border-color: #2b8a57;
+        background: #13291f;
+        color: #b6f2cf;
+      }
+
+      .radnai-alert--error {
+        border-color: #a44343;
+        background: #301919;
+        color: #ffc9c9;
+      }
+
+      .radnai-alert--info {
+        border-color: #3d475f;
+        background: #1b2130;
+        color: #d9e1f3;
+      }
+
+      .radnai-actions {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+    </style>
+  </head>
+  <body>
+    <a href="/" class="back-link"><span>←</span> Vissza a főoldalra</a>
+    <div class="manager">
+      <div class="manager__header">
+        <h1 class="manager__title">Admin felület</h1>
+        <p class="manager__subtitle">Klipek áttekintése és a feldolgozás követése egyetlen oldalon.</p>
+        <div class="manager__tabs">
+          <button class="manager__tab manager__tab--active" data-target="clipsSection" type="button">Klip lista</button>
+          <button class="manager__tab" data-target="processingSection" type="button">Feldolgozási állapot</button>
+          <button class="manager__tab" data-target="movieSection" type="button">Mozi Teszt</button>
+          <button class="manager__tab" data-target="radnaiSection" type="button">Radnai Figyelő</button>
+        </div>
+      </div>
+
+      <div class="manager__content">
+        <section id="clipsSection" class="manager__section manager__section--active">
+          <div class="clip-window">
+            <h2>Feltöltött klipek</h2>
+            <p class="clip-window__subtitle">Egyszerű, áttekinthető lista a klipjeidről.</p>
+            <div class="clip-window__controls">
+              <label for="clipWindowVariant">Megjelenített fájlok</label>
+              <select id="clipWindowVariant" class="clip-window__select">
+                <option value="original">Eredeti videók</option>
+                <option value="720p">720p videók</option>
+                <option value="other">Egyéb fájlok</option>
+              </select>
+              <span id="clipWindowCount" class="clip-window__count"></span>
+            </div>
+            <div id="clipWindowStatus" class="clip-window__status">Klipek betöltése folyamatban...</div>
+            <div id="clipWindowTable"></div>
+          </div>
+        </section>
+
+        <section id="processingSection" class="manager__section">
+          <div class="process-window">
+            <div class="process-window__header">
+              <div>
+                <h2>Feldolgozási állapot</h2>
+                <p class="process-window__subtitle">Ellenőrizd az aktuális és sorban álló fájlokat.</p>
+              </div>
+              <button id="refreshProcessing" class="process-window__refresh" type="button">Frissítés</button>
+            </div>
+            <p id="processingStatusText" class="process-window__status">Állapot betöltése folyamatban...</p>
+            <div class="process-window__card" id="currentProcessing"></div>
+            <h3 class="process-window__section-title">Várólista <span id="processingQueueCount"></span></h3>
+            <ul class="process-window__queue" id="processingQueue"></ul>
+          </div>
+        </section>
+
+        <section id="movieSection" class="manager__section">
+          <div class="process-window">
+            <div class="process-window__header">
+              <div>
+                <h2>Mozi Adatgyűjtés Teszt</h2>
+                <p class="process-window__subtitle">Manuális adatgyűjtés indítása a Cinema City műsorából.</p>
+              </div>
+              <button id="fetchMoviesBtn" class="process-window__refresh" type="button">Lekérdezés Indítása</button>
+            </div>
+            <h3>Konzol</h3>
+            <pre id="movieConsole" class="console-output"></pre>
+            <h3>Eredmény</h3>
+            <div id="movieResults" class="movie-results-grid"></div>
+          </div>
+        </section>
+
+        <section id="radnaiSection" class="manager__section">
+          <div class="process-window">
+            <div class="process-window__header">
+              <div>
+                <h2>Radnai Márk Weboldal Figyelő</h2>
+                <p class="process-window__subtitle">A rendszer percenként ellenőrzi a változásokat.</p>
+              </div>
+              <div class="radnai-actions">
+                <button id="radnaiToggleBtn" class="process-window__refresh" type="button">Figyelés Kikapcsolása</button>
+                <button id="radnaiTestBtn" class="process-window__refresh" type="button">Teszt Riadó Indítása</button>
+              </div>
+            </div>
+
+            <div class="process-window__card">
+              <h3>Státusz</h3>
+              <p id="radnaiStatusText" class="process-window__meta">Betöltés...</p>
+              <p id="radnaiLastCheck" class="process-window__meta">Utolsó ellenőrzés: -</p>
+              <pre id="radnaiHashDisplay" class="console-output" style="height: 60px; min-height: 60px; margin-top: 10px;">Hash: -</pre>
+              <p id="radnaiAlertMessage" class="radnai-alert radnai-alert--info">Nincs futtatott teszt riadó.</p>
+              <h3 style="margin-top: 1rem;">Hibakeresési napló</h3>
+              <pre id="radnaiDebugLog" class="console-output" style="height: 180px; min-height: 120px; margin-top: 10px;">Napló üres.</pre>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="js/admin-felulet.js?v=2026-02-11-radnai-toggle"></script>
+  </body>
+</html>

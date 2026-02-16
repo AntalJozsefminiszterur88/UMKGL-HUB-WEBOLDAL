@@ -18,6 +18,8 @@ async function initializeDatabase() {
         can_upload INTEGER DEFAULT 0,
         can_transfer INTEGER DEFAULT 0,
         can_view_clips INTEGER DEFAULT 0,
+        can_view_archive INTEGER DEFAULT 0,
+        can_edit_archive INTEGER DEFAULT 0,
         is_admin INTEGER DEFAULT 0,
         upload_count INTEGER DEFAULT 0,
         max_file_size_mb INTEGER DEFAULT 50,
@@ -35,6 +37,12 @@ async function initializeDatabase() {
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_clips INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_archive INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_archive INTEGER DEFAULT 0'
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0'
@@ -103,6 +111,7 @@ async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS tags (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
+        color TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
@@ -111,6 +120,62 @@ async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS video_tags (
         video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
         tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (video_id, tag_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS archive_videos (
+        id SERIAL PRIMARY KEY,
+        folder_name TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        uploader_id INTEGER NOT NULL REFERENCES users(id),
+        uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+        content_created_at TIMESTAMPTZ DEFAULT NOW(),
+        thumbnail_filename TEXT,
+        has_720p INTEGER DEFAULT 0,
+        original_quality TEXT,
+        processing_status TEXT DEFAULT 'done',
+        processing_error TEXT
+      )
+    `);
+
+    await client.query(
+      'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS folder_name TEXT'
+    );
+    await client.query(
+      'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS content_created_at TIMESTAMPTZ DEFAULT NOW()'
+    );
+    await client.query(
+      'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS thumbnail_filename TEXT'
+    );
+    await client.query(
+      'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS has_720p INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS original_quality TEXT'
+    );
+    await client.query(
+      "ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS processing_status TEXT DEFAULT 'done'"
+    );
+    await client.query(
+      'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS processing_error TEXT'
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS archive_tags (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        color TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS archive_video_tags (
+        video_id INTEGER NOT NULL REFERENCES archive_videos(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES archive_tags(id) ON DELETE CASCADE,
         PRIMARY KEY (video_id, tag_id)
       )
     `);

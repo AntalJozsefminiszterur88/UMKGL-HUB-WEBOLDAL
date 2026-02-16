@@ -385,7 +385,7 @@
       }
 
       async function fetchProcessingStatus() {
-        const response = await fetch("/api/processing-status", {
+        const response = await fetch("/api/admin/processing-status", {
           headers: buildAuthHeaders(),
         });
 
@@ -399,6 +399,52 @@
           isProcessing: Boolean(data?.isProcessing),
           currentTask: data?.currentTask || null,
           pending: Array.isArray(data?.pending) ? data.pending : [],
+        };
+      }
+
+      async function readApiResponse(response) {
+        const contentType = response.headers.get("content-type") || "";
+        const rawText = await response.text().catch(() => "");
+        let parsedBody = null;
+
+        if (rawText) {
+          try {
+            parsedBody = JSON.parse(rawText);
+          } catch (_err) {
+            parsedBody = null;
+          }
+        }
+
+        return {
+          contentType,
+          rawText,
+          parsedBody,
+        };
+      }
+
+      async function fetchRadnaiStatus() {
+        const response = await fetch("/api/admin/radnai-status", {
+          headers: buildAuthHeaders(),
+        });
+
+        const responseInfo = await readApiResponse(response);
+        const data = responseInfo.parsedBody || {};
+        if (!response.ok) {
+          const message = data?.message || `Nem sikerult lekerdezni a Radnai figyelo allapotat (HTTP ${response.status}).`;
+          throw new Error(message);
+        }
+
+        return {
+          httpStatus: response.status,
+          rawResponse: responseInfo.rawText,
+          monitorEnabled: data?.monitorEnabled !== false,
+          status: data?.status || "unknown",
+          lastCheck: data?.lastCheck || null,
+          hash: data?.hash || null,
+          failureReason: data?.failureReason || null,
+          consecutiveFailures: Number.isFinite(Number(data?.consecutiveFailures)) ? Number(data.consecutiveFailures) : 0,
+          outageActive: data?.outageActive === true,
+          lastOutageAlertAt: data?.lastOutageAlertAt || null,
         };
       }
 
@@ -470,6 +516,16 @@
         const currentTaskEl = document.getElementById("currentProcessing");
         const queueListEl = document.getElementById("processingQueue");
         const queueCountEl = document.getElementById("processingQueueCount");
+        const fetchMoviesBtn = document.getElementById("fetchMoviesBtn");
+        const movieConsole = document.getElementById("movieConsole");
+        const movieResults = document.getElementById("movieResults");
+        const radnaiToggleBtn = document.getElementById("radnaiToggleBtn");
+        const radnaiTestBtn = document.getElementById("radnaiTestBtn");
+        const radnaiStatusText = document.getElementById("radnaiStatusText");
+        const radnaiLastCheck = document.getElementById("radnaiLastCheck");
+        const radnaiHashDisplay = document.getElementById("radnaiHashDisplay");
+        const radnaiAlertMessage = document.getElementById("radnaiAlertMessage");
+        const radnaiDebugLog = document.getElementById("radnaiDebugLog");
         const tabs = document.querySelectorAll(".manager__tab");
         const sections = document.querySelectorAll(".manager__section");
         const VARIANT_STORAGE_KEY = "clipWindowVariant";
@@ -478,6 +534,9 @@
         let clipsLoaded = false;
         let currentClips = [];
         let currentSort = { key: "uploaded_at", direction: "desc" };
+        let radnaiDebugHistory = [];
+        let radnaiMonitorEnabled = true;
+        let radnaiTogglePending = false;
         const sortableKeys = new Set(["id", "original_name", "sizeBytes", "uploaded_at", "content_created_at"]);
 
         function handleSortChange(key) {
@@ -502,6 +561,165 @@
 
         const renderCurrentClips = () => {
           renderClipTable(statusEl, tableContainer, currentClips, countEl, adminUser, currentSort, handleSortChange, handleClipRemoval);
+        };
+
+        const renderMovieCards = (movies) => {
+          if (!movieResults) {
+            return;
+          }
+
+          movieResults.innerHTML = "";
+
+          if (!Array.isArray(movies) || movies.length === 0) {
+            movieResults.textContent = "Nincs megjelenitheto film.";
+            return;
+          }
+
+          movies.forEach((movie) => {
+            const card = document.createElement("div");
+            card.className = "movie-card";
+
+            const poster = document.createElement("img");
+            poster.className = "movie-card__poster";
+            poster.alt = movie?.title ? `${movie.title} plakat` : "Film plakat";
+            poster.loading = "lazy";
+            if (movie?.posterUrl) {
+              poster.src = movie.posterUrl;
+            }
+
+            const details = document.createElement("div");
+            details.className = "movie-card__details";
+
+            const title = document.createElement("h4");
+            title.className = "movie-card__title";
+            title.textContent = movie?.title || "Ismeretlen cim";
+
+            const category = document.createElement("p");
+            category.className = "movie-card__category";
+            category.textContent = movie?.category || "Kategoria: ismeretlen";
+
+            const times = document.createElement("p");
+            times.className = "movie-card__times";
+
+            const timesLabel = document.createElement("strong");
+            timesLabel.textContent = "Idopontok: ";
+            times.appendChild(timesLabel);
+            times.appendChild(document.createTextNode(movie?.times || "Nincs idopont"));
+
+            details.appendChild(title);
+            details.appendChild(category);
+            details.appendChild(times);
+
+            card.appendChild(poster);
+            card.appendChild(details);
+            movieResults.appendChild(card);
+          });
+        };
+
+        const safeJsonStringify = (value) => {
+          try {
+            return JSON.stringify(value, null, 2);
+          } catch (_err) {
+            return String(value);
+          }
+        };
+
+        const appendRadnaiDebug = (title, details) => {
+          if (!radnaiDebugLog) {
+            return;
+          }
+
+          const timestamp = new Date().toLocaleTimeString("hu-HU", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+
+          const lines = [`[${timestamp}] ${title}`];
+          if (details !== undefined && details !== null && details !== "") {
+            if (typeof details === "string") {
+              lines.push(details);
+            } else {
+              lines.push(safeJsonStringify(details));
+            }
+          }
+
+          radnaiDebugHistory.push(lines.join("\n"));
+          if (radnaiDebugHistory.length > 25) {
+            radnaiDebugHistory = radnaiDebugHistory.slice(-25);
+          }
+
+          radnaiDebugLog.textContent = radnaiDebugHistory.join("\n\n");
+        };
+
+        const setRadnaiAlertMessage = (text, type) => {
+          if (!radnaiAlertMessage) {
+            return;
+          }
+
+          const normalizedType = type || "info";
+          radnaiAlertMessage.className = `radnai-alert radnai-alert--${normalizedType}`;
+          radnaiAlertMessage.textContent = text || "-";
+        };
+
+        const updateRadnaiToggleButton = () => {
+          if (!radnaiToggleBtn) {
+            return;
+          }
+          if (radnaiTogglePending) {
+            radnaiToggleBtn.disabled = true;
+            radnaiToggleBtn.textContent = "Valtas folyamatban...";
+            return;
+          }
+          radnaiToggleBtn.disabled = false;
+          radnaiToggleBtn.textContent = radnaiMonitorEnabled
+            ? "Figyelés Kikapcsolása"
+            : "Figyelés Bekapcsolása";
+        };
+
+        window.addEventListener("error", (event) => {
+          appendRadnaiDebug("Globalis JS hiba", {
+            message: event?.message || "Ismeretlen hiba",
+            file: event?.filename || "",
+            line: event?.lineno || "",
+            column: event?.colno || "",
+          });
+          setRadnaiAlertMessage("JavaScript hiba tortent. Ellenorizd a hibakeresesi naplot.", "error");
+        });
+
+        window.addEventListener("unhandledrejection", (event) => {
+          appendRadnaiDebug("Kezeletlen Promise hiba", event?.reason || "Ismeretlen Promise hiba");
+          setRadnaiAlertMessage("Kezeletlen Promise hiba tortent. Ellenorizd a hibakeresesi naplot.", "error");
+        });
+
+        const renderRadnaiStatus = (data) => {
+          radnaiMonitorEnabled = data?.monitorEnabled !== false;
+          updateRadnaiToggleButton();
+
+          if (radnaiStatusText) {
+            if (!radnaiMonitorEnabled) {
+              radnaiStatusText.textContent = "Statusz: KIKAPCSOLVA";
+            } else {
+              const status = (data?.status || "unknown").toString().toLowerCase();
+              if (status === "ok") {
+                radnaiStatusText.textContent = "Statusz: OK";
+              } else if (status === "error") {
+                const reason = data?.failureReason ? ` (${data.failureReason})` : "";
+                const tries = Number(data?.consecutiveFailures) > 0 ? ` [hibak: ${data.consecutiveFailures}]` : "";
+                radnaiStatusText.textContent = `Statusz: HIBA${tries}${reason}`;
+              } else {
+                radnaiStatusText.textContent = `Statusz: ${status}`;
+              }
+            }
+          }
+
+          if (radnaiLastCheck) {
+            radnaiLastCheck.textContent = `Utolso ellenorzes: ${data?.lastCheck ? formatHungarianDate(data.lastCheck) : "-"}`;
+          }
+
+          if (radnaiHashDisplay) {
+            radnaiHashDisplay.textContent = `Hash: ${data?.hash || "-"}`;
+          }
         };
 
         if (!isUserLoggedIn()) {
@@ -566,6 +784,207 @@
           }
         };
 
+        const loadMovieData = async () => {
+          if (!fetchMoviesBtn) {
+            return;
+          }
+
+          const buttonLabel = fetchMoviesBtn.textContent;
+          fetchMoviesBtn.disabled = true;
+          fetchMoviesBtn.textContent = "Lekerdezes folyamatban...";
+
+          if (movieConsole) {
+            movieConsole.textContent = "Cinema City API lekerdezes indul...";
+          }
+
+          if (movieResults) {
+            movieResults.textContent = "";
+          }
+
+          try {
+            const response = await fetch("/api/admin/fetch-movies", {
+              headers: buildAuthHeaders(),
+            });
+
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+              const message = result?.message || "Nem sikerult lekerdezni a mozi adatokat.";
+              throw new Error(message);
+            }
+
+            const logs = Array.isArray(result?.logs) ? result.logs : [];
+            const movieData = Array.isArray(result?.movieData) ? result.movieData : [];
+
+            if (movieConsole) {
+              movieConsole.textContent = logs.length ? logs.join("\n") : "Nincs naplouzenet.";
+            }
+
+            if (movieResults) {
+              renderMovieCards(movieData);
+            }
+          } catch (error) {
+            console.error("Mozi adatgyujtesi hiba:", error);
+            if (movieConsole) {
+              movieConsole.textContent = error.message || "Nem sikerult lekerdezni a mozi adatokat.";
+            }
+          } finally {
+            fetchMoviesBtn.disabled = false;
+            fetchMoviesBtn.textContent = buttonLabel;
+          }
+        };
+
+        const loadRadnaiStatus = async () => {
+          if (radnaiStatusText) {
+            radnaiStatusText.textContent = "Statusz betoltese folyamatban...";
+          }
+          setRadnaiAlertMessage("Radnai statusz lekerdezese...", "info");
+          appendRadnaiDebug("Radnai statusz lekerdezes indul.");
+
+          try {
+            const statusData = await fetchRadnaiStatus();
+            renderRadnaiStatus(statusData);
+            setRadnaiAlertMessage(`Radnai statusz frissitve (HTTP ${statusData.httpStatus}).`, "success");
+            appendRadnaiDebug("Radnai statusz valasz", {
+              httpStatus: statusData.httpStatus,
+              monitorEnabled: statusData.monitorEnabled,
+              status: statusData.status,
+              lastCheck: statusData.lastCheck,
+              hash: statusData.hash,
+              rawResponse: statusData.rawResponse || "",
+            });
+          } catch (error) {
+            console.error("Radnai allapot lekerdezesi hiba:", error);
+            if (radnaiStatusText) {
+              radnaiStatusText.textContent = error.message || "Nem sikerult lekerdezni a Radnai allapotot.";
+            }
+            setRadnaiAlertMessage(error.message || "Nem sikerult lekerdezni a Radnai allapotot.", "error");
+            appendRadnaiDebug("Radnai statusz lekerdezes HIBA", error?.stack || error?.message || String(error));
+          }
+        };
+
+        const toggleRadnaiMonitoring = async () => {
+          if (!radnaiToggleBtn) {
+            return;
+          }
+
+          const nextEnabled = !radnaiMonitorEnabled;
+          radnaiTogglePending = true;
+          updateRadnaiToggleButton();
+          setRadnaiAlertMessage(
+            nextEnabled ? "Radnai figyeles bekapcsolasa folyamatban..." : "Radnai figyeles kikapcsolasa folyamatban...",
+            "info"
+          );
+          appendRadnaiDebug("Radnai figyeles allapot valtas indul", { enabled: nextEnabled });
+
+          try {
+            const response = await fetch("/api/admin/radnai-monitor", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...buildAuthHeaders(),
+              },
+              body: JSON.stringify({ enabled: nextEnabled }),
+            });
+
+            const responseInfo = await readApiResponse(response);
+            const result = responseInfo.parsedBody || {};
+
+            if (!response.ok) {
+              const message = result?.message || `Nem sikerult valtani a Radnai figyelest (HTTP ${response.status}).`;
+              appendRadnaiDebug("Radnai figyeles allapot valasz HIBA", {
+                httpStatus: response.status,
+                body: responseInfo.parsedBody || responseInfo.rawText,
+              });
+              throw new Error(message);
+            }
+
+            radnaiMonitorEnabled = result?.monitorEnabled !== false;
+            setRadnaiAlertMessage(result?.message || "Radnai figyeles allapot frissitve.", "success");
+            appendRadnaiDebug("Radnai figyeles allapot valasz OK", {
+              httpStatus: response.status,
+              body: responseInfo.parsedBody || responseInfo.rawText,
+            });
+            await loadRadnaiStatus();
+          } catch (error) {
+            console.error("Radnai figyeles allapot valtas hiba:", error);
+            setRadnaiAlertMessage(error.message || "Nem sikerult valtani a Radnai figyelest.", "error");
+            appendRadnaiDebug("Radnai figyeles allapot valtas kliens hiba", error?.stack || error?.message || String(error));
+          } finally {
+            radnaiTogglePending = false;
+            updateRadnaiToggleButton();
+          }
+        };
+
+        const triggerRadnaiTestAlert = async () => {
+          if (!radnaiTestBtn) {
+            return;
+          }
+
+          const originalLabel = radnaiTestBtn.textContent;
+          radnaiTestBtn.disabled = true;
+          radnaiTestBtn.textContent = "Kuldese folyamatban...";
+
+          if (radnaiStatusText) {
+            radnaiStatusText.textContent = "Teszt riado kuldese folyamatban...";
+          }
+          setRadnaiAlertMessage("Teszt riado kerese folyamatban...", "info");
+          appendRadnaiDebug("Radnai teszt riado kuldes indul.");
+
+          try {
+            const response = await fetch("/api/admin/radnai-test", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...buildAuthHeaders(),
+              },
+              body: JSON.stringify({}),
+            });
+
+            const responseInfo = await readApiResponse(response);
+            const result = responseInfo.parsedBody || responseInfo.rawText;
+
+            if (!response.ok) {
+              const message = typeof result === "object" && result?.message
+                ? result.message
+                : `Nem sikerult elkuldeni a teszt riasztast (HTTP ${response.status}).`;
+              appendRadnaiDebug("Radnai teszt riado valasz HIBA", {
+                httpStatus: response.status,
+                body: responseInfo.parsedBody || responseInfo.rawText,
+              });
+              throw new Error(message);
+            }
+
+            const serverMessage = typeof result === "object"
+              ? result?.message
+              : typeof result === "string"
+                ? result
+                : "";
+            if (radnaiStatusText) {
+              radnaiStatusText.textContent = serverMessage || "Teszt riado sikeresen elkuldve.";
+            }
+            setRadnaiAlertMessage(
+              `Teszt riado elkuldve (HTTP ${response.status}). ${serverMessage || ""}`.trim(),
+              "success"
+            );
+            appendRadnaiDebug("Radnai teszt riado valasz OK", {
+              httpStatus: response.status,
+              body: responseInfo.parsedBody || responseInfo.rawText || "(ures valasz)",
+            });
+
+            await loadRadnaiStatus();
+          } catch (error) {
+            console.error("Radnai teszt riado hiba:", error);
+            if (radnaiStatusText) {
+              radnaiStatusText.textContent = error.message || "Nem sikerult elkuldeni a teszt riasztast.";
+            }
+            setRadnaiAlertMessage(error.message || "Nem sikerult elkuldeni a teszt riasztast.", "error");
+            appendRadnaiDebug("Radnai teszt riado kliens hiba", error?.stack || error?.message || String(error));
+          } finally {
+            radnaiTestBtn.disabled = false;
+            radnaiTestBtn.textContent = originalLabel;
+          }
+        };
+
         const getInitialVariant = () => {
           const stored = localStorage.getItem(VARIANT_STORAGE_KEY);
           if (stored && VALID_VARIANTS.includes(stored)) {
@@ -591,6 +1010,10 @@
           if (targetId === "processingSection") {
             loadProcessingStatus();
           }
+
+          if (targetId === "radnaiSection") {
+            loadRadnaiStatus();
+          }
         };
 
         const initialVariant = getInitialVariant();
@@ -611,6 +1034,24 @@
         if (refreshBtn) {
           refreshBtn.addEventListener("click", () => {
             loadProcessingStatus();
+          });
+        }
+
+        if (fetchMoviesBtn) {
+          fetchMoviesBtn.addEventListener("click", () => {
+            loadMovieData();
+          });
+        }
+
+        if (radnaiTestBtn) {
+          radnaiTestBtn.addEventListener("click", () => {
+            triggerRadnaiTestAlert();
+          });
+        }
+
+        if (radnaiToggleBtn) {
+          radnaiToggleBtn.addEventListener("click", () => {
+            toggleRadnaiMonitoring();
           });
         }
 

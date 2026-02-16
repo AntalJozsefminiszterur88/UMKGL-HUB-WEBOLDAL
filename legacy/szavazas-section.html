@@ -1,0 +1,27 @@
+﻿<!-- Legacy Szavazás szekció az eredeti index.html-ből -->
+<section id="szavazas">
+  <h2>Szavazások</h2>
+  <div id="pollCreator" class="poll-card">
+    <h3>Új szavazás létrehozása</h3>
+    <p id="pollCreatorNotice" class="poll-hint"></p>
+    <form id="createPollForm">
+      <input
+        id="questionInput"
+        class="poll-text-input"
+        type="text"
+        placeholder="Kérdés"
+        required
+      />
+      <div id="optionsContainer" class="poll-options-inputs"></div>
+      <div class="poll-creator-actions">
+        <button type="button" id="addOptionBtn" class="poll-button poll-secondary-btn">
+          Új válaszlehetőség
+        </button>
+        <button type="submit" class="poll-button poll-primary-btn">
+          Szavazás létrehozása
+        </button>
+      </div>
+    </form>
+  </div>
+  <div id="pollList" class="poll-list"></div>
+</section>

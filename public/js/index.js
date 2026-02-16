@@ -28,6 +28,88 @@
     const addOptionBtn = document.getElementById("addOptionBtn");
     const pollListContainer = document.getElementById("pollList");
     const pollSection = document.getElementById("szavazas");
+    const archiveSection = document.getElementById("archivum");
+    const archivePermissionOverlay = document.getElementById("archivePermissionOverlay");
+    const archiveCategoryGrid = document.getElementById("archiveCategoryGrid");
+    const archiveBrowser = document.getElementById("archiveBrowser");
+    const archiveBackBtn = document.getElementById("archiveBackBtn");
+    const archiveCategoryTitle = document.getElementById("archiveCategoryTitle");
+    const archiveCategoryHint = document.getElementById("archiveCategoryHint");
+    const archiveFolderRow = document.getElementById("archiveFolderRow");
+    const archiveFolderEmpty = document.getElementById("archiveFolderEmpty");
+    const archiveFileGrid = document.getElementById("archiveFileGrid");
+    const archiveFileEmpty = document.getElementById("archiveFileEmpty");
+    const archiveFolderNameInput = document.getElementById("archiveFolderNameInput");
+    const archiveCreateFolderBtn = document.getElementById("archiveCreateFolderBtn");
+    const archiveDeleteFolderBtn = document.getElementById("archiveDeleteFolderBtn");
+    const archiveUploadInput = document.getElementById("archiveUploadInput");
+    const archiveUploadBtn = document.getElementById("archiveUploadBtn");
+    const archiveRenameFolderBtn = document.getElementById("archiveRenameFolderBtn");
+    const archiveUploadStatus = document.getElementById("archiveUploadStatus");
+    const archiveImageModal = document.getElementById("archiveImageModal");
+    const archiveImagePreview = document.getElementById("archiveImagePreview");
+    const archiveImageTitle = document.getElementById("archiveImageTitle");
+    const archiveImageClose = document.getElementById("archiveImageClose");
+    const archiveImageZoom = document.getElementById("archiveImageZoom");
+    const archiveImageStage = document.querySelector("#archiveImageModal .archive-image-stage");
+    const archiveImagePrev = document.getElementById("archiveImagePrev");
+    const archiveImageNext = document.getElementById("archiveImageNext");
+    const archiveDocModal = document.getElementById("archiveDocModal");
+    const archiveDocFrame = document.getElementById("archiveDocFrame");
+    const archiveDocTitle = document.getElementById("archiveDocTitle");
+    const archiveDocClose = document.getElementById("archiveDocClose");
+    const archiveVideoPanel = document.getElementById("archiveVideoPanel");
+    const archiveVideoPanelHint = document.getElementById("archiveVideoPanelHint");
+    const archiveVideoGridContainer = document.getElementById("archiveVideoGridContainer");
+    const archiveVideoPagination = document.getElementById("archiveVideoPagination");
+    const archiveVideoToast = document.getElementById("archiveVideoToast");
+    const archiveShowUploadModalBtn = document.getElementById("archiveShowUploadModalBtn");
+    const archiveVideoSearchInput = document.getElementById("archiveVideoSearchInput");
+    const archiveTagSelectContainer = document.getElementById("archiveTagSelectContainer");
+    const archiveTagSelectBox = archiveTagSelectContainer?.querySelector(".tag-select-box");
+    const archiveTagSelectDropdown = archiveTagSelectContainer?.querySelector(".tag-dropdown");
+    const archiveSortOrderSelect = document.getElementById("archiveSortOrderSelect");
+    const archiveVideoQualitySelect = document.getElementById("archiveVideoQualitySelect");
+    const archivePageSizeSelect = document.getElementById("archivePageSizeSelect");
+    const archiveFilterResetBtn = document.getElementById("archiveFilterResetBtn");
+    const archiveVideoUploadModal = document.getElementById("archiveVideoUploadModal");
+    const archiveThumbnailPickerModal = document.getElementById("archiveThumbnailPickerModal");
+    const archiveThumbnailPickerVideo = document.getElementById("archiveThumbnailPickerVideo");
+    const archiveThumbnailPickerCloseBtn = document.getElementById("archiveThumbnailPickerClose");
+    const archiveThumbnailPickerCancelBtn = document.getElementById("archiveThumbnailPickerCancel");
+    const archiveThumbnailPickerSaveBtn = document.getElementById("archiveThumbnailPickerSave");
+    const archiveThumbnailPickerStepBackBtn = document.getElementById("archiveThumbnailStepBack");
+    const archiveThumbnailPickerStepForwardBtn = document.getElementById("archiveThumbnailStepForward");
+    const archiveThumbnailPickerSlider = document.getElementById("archiveThumbnailSlider");
+    const archiveThumbnailPickerCurrentEl = document.getElementById("archiveThumbnailCurrent");
+    const archiveThumbnailPickerDurationEl = document.getElementById("archiveThumbnailDuration");
+    const archiveThumbnailPickerHintEl = document.getElementById("archiveThumbnailPickerHint");
+    const archiveThumbnailPickerTitleEl = document.getElementById("archiveThumbnailPickerTitle");
+    const archiveCloseUploadModalBtn = document.getElementById("archiveCloseUploadModal");
+    const archiveDropZone = document.getElementById("archiveDropZone");
+    const archiveUploadQueueContainer = document.getElementById("archiveUploadQueueContainer");
+    const archiveAddMoreVideosBtn = document.getElementById("archiveAddMoreVideosBtn");
+    const archiveVideoFileInput = document.getElementById("archiveVideoFileInput");
+    const archiveAddFilesBtn = document.getElementById("archiveAddFilesBtn");
+    const archiveCancelUploadBtn = document.getElementById("archiveCancelUploadBtn");
+    const archiveUploadSubmitBtn = document.getElementById("archiveUploadSubmitBtn");
+    const archiveUploadStatusText = document.getElementById("archiveUploadStatusText");
+    const archiveUploadProgress = document.getElementById("archiveUploadProgress");
+    const archiveUploadProgressFill = document.getElementById("archiveUploadProgressFill");
+    const archiveUploadProgressCount = document.getElementById("archiveUploadProgressCount");
+    const archiveUploadProgressEta = document.getElementById("archiveUploadProgressEta");
+    const archiveUploadProgressDetails = document.getElementById("archiveUploadProgressDetails");
+    const archiveSelectedFileName = document.getElementById("archiveSelectedFileName");
+    const archiveUploadSummary = document.getElementById("archiveUploadSummary");
+    const archiveUploadToast = document.getElementById("archiveUploadToast");
+    const archiveGlobalTagSelect = document.getElementById("archiveGlobalTagSelect");
+    const archiveCreateTagWrapper = document.getElementById("archiveCreateTagWrapper");
+    const archiveNewTagNameInput = document.getElementById("archiveNewTagName");
+    const archiveNewTagColorInput = document.getElementById("archiveNewTagColor");
+    const archiveTagColorButton = document.getElementById("archiveTagColorButton");
+    const archiveCreateTagButton = document.getElementById("archiveCreateTagButton");
+    const archiveDeleteTagButton = document.getElementById("archiveDeleteTagButton");
+    const archiveCreateTagStatus = document.getElementById("archiveCreateTagStatus");
     const receiverToggle = document.getElementById("receiverToggle");
     const receiverList = document.getElementById("receiverList");
     const selfAvatar = document.getElementById("selfAvatar");
@@ -109,7 +191,36 @@
       isAdmin: ADMIN_SESSION_KEY,
       canTransfer: "canTransfer",
       canViewClips: "canViewClips",
+      canViewArchive: "canViewArchive",
+      canEditArchive: "canEditArchive",
       profilePictureFilename: "profilePictureFilename",
+    };
+    const ARCHIVE_NAV_STATE_KEY = "archiveNavState";
+    const ARCHIVE_CATEGORIES = {
+      kepek: {
+        id: "kepek",
+        label: "Képek",
+        accept: "image/png,image/jpeg,image/jpg,image/webp,image/gif",
+        type: "image",
+      },
+      hang: {
+        id: "hang",
+        label: "Hang",
+        accept: "audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/x-m4a,audio/flac",
+        type: "audio",
+      },
+      dokumentumok: {
+        id: "dokumentumok",
+        label: "Dokumentumok",
+        accept: "application/pdf",
+        type: "document",
+      },
+      videok: {
+        id: "videok",
+        label: "Videók",
+        accept: "video/mp4,video/webm,video/ogg,video/quicktime,video/x-matroska",
+        type: "video",
+      },
     };
     const POLL_MIN_OPTIONS = 2;
     let pollsShouldRefresh = true;
@@ -128,6 +239,18 @@
     let academyInlineImages = [];
     let editingAcademyArticle = null;
     let activeAcademyArticle = null;
+    let currentArchiveCategory = null;
+    let selectedArchiveFolder = null;
+    let openedArchiveFolder = null;
+    let archivePendingRestoreFolder = null;
+    let archiveImageScale = 1;
+    let archiveImagePanX = 0;
+    let archiveImagePanY = 0;
+    let archiveImageDragging = false;
+    let archiveImageDragStartX = 0;
+    let archiveImageDragStartY = 0;
+    let currentArchiveImageFiles = [];
+    let activeArchiveImageIndex = -1;
 
     function isPollSectionActive() {
       return pollSection?.classList.contains("active");
@@ -156,7 +279,11 @@
     const P2P_CHUNK_SIZE = 64 * 1024;
     const P2P_ACK_EVERY_BYTES = 5 * 1024 * 1024;
     const P2P_ACK_EVERY_CHUNKS = 50;
-    const P2P_BUFFERED_THRESHOLD = 10 * 1024 * 1024;
+    const P2P_BUFFERED_THRESHOLD = 24 * 1024 * 1024;
+    const P2P_RAW_BATCH_BYTES = 24 * 1024 * 1024;
+    const P2P_BACKPRESSURE_POLL_MS = 4;
+    const P2P_CHUNK_MODE_RAW = "raw-v1";
+    const P2P_CHUNK_MODE_LEGACY = "legacy";
     const P2P_SIGNAL_TIMEOUT_MS = 4000;
     const P2P_SIGNAL_RETRY_LIMIT = 3;
     const P2P_SIGNAL_RETRY_DELAY_MS = 1200;
@@ -699,6 +826,108 @@
       transfer.lastAckChunks = receivedChunks;
     }
 
+    async function normalizeChunkToArrayBuffer(payload) {
+      if (!payload) {
+        return null;
+      }
+
+      if (payload instanceof ArrayBuffer) {
+        return payload;
+      }
+
+      if (ArrayBuffer.isView(payload)) {
+        const { buffer, byteOffset, byteLength } = payload;
+        if (byteOffset === 0 && byteLength === buffer.byteLength) {
+          return buffer;
+        }
+        return buffer.slice(byteOffset, byteOffset + byteLength);
+      }
+
+      if (payload instanceof Blob) {
+        return payload.arrayBuffer();
+      }
+
+      if (Array.isArray(payload)) {
+        return Uint8Array.from(payload).buffer;
+      }
+
+      if (typeof payload === "object" && payload.type === "Buffer" && Array.isArray(payload.data)) {
+        return Uint8Array.from(payload.data).buffer;
+      }
+
+      return null;
+    }
+
+    async function resolveIncomingChunkBuffer(data) {
+      if (!data) {
+        return null;
+      }
+
+      if (typeof data === "object" && data.type === "chunk") {
+        return normalizeChunkToArrayBuffer(data.data);
+      }
+
+      return normalizeChunkToArrayBuffer(data);
+    }
+
+    function processIncomingChunk(transfer, conn, chunkBuffer, seq = null) {
+      if (!transfer || !chunkBuffer || transfer.isCancelled || !transfer.isAccepted) {
+        return false;
+      }
+      if (!transfer.startTime) {
+        transfer.startTime = Date.now();
+      }
+
+      if (Number.isInteger(seq) && transfer.seenSeqs) {
+        if (transfer.seenSeqs.has(seq)) {
+          return true;
+        }
+        transfer.seenSeqs.add(seq);
+      }
+
+      transfer.chunks.push(chunkBuffer);
+      transfer.received += chunkBuffer.byteLength;
+      transfer.receivedChunks = (transfer.receivedChunks || 0) + 1;
+
+      if (transfer.size) {
+        const percent = Math.min(100, Math.round((transfer.received / transfer.size) * 100));
+        updateTransferStatus(transfer, `Fogadás: ${percent}%`);
+      } else {
+        updateTransferStatus(transfer, "Fogadás...");
+      }
+
+      updateTransferProgress(transfer, transfer.received, transfer.size || transfer.received);
+
+      const shouldAck =
+        transfer.received - (transfer.lastAckBytes || 0) >= P2P_ACK_EVERY_BYTES ||
+        transfer.receivedChunks - (transfer.lastAckChunks || 0) >= P2P_ACK_EVERY_CHUNKS ||
+        (Number.isFinite(transfer.size) && transfer.received >= transfer.size);
+
+      if (shouldAck) {
+        sendReceiverAck(conn, transfer);
+      }
+
+      if (Number.isFinite(transfer.size) && transfer.received >= transfer.size) {
+        transfer.finalByteReceived = true;
+      }
+
+      if (
+        Number.isFinite(transfer.size) &&
+        transfer.received === transfer.size &&
+        transfer.pendingComplete
+      ) {
+        if (!transfer.finalizeScheduled) {
+          transfer.finalizeScheduled = true;
+          setTimeout(() => {
+            transfer.finalizeScheduled = false;
+            finalizeIncomingTransfer(transfer, conn);
+          }, 0);
+        }
+      }
+
+      return true;
+    }
+
     function finalizeIncomingTransfer(transfer, conn) {
       if (!transfer || transfer.completed || transfer.isCancelled) {
         return;
@@ -1039,15 +1268,22 @@
 
     function handleIncomingConnection(conn) {
       conn.on("data", async (data) => {
-        if (!data || typeof data !== "object") {
+        if (data == null) {
           return;
         }
 
-        console.log("P2P adat érkezett", data.type, data);
+        const messageType =
+          data &&
+          typeof data === "object" &&
+          !(data instanceof ArrayBuffer) &&
+          !ArrayBuffer.isView(data) &&
+          !(data instanceof Blob)
+            ? data.type
+            : "chunk";
 
         let transfer = getTransferByConn(conn);
 
-        if (data.type === "meta") {
+        if (messageType === "meta") {
           if (transfer) {
             conn.send({ type: "meta_ack" });
             return;
@@ -1102,7 +1338,12 @@
               updateTransferStatus(transfer, "Fogadás...");
               setTransferActions(transfer, [cancelBtn]);
               try {
-                await sendSignalWithRetry(conn, transfer, { type: "accept" }, "accept_ack");
+                await sendSignalWithRetry(
+                  conn,
+                  transfer,
+                  { type: "accept", chunkMode: P2P_CHUNK_MODE_RAW },
+                  "accept_ack",
+                );
               } catch (err) {
                 updateTransferStatus(transfer, "Elfogadás elküldve, várakozás a feladóra...");
               }
@@ -1140,88 +1381,27 @@
           return;
         }
 
-        if (data.type === "accept_ack") {
+        if (messageType === "accept_ack") {
           resolveSignalAck(transfer, "accept_ack", data);
           return;
         }
 
-        if (data.type === "ack_request") {
+        if (messageType === "ack_request") {
           sendReceiverAck(conn, transfer);
           return;
         }
 
-        if (data.type === "chunk") {
-          if (transfer.isCancelled) {
-            return;
-          }
-          if (!transfer.startTime) {
-            transfer.startTime = Date.now();
-          }
-
-          const chunkBuffer =
-            data.data instanceof ArrayBuffer
-              ? data.data
-              : data.data?.buffer instanceof ArrayBuffer
-                ? data.data.buffer
-                : null;
-
+        if (messageType === "chunk") {
+          const chunkBuffer = await resolveIncomingChunkBuffer(data);
           if (!chunkBuffer) {
             console.warn("Érvénytelen chunk érkezett, kihagyva.");
             return;
           }
-
-          const seq = data.seq;
-          if (transfer.seenSeqs) {
-            if (transfer.seenSeqs.has(seq)) {
-              return;
-            }
-            transfer.seenSeqs.add(seq);
-          }
-
-          transfer.chunks.push(chunkBuffer);
-          transfer.received += chunkBuffer.byteLength;
-          transfer.receivedChunks = (transfer.receivedChunks || 0) + 1;
-
-          if (transfer.size) {
-            const percent = Math.min(100, Math.round((transfer.received / transfer.size) * 100));
-            updateTransferStatus(transfer, `Fogadás: ${percent}%`);
-          } else {
-            updateTransferStatus(transfer, "Fogadás...");
-          }
-
-          updateTransferProgress(transfer, transfer.received, transfer.size || transfer.received);
-
-          const shouldAck =
-            transfer.received - (transfer.lastAckBytes || 0) >= P2P_ACK_EVERY_BYTES ||
-            transfer.receivedChunks - (transfer.lastAckChunks || 0) >= P2P_ACK_EVERY_CHUNKS ||
-            (Number.isFinite(transfer.size) && transfer.received >= transfer.size);
-
-          if (shouldAck) {
-            sendReceiverAck(conn, transfer);
-          }
-
-          if (Number.isFinite(transfer.size) && transfer.received >= transfer.size) {
-            transfer.finalByteReceived = true;
-          }
-
-          if (
-            Number.isFinite(transfer.size) &&
-            transfer.received === transfer.size &&
-            transfer.pendingComplete
-          ) {
-            if (!transfer.finalizeScheduled) {
-              transfer.finalizeScheduled = true;
-              setTimeout(() => {
-                transfer.finalizeScheduled = false;
-                finalizeIncomingTransfer(transfer, conn);
-              }, 0);
-            }
-          }
-
+          processIncomingChunk(transfer, conn, chunkBuffer, data?.seq);
           return;
         }
 
-        if (data.type === "complete") {
+        if (messageType === "complete") {
           if (transfer.completed) {
             if (conn?.open) {
               conn.send({ type: "complete_ack", success: true });
@@ -1246,12 +1426,12 @@
           return;
         }
 
-        if (data.type === "reject") {
+        if (messageType === "reject") {
           finalizeTransfer(transfer, "A fogadó elutasította a küldést.");
           return;
         }
 
-        if (data.type === "cancel") {
+        if (messageType === "cancel") {
           transfer.isCancelled = true;
           finalizeTransfer(transfer, "A feladó megszakította az átvitelt.");
           conn.close();
@@ -1282,7 +1462,8 @@
       const { conn, file } = transfer;
       const chunkSize = P2P_CHUNK_SIZE;
       const bufferedThreshold = P2P_BUFFERED_THRESHOLD;
-      const batchBytesTarget = P2P_ACK_EVERY_BYTES;
+      const useRawChunkMode = transfer.remoteChunkMode === P2P_CHUNK_MODE_RAW;
+      const batchBytesTarget = useRawChunkMode ? P2P_RAW_BATCH_BYTES : P2P_ACK_EVERY_BYTES;
       let chunksSent = 0;
       let offset = 0;
       transfer.startTime = transfer.startTime || Date.now();
@@ -1295,11 +1476,10 @@
         }
 
         let batchBytesSent = 0;
-        let batchChunksSent = 0;
 
         while (offset < file.size && batchBytesSent < batchBytesTarget) {
           while ((conn.dataChannel?.bufferedAmount ?? 0) > bufferedThreshold) {
-            await delay(15);
+            await delay(P2P_BACKPRESSURE_POLL_MS);
             if (transfer.isCancelled) {
               finalizeTransfer(transfer, "Küldés megszakítva.");
               return;
@@ -1311,11 +1491,14 @@
           if (!conn.open) {
             throw new Error("A kapcsolat megszakadt a küldés közben.");
           }
-          conn.send({ type: "chunk", data: buffer, seq: chunksSent });
+          if (useRawChunkMode) {
+            conn.send(buffer);
+          } else {
+            conn.send({ type: "chunk", data: buffer, seq: chunksSent });
+          }
           offset += buffer.byteLength;
           chunksSent += 1;
           batchBytesSent += buffer.byteLength;
-          batchChunksSent += 1;
           transfer.sentBytes = offset;
           transfer.sentChunks = chunksSent;
 
@@ -1326,24 +1509,30 @@
           }
         }
 
-        updateTransferStatus(transfer, "Batch elküldve, ACK kérés...");
-        if (conn.open) {
-          conn.send({ type: "ack_request", targetBytes: offset, targetChunks: chunksSent });
-        }
+        if (!useRawChunkMode) {
+          updateTransferStatus(transfer, "Batch elküldve, ACK kérés...");
+          if (conn.open) {
+            conn.send({ type: "ack_request", targetBytes: offset, targetChunks: chunksSent });
+          }
 
-        updateTransferStatus(transfer, "Várakozás a fogadó visszaigazolására...");
-        try {
-          await waitForChunkAckWithRetry(transfer, conn, offset);
-        } catch (err) {
-          transfer.isCancelled = true;
-          finalizeTransfer(transfer, "A fogadó nem válaszol, az átvitel megszakadt.");
-          conn.close();
-          return;
+          updateTransferStatus(transfer, "Várakozás a fogadó visszaigazolására...");
+          try {
+            await waitForChunkAckWithRetry(transfer, conn, offset);
+          } catch (err) {
+            transfer.isCancelled = true;
+            finalizeTransfer(transfer, "A fogadó nem válaszol, az átvitel megszakadt.");
+            conn.close();
+            return;
+          }
         }
       }
 
       if (transfer.isCancelled) {
         return;
+      }
+
+      if (conn.open) {
+        conn.send({ type: "ack_request", targetBytes: file.size, targetChunks: chunksSent });
       }
 
       try {
@@ -1405,6 +1594,7 @@
       transfer.file = file;
       transfer.lastAck = { receivedBytes: 0, receivedChunks: 0, final: false };
       transfer.isSending = false;
+      transfer.remoteChunkMode = P2P_CHUNK_MODE_LEGACY;
       conn.__transferId = transferId;
 
       const cancelBtn = createTransferButton("Mégse", "transfer-btn--cancel", () => {
@@ -1467,6 +1657,10 @@
           if (transfer.isSending) {
             return;
           }
+          transfer.remoteChunkMode =
+            data?.chunkMode === P2P_CHUNK_MODE_RAW
+              ? P2P_CHUNK_MODE_RAW
+              : P2P_CHUNK_MODE_LEGACY;
           transfer.isSending = true;
           updateTransferStatus(transfer, "Fogadó elfogadta, küldés indul...");
           transfer.startTime = Date.now();
@@ -2337,7 +2531,7 @@
       }
     }
 
-    function updateUIForLoggedIn(username, profilePictureFilename) {
+      function updateUIForLoggedIn(username, profilePictureFilename) {
       if (userGreeting) {
         userGreeting.textContent = username;
       }
@@ -2370,6 +2564,10 @@
       }
 
       applyAdminPreviewState();
+      const activeSection = document.querySelector("main section.active");
+      if (activeSection?.id === "archivum" && !currentArchiveCategory) {
+        restoreArchiveNavState();
+      }
       markPollsForRefresh();
       loadPrograms();
 
@@ -2390,7 +2588,10 @@
       localStorage.removeItem(ADMIN_PREVIEW_KEY);
       localStorage.removeItem(SESSION_KEYS.canTransfer);
       localStorage.removeItem(SESSION_KEYS.canViewClips);
+      localStorage.removeItem(SESSION_KEYS.canViewArchive);
+      localStorage.removeItem(SESSION_KEYS.canEditArchive);
       localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
+      localStorage.removeItem(ARCHIVE_NAV_STATE_KEY);
 
       if (authLoggedOut) {
         authLoggedOut.style.display = "flex";
@@ -2423,6 +2624,7 @@
       updateAcademyAdminControls();
       updateFileTransferNavVisibility();
       updateClipAccessUI();
+      updateArchiveAccessUI();
       updatePollCreatorState(false);
       markPollsForRefresh();
       loadPrograms();
@@ -2464,7 +2666,9 @@
             <th>Felhasználónév</th>
             <th>Feltöltési jogosultság</th>
             <th>P2P Jog</th>
-          <th>Klip nézési jog</th>
+            <th>Klip nézési jog</th>
+            <th>Archívum megtekintés</th>
+            <th>Archívum szerkesztés</th>
             <th>Max fájlméret (MB)</th>
             <th>Videó limit</th>
             <th>Feltöltött videók</th>
@@ -2517,6 +2721,43 @@
         viewClipsLabel.append(" Klipek");
         viewClipsCell.appendChild(viewClipsLabel);
         row.appendChild(viewClipsCell);
+
+        const viewArchiveCell = document.createElement("td");
+        const viewArchiveLabel = document.createElement("label");
+        viewArchiveLabel.className = "permission-toggle";
+        const viewArchiveCheckbox = document.createElement("input");
+        viewArchiveCheckbox.type = "checkbox";
+        viewArchiveCheckbox.name = "canViewArchive";
+        const canEditArchive = Number(user.can_edit_archive) === 1;
+        viewArchiveCheckbox.checked = Number(user.can_view_archive) === 1 || canEditArchive;
+        viewArchiveLabel.appendChild(viewArchiveCheckbox);
+        viewArchiveLabel.append(" Archívum");
+        viewArchiveCell.appendChild(viewArchiveLabel);
+        row.appendChild(viewArchiveCell);
+
+        const editArchiveCell = document.createElement("td");
+        const editArchiveLabel = document.createElement("label");
+        editArchiveLabel.className = "permission-toggle";
+        const editArchiveCheckbox = document.createElement("input");
+        editArchiveCheckbox.type = "checkbox";
+        editArchiveCheckbox.name = "canEditArchive";
+        editArchiveCheckbox.checked = canEditArchive;
+        editArchiveLabel.appendChild(editArchiveCheckbox);
+        editArchiveLabel.append(" Szerkesztés");
+        editArchiveCell.appendChild(editArchiveLabel);
+        row.appendChild(editArchiveCell);
+
+        viewArchiveCheckbox.addEventListener("change", () => {
+          if (!viewArchiveCheckbox.checked) {
+            editArchiveCheckbox.checked = false;
+          }
+        });
+
+        editArchiveCheckbox.addEventListener("change", () => {
+          if (editArchiveCheckbox.checked) {
+            viewArchiveCheckbox.checked = true;
+          }
+        });
 
         const maxFileSizeCell = document.createElement("td");
         const maxFileInput = document.createElement("input");
@@ -3221,11 +3462,13 @@
             const uploadCheckbox = row.querySelector('input[name="canUpload"]');
             const transferCheckbox = row.querySelector('input[name="canTransfer"]');
             const viewClipsCheckbox = row.querySelector('input[name="canViewClips"]');
+            const viewArchiveCheckbox = row.querySelector('input[name="canViewArchive"]');
+            const editArchiveCheckbox = row.querySelector('input[name="canEditArchive"]');
             const maxFileSizeInput = row.querySelector('input[name="maxFileSizeMb"]');
             const maxVideosInput = row.querySelector('input[name="maxVideos"]');
             const userIdAttr = row.dataset.userId;
 
-            if (!uploadCheckbox || !transferCheckbox || !viewClipsCheckbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
+            if (!uploadCheckbox || !transferCheckbox || !viewClipsCheckbox || !viewArchiveCheckbox || !editArchiveCheckbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
               return null;
             }
 
@@ -3244,11 +3487,16 @@
               return null;
             }
 
+            const canEditArchive = editArchiveCheckbox.checked;
+            const canViewArchive = viewArchiveCheckbox.checked || canEditArchive;
+
             return {
               userId,
               canUpload: uploadCheckbox.checked,
               canTransfer: transferCheckbox.checked,
               canViewClips: viewClipsCheckbox.checked,
+              canViewArchive,
+              canEditArchive,
               maxFileSizeMb: maxFileSizeValue,
               maxVideos: maxVideosValue,
             };
@@ -3307,7 +3555,7 @@
       adminNavBtn.addEventListener("click", loadAdminPanel);
     }
 
-    const VIDEO_MANAGEMENT_PATH = "/video-kezeles-felulet.html";
+    const VIDEO_MANAGEMENT_PATH = "/admin-felulet.html";
     const DISCORD_PANEL_PATH = "/discord-panel.html";
 
     if (videoManagementBtn) {
@@ -3389,11 +3637,15 @@
         if (res.ok) {
           const canTransfer = data.canTransfer === true || data.canTransfer === 1;
           const canViewClips = data.canViewClips === true || data.canViewClips === 1;
+          const canEditArchive = data.canEditArchive === true || data.canEditArchive === 1;
+          const canViewArchive = (data.canViewArchive === true || data.canViewArchive === 1) || canEditArchive;
           localStorage.setItem(SESSION_KEYS.token, data.token);
           localStorage.setItem(SESSION_KEYS.username, data.username);
           localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
           localStorage.setItem(SESSION_KEYS.canTransfer, canTransfer ? "true" : "false");
           localStorage.setItem(SESSION_KEYS.canViewClips, canViewClips ? "true" : "false");
+          localStorage.setItem(SESSION_KEYS.canViewArchive, canViewArchive ? "true" : "false");
+          localStorage.setItem(SESSION_KEYS.canEditArchive, canEditArchive ? "true" : "false");
           if (data.profile_picture_filename) {
             localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
           } else {
@@ -3466,6 +3718,10 @@
             localStorage.setItem(SESSION_KEYS.canTransfer, canTransfer ? "true" : "false");
             const canViewClips = data.canViewClips === true || data.canViewClips === 1;
             localStorage.setItem(SESSION_KEYS.canViewClips, canViewClips ? "true" : "false");
+            const canEditArchive = data.canEditArchive === true || data.canEditArchive === 1;
+            const canViewArchive = (data.canViewArchive === true || data.canViewArchive === 1) || canEditArchive;
+            localStorage.setItem(SESSION_KEYS.canViewArchive, canViewArchive ? "true" : "false");
+            localStorage.setItem(SESSION_KEYS.canEditArchive, canEditArchive ? "true" : "false");
             if (data.profile_picture_filename) {
                 localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
             } else {
@@ -3799,6 +4055,36 @@
       let videoSearchTimeout = null;
       let currentVideoList = [];
       let currentVideoIndex = 0;
+      let activeVideoModalContext = "clips";
+      const ARCHIVE_VIDEO_PAGE_SIZE_KEY = "archiveVideoPageSize";
+      const ARCHIVE_VIDEO_SORT_ORDER_KEY = "archiveVideoSortOrder";
+      const savedArchivePageSize = Number.parseInt(localStorage.getItem(ARCHIVE_VIDEO_PAGE_SIZE_KEY), 10);
+      const savedArchiveSortOrder = localStorage.getItem(ARCHIVE_VIDEO_SORT_ORDER_KEY);
+      const archiveVideoFilters = {
+        page: 1,
+        limit: [12, 24, 40, 80].includes(savedArchivePageSize) ? savedArchivePageSize : 24,
+        search: "",
+        tag: [],
+        sort: savedArchiveSortOrder === "oldest" ? "oldest" : "newest",
+      };
+      let archiveVideoSearchTimeout = null;
+      let archiveVideoList = [];
+      let archiveVideoIndex = 0;
+      let archiveAvailableTags = [];
+      let archiveTagSelectHandlersAttached = false;
+      let archiveVideoTagHandlersAttached = false;
+      let archiveUploadQueue = [];
+      const archiveFileSignatures = new Set();
+      let archiveIsUploadCancelled = false;
+      let archiveIsUploading = false;
+      let archiveCurrentUploadXhr = null;
+      let archiveUploadedVideoIds = [];
+      let archiveVideoToastTimeout = null;
+      const archiveNotifiedProcessingErrorIds = new Set();
+      const ARCHIVE_THUMBNAIL_STEP_SECONDS = 5;
+      let archiveThumbnailPickerState = null;
+      const ARCHIVE_UPLOAD_CHUNK_THRESHOLD_BYTES = 90 * 1024 * 1024;
+      const ARCHIVE_UPLOAD_CHUNK_SIZE_BYTES = 20 * 1024 * 1024;
 
       if (summaryToggleBtn && summaryCard) {
         summaryToggleBtn.addEventListener("click", () => {
@@ -3831,8 +4117,20 @@
         sortOrderSelect.value = videoFilters.sort;
       }
 
+      if (archivePageSizeSelect) {
+        archivePageSizeSelect.value = String(archiveVideoFilters.limit);
+      }
+
+      if (archiveSortOrderSelect) {
+        archiveSortOrderSelect.value = archiveVideoFilters.sort;
+      }
+
       applyQualityPreference(currentVideoQuality);
+      if (archiveVideoQualitySelect) {
+        archiveVideoQualitySelect.value = currentVideoQuality;
+      }
       renderTagSelector();
+      renderArchiveTagSelector();
 
       function isActualAdmin() {
         const value = localStorage.getItem(ADMIN_SESSION_KEY);
@@ -3907,6 +4205,7 @@
         updateAdminNavVisibility();
         updateFileTransferNavVisibility();
         updateClipAccessUI();
+        updateArchiveAccessUI();
         updatePollCreatorState();
         updateAcademyAdminControls();
 
@@ -3924,6 +4223,10 @@
 
         if (activeId === "szavazas") {
           loadPolls();
+        }
+
+        if (activeId === "archivum") {
+          updateArchiveAccessUI();
         }
 
         if (activeId === "akademia") {
@@ -3945,6 +4248,70 @@
 
       function hasClipAccess() {
         return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canViewClips) === "true";
+      }
+
+      function hasArchiveViewAccess() {
+        return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canViewArchive) === "true";
+      }
+
+      function hasArchiveEditAccess() {
+        return isUserLoggedIn() && localStorage.getItem(SESSION_KEYS.canEditArchive) === "true";
+      }
+
+      function readArchiveNavState() {
+        try {
+          const raw = localStorage.getItem(ARCHIVE_NAV_STATE_KEY);
+          if (!raw) {
+            return null;
+          }
+
+          const parsed = JSON.parse(raw);
+          const category = typeof parsed?.category === "string" ? parsed.category : "";
+          const folder = typeof parsed?.folder === "string" ? parsed.folder.trim() : "";
+
+          if (!ARCHIVE_CATEGORIES[category]) {
+            return null;
+          }
+
+          return {
+            category,
+            folder: folder || null,
+          };
+        } catch (_error) {
+          return null;
+        }
+      }
+
+      function persistArchiveNavState() {
+        try {
+          if (!currentArchiveCategory || !ARCHIVE_CATEGORIES[currentArchiveCategory]) {
+            localStorage.removeItem(ARCHIVE_NAV_STATE_KEY);
+            return;
+          }
+
+          localStorage.setItem(
+            ARCHIVE_NAV_STATE_KEY,
+            JSON.stringify({
+              category: currentArchiveCategory,
+              folder: openedArchiveFolder || null,
+            }),
+          );
+        } catch (_error) {
+          // Local storage can fail in privacy-restricted environments.
+        }
+      }
+
+      function restoreArchiveNavState() {
+        if (!hasArchiveViewAccess()) {
+          return;
+        }
+
+        const state = readArchiveNavState();
+        if (!state) {
+          return;
+        }
+
+        openArchiveCategory(state.category, { restoreFolder: state.folder || null });
       }
 
       function updateClipAccessUI() {
@@ -3972,6 +4339,3109 @@
           showUploadModalBtn.disabled = !allowed;
           showUploadModalBtn.title = allowed ? "" : "Jogosultság szükséges a klipek eléréséhez.";
         }
+      }
+
+      function updateArchiveAccessUI() {
+        const allowed = hasArchiveViewAccess();
+
+        if (archiveSection) {
+          archiveSection.classList.toggle("permission-blocked", !allowed);
+        }
+
+        if (archivePermissionOverlay) {
+          archivePermissionOverlay.style.display = allowed ? "none" : "flex";
+          archivePermissionOverlay.setAttribute("aria-hidden", allowed ? "true" : "false");
+        }
+
+        const canEdit = hasArchiveEditAccess();
+        const editControls = document.querySelectorAll("[data-archive-edit]");
+        editControls.forEach((el) => {
+          el.style.display = canEdit ? "" : "none";
+        });
+
+        if (!allowed) {
+          resetArchiveBrowser();
+          return;
+        }
+
+        updateArchiveFolderActions();
+        updateArchiveFolderView();
+      }
+
+      function updateArchiveBackButton() {
+        if (!archiveBackBtn) {
+          return;
+        }
+
+        const backLabel = openedArchiveFolder ? "Vissza a mappákhoz" : "Vissza a kategóriákhoz";
+        archiveBackBtn.innerHTML = `<i class="fas fa-arrow-left"></i> ${backLabel}`;
+      }
+
+      function updateArchiveFolderView() {
+        const isFolderOpen = Boolean(openedArchiveFolder);
+        const isVideoMode = isArchiveVideoCategory();
+
+        if (archiveBrowser) {
+          archiveBrowser.classList.toggle("archive-browser--folder-open", isFolderOpen);
+        }
+
+        if (archiveCategoryHint) {
+          if (isFolderOpen && isVideoMode) {
+            archiveCategoryHint.textContent = `${openedArchiveFolder} - videó mappa`;
+          } else if (isFolderOpen) {
+            archiveCategoryHint.textContent = `${openedArchiveFolder} mappa tartalma`;
+          } else {
+            archiveCategoryHint.textContent = "Dupla kattintással nyithatsz mappát.";
+          }
+        }
+
+        if (archiveFolderEmpty && isFolderOpen) {
+          archiveFolderEmpty.style.display = "none";
+        }
+
+        updateArchiveVideoPanelVisibility();
+        updateArchiveBackButton();
+      }
+
+      function closeArchiveFolderView() {
+        openedArchiveFolder = null;
+        currentArchiveImageFiles = [];
+        activeArchiveImageIndex = -1;
+        archiveVideoList = [];
+        archiveVideoIndex = 0;
+        archiveVideoFilters.page = 1;
+        closeArchiveImage();
+        closeArchiveThumbnailPicker({ restoreFocus: false });
+        closeArchiveVideoUploadModal();
+        if (activeVideoModalContext === "archive") {
+          closeVideoModal();
+        }
+
+        if (archiveFileGrid) {
+          archiveFileGrid.innerHTML = "";
+        }
+        if (archiveFileEmpty) {
+          archiveFileEmpty.style.display = "none";
+        }
+        if (archiveVideoGridContainer) {
+          archiveVideoGridContainer.innerHTML = "";
+        }
+        if (archiveVideoPagination) {
+          archiveVideoPagination.innerHTML = "";
+        }
+
+        updateArchiveFolderActions();
+        updateArchiveFolderView();
+        persistArchiveNavState();
+      }
+
+      function resetArchiveBrowser(options = {}) {
+        const preserveNavState = Boolean(options?.preserveNavState);
+        currentArchiveCategory = null;
+        selectedArchiveFolder = null;
+        openedArchiveFolder = null;
+        archivePendingRestoreFolder = null;
+        currentArchiveImageFiles = [];
+        activeArchiveImageIndex = -1;
+        archiveVideoList = [];
+        archiveVideoIndex = 0;
+        archiveVideoFilters.page = 1;
+        archiveVideoFilters.search = "";
+        archiveVideoFilters.tag = [];
+        if (archiveVideoSearchInput) {
+          archiveVideoSearchInput.value = "";
+        }
+        closeArchiveImage();
+        closeArchiveThumbnailPicker({ restoreFocus: false });
+        closeArchiveVideoUploadModal();
+        if (activeVideoModalContext === "archive") {
+          closeVideoModal();
+        }
+        if (archiveBrowser) {
+          archiveBrowser.style.display = "none";
+        }
+        if (archiveCategoryGrid) {
+          archiveCategoryGrid.style.display = "grid";
+        }
+        if (archiveFolderRow) {
+          archiveFolderRow.innerHTML = "";
+        }
+        if (archiveFileGrid) {
+          archiveFileGrid.innerHTML = "";
+        }
+        if (archiveVideoGridContainer) {
+          archiveVideoGridContainer.innerHTML = "";
+        }
+        if (archiveVideoPagination) {
+          archiveVideoPagination.innerHTML = "";
+        }
+        if (archiveFolderEmpty) {
+          archiveFolderEmpty.style.display = "none";
+        }
+        if (archiveFileEmpty) {
+          archiveFileEmpty.style.display = "none";
+        }
+        if (archiveUploadStatus) {
+          archiveUploadStatus.textContent = "";
+        }
+        if (archiveFolderNameInput) {
+          archiveFolderNameInput.value = "";
+        }
+        updateArchiveFolderView();
+        updateArchiveFolderActions();
+        if (!preserveNavState) {
+          persistArchiveNavState();
+        }
+      }
+
+      function openArchiveCategory(categoryId, options = {}) {
+        const category = ARCHIVE_CATEGORIES[categoryId];
+        if (!category) {
+          return;
+        }
+
+        if (!hasArchiveViewAccess()) {
+          updateArchiveAccessUI();
+          return;
+        }
+
+        currentArchiveCategory = categoryId;
+        selectedArchiveFolder = null;
+        openedArchiveFolder = null;
+        const restoreFolderName = typeof options?.restoreFolder === "string"
+          ? options.restoreFolder.trim()
+          : "";
+        archivePendingRestoreFolder = restoreFolderName || null;
+
+        if (archiveCategoryTitle) {
+          archiveCategoryTitle.textContent = category.label;
+        }
+        if (archiveCategoryHint) {
+          archiveCategoryHint.textContent = "Dupla kattintással nyithatsz mappát.";
+        }
+
+        if (archiveCategoryGrid) {
+          archiveCategoryGrid.style.display = "none";
+        }
+        if (archiveBrowser) {
+          archiveBrowser.style.display = "block";
+        }
+
+        if (archiveUploadInput) {
+          archiveUploadInput.accept = category.accept || "";
+          archiveUploadInput.value = "";
+        }
+        if (archiveUploadBtn) {
+          archiveUploadBtn.disabled = true;
+        }
+        if (archiveDeleteFolderBtn) {
+          archiveDeleteFolderBtn.disabled = true;
+        }
+
+        if (isArchiveVideoCategory()) {
+          bindArchiveTagSelectorHandlers();
+          attachArchiveVideoTagHandlers();
+          fetchArchiveVideoTags();
+        }
+
+        updateArchiveFolderView();
+        persistArchiveNavState();
+        loadArchiveFolders();
+      }
+
+      async function loadArchiveFolders() {
+        if (!currentArchiveCategory || !hasArchiveViewAccess()) {
+          return;
+        }
+
+        if (archiveFolderRow) {
+          archiveFolderRow.innerHTML = "";
+        }
+        if (archiveFolderEmpty) {
+          archiveFolderEmpty.style.display = "none";
+        }
+
+        try {
+          const response = await fetch(`/api/archive/${currentArchiveCategory}/folders`, {
+            headers: buildAuthHeaders(),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data?.message || "Nem sikerült betölteni a mappákat.");
+          }
+          const folders = Array.isArray(data?.folders) ? data.folders : [];
+          renderArchiveFolders(folders);
+        } catch (error) {
+          console.error("Archívum mappa hiba:", error);
+          if (archiveFolderEmpty) {
+            archiveFolderEmpty.textContent = error.message || "Nem sikerült betölteni a mappákat.";
+            archiveFolderEmpty.style.display = "block";
+          }
+        }
+      }
+
+      function renderArchiveFolders(folders) {
+        if (!archiveFolderRow) {
+          return;
+        }
+
+        archiveFolderRow.innerHTML = "";
+
+        if (!Array.isArray(folders) || folders.length === 0) {
+          selectedArchiveFolder = null;
+          openedArchiveFolder = null;
+          archivePendingRestoreFolder = null;
+          archiveVideoList = [];
+          archiveVideoIndex = 0;
+          updateArchiveFolderView();
+          updateArchiveFolderActions();
+          persistArchiveNavState();
+
+          if (archiveFolderEmpty) {
+            archiveFolderEmpty.textContent = "Nincs mappa ebben a kategóriában.";
+            archiveFolderEmpty.style.display = "block";
+          }
+          if (archiveFileGrid) {
+            archiveFileGrid.innerHTML = "";
+          }
+          if (archiveFileEmpty) {
+            archiveFileEmpty.style.display = "none";
+          }
+          if (archiveVideoGridContainer) {
+            archiveVideoGridContainer.innerHTML = "";
+          }
+          if (archiveVideoPagination) {
+            archiveVideoPagination.innerHTML = "";
+          }
+          return;
+        }
+
+        if (archiveFolderEmpty) {
+          archiveFolderEmpty.style.display = "none";
+        }
+
+        if (archivePendingRestoreFolder) {
+          if (folders.includes(archivePendingRestoreFolder)) {
+            selectedArchiveFolder = archivePendingRestoreFolder;
+            openedArchiveFolder = archivePendingRestoreFolder;
+            archiveVideoFilters.page = 1;
+          }
+          archivePendingRestoreFolder = null;
+        }
+
+        folders.forEach((folderName) => {
+          const folderBtn = document.createElement("button");
+          folderBtn.type = "button";
+          folderBtn.className = "archive-folder-item";
+          if (folderName === selectedArchiveFolder) {
+            folderBtn.classList.add("active");
+          }
+          folderBtn.dataset.folderName = folderName;
+          folderBtn.title = folderName;
+          folderBtn.setAttribute("aria-label", folderName);
+
+          const folderIcon = document.createElement("i");
+          folderIcon.className = "fas fa-folder";
+          const folderLabel = document.createElement("span");
+          folderLabel.textContent = folderName;
+          folderBtn.append(folderIcon, folderLabel);
+
+          folderBtn.addEventListener("click", () => {
+            selectArchiveFolder(folderName);
+          });
+          folderBtn.addEventListener("dblclick", () => {
+            openArchiveFolder(folderName);
+          });
+          archiveFolderRow.appendChild(folderBtn);
+        });
+
+        if (selectedArchiveFolder && !folders.includes(selectedArchiveFolder)) {
+          selectedArchiveFolder = null;
+        }
+        if (openedArchiveFolder && !folders.includes(openedArchiveFolder)) {
+          openedArchiveFolder = null;
+        }
+
+        updateArchiveFolderView();
+
+        if (openedArchiveFolder) {
+          if (isArchiveVideoCategory()) {
+            loadArchiveVideos();
+          } else {
+            loadArchiveFiles(openedArchiveFolder);
+          }
+        } else {
+          if (archiveFileGrid) {
+            archiveFileGrid.innerHTML = "";
+          }
+          if (archiveFileEmpty) {
+            archiveFileEmpty.style.display = "none";
+          }
+          if (archiveVideoGridContainer) {
+            archiveVideoGridContainer.innerHTML = "";
+          }
+          if (archiveVideoPagination) {
+            archiveVideoPagination.innerHTML = "";
+          }
+        }
+
+        updateArchiveFolderActions();
+        persistArchiveNavState();
+      }
+
+      function selectArchiveFolder(folderName) {
+        selectedArchiveFolder = folderName;
+
+        if (archiveFolderRow) {
+          Array.from(archiveFolderRow.children).forEach((child) => {
+            child.classList.toggle("active", child.dataset.folderName === folderName);
+          });
+        }
+
+        if (openedArchiveFolder !== folderName) {
+          if (archiveFileGrid) {
+            archiveFileGrid.innerHTML = "";
+          }
+          if (archiveFileEmpty) {
+            archiveFileEmpty.style.display = "none";
+          }
+          if (archiveVideoGridContainer) {
+            archiveVideoGridContainer.innerHTML = "";
+          }
+          if (archiveVideoPagination) {
+            archiveVideoPagination.innerHTML = "";
+          }
+        }
+
+        updateArchiveFolderActions();
+      }
+
+      function openArchiveFolder(folderName) {
+        selectedArchiveFolder = folderName;
+        openedArchiveFolder = folderName;
+        archiveVideoFilters.page = 1;
+
+        if (archiveFolderRow) {
+          Array.from(archiveFolderRow.children).forEach((child) => {
+            child.classList.toggle("active", child.dataset.folderName === folderName);
+          });
+        }
+
+        updateArchiveFolderView();
+        updateArchiveFolderActions();
+        persistArchiveNavState();
+        if (isArchiveVideoCategory()) {
+          loadArchiveVideos();
+        } else {
+          loadArchiveFiles(folderName);
+        }
+      }
+
+      function updateArchiveFolderActions() {
+        const canEdit = hasArchiveEditAccess();
+        const hasOpenFolder = Boolean(openedArchiveFolder);
+        const canAdminRename = canEdit && isActualAdmin() && hasOpenFolder;
+        const canAdminDelete = canEdit && isActualAdmin() && hasOpenFolder;
+        const isVideoCategory = isArchiveVideoCategory();
+        if (archiveUploadBtn) {
+          archiveUploadBtn.style.display = isVideoCategory ? "none" : "inline-flex";
+          archiveUploadBtn.disabled = !canEdit || !hasOpenFolder || isVideoCategory;
+        }
+        if (archiveDeleteFolderBtn) {
+          archiveDeleteFolderBtn.style.display = canAdminDelete ? "inline-flex" : "none";
+          archiveDeleteFolderBtn.disabled = !canAdminDelete;
+        }
+        if (archiveRenameFolderBtn) {
+          archiveRenameFolderBtn.style.display = canAdminRename ? "inline-flex" : "none";
+          archiveRenameFolderBtn.disabled = !canAdminRename;
+        }
+        if (archiveShowUploadModalBtn) {
+          archiveShowUploadModalBtn.style.display = isVideoCategory && hasOpenFolder && canEdit ? "inline-flex" : "none";
+          archiveShowUploadModalBtn.disabled = !canEdit || !hasOpenFolder || !isVideoCategory;
+        }
+        if (archiveVideoSearchInput) {
+          archiveVideoSearchInput.disabled = !hasOpenFolder || !isVideoCategory;
+        }
+        if (archiveSortOrderSelect) {
+          archiveSortOrderSelect.disabled = !hasOpenFolder || !isVideoCategory;
+        }
+        if (archiveVideoQualitySelect) {
+          archiveVideoQualitySelect.disabled = !hasOpenFolder || !isVideoCategory;
+        }
+        if (archivePageSizeSelect) {
+          archivePageSizeSelect.disabled = !hasOpenFolder || !isVideoCategory;
+        }
+        if (archiveFilterResetBtn) {
+          archiveFilterResetBtn.disabled = !hasOpenFolder || !isVideoCategory;
+        }
+      }
+
+      async function loadArchiveFiles(folderName) {
+        if (!currentArchiveCategory || !folderName || !hasArchiveViewAccess()) {
+          return;
+        }
+
+        if (isArchiveVideoCategory()) {
+          await loadArchiveVideos();
+          return;
+        }
+
+        if (archiveFileGrid) {
+          archiveFileGrid.innerHTML = "";
+        }
+        if (archiveFileEmpty) {
+          archiveFileEmpty.style.display = "none";
+        }
+
+        try {
+          const response = await fetch(`/api/archive/${currentArchiveCategory}/folders/${encodeURIComponent(folderName)}/files`, {
+            headers: buildAuthHeaders(),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data?.message || "Nem sikerült betölteni a fájlokat.");
+          }
+          const files = Array.isArray(data?.files) ? data.files : [];
+          renderArchiveFiles(files);
+        } catch (error) {
+          console.error("Archívum fájl hiba:", error);
+          if (archiveFileEmpty) {
+            archiveFileEmpty.textContent = error.message || "Nem sikerült betölteni a fájlokat.";
+            archiveFileEmpty.style.display = "block";
+          }
+        }
+      }
+
+      function renderArchiveFiles(files) {
+        if (!archiveFileGrid) {
+          return;
+        }
+
+        archiveFileGrid.innerHTML = "";
+        archiveFileGrid.classList.toggle("archive-file-grid--images", currentArchiveCategory === "kepek");
+
+        if (!Array.isArray(files) || files.length === 0) {
+          currentArchiveImageFiles = [];
+          activeArchiveImageIndex = -1;
+          updateArchiveImageNavigation();
+          if (archiveFileEmpty) {
+            archiveFileEmpty.textContent = "Nincs megjeleníthető fájl ebben a mappában.";
+            archiveFileEmpty.style.display = "block";
+          }
+          return;
+        }
+
+        if (archiveFileEmpty) {
+          archiveFileEmpty.style.display = "none";
+        }
+
+        const category = ARCHIVE_CATEGORIES[currentArchiveCategory] || {};
+        const type = category.type;
+
+        if (type === "image") {
+          const prevActiveUrl = activeArchiveImageIndex >= 0
+            ? currentArchiveImageFiles[activeArchiveImageIndex]?.url
+            : null;
+          currentArchiveImageFiles = files.map((item) => ({
+            url: item.url,
+            name: item.name || "Kep",
+          }));
+          if (prevActiveUrl) {
+            activeArchiveImageIndex = currentArchiveImageFiles.findIndex((item) => item.url === prevActiveUrl);
+          } else {
+            activeArchiveImageIndex = -1;
+          }
+        } else {
+          currentArchiveImageFiles = [];
+          activeArchiveImageIndex = -1;
+        }
+        updateArchiveImageNavigation();
+
+        files.forEach((file, fileIndex) => {
+          const card = document.createElement("div");
+          card.className = "archive-file-card";
+
+          if (type === "image") {
+            card.classList.add("archive-file-card--image");
+            const img = document.createElement("img");
+            img.className = "archive-file-thumb";
+            img.src = file.url;
+            img.alt = file.name || "Archív kép";
+            img.addEventListener("click", () => openArchiveImageByIndex(fileIndex));
+            card.appendChild(img);
+          } else if (type === "audio") {
+            const audio = document.createElement("audio");
+            audio.className = "archive-file-audio";
+            audio.controls = true;
+            audio.src = file.url;
+            card.appendChild(audio);
+          } else if (type === "document") {
+            const docRow = document.createElement("div");
+            docRow.className = "archive-doc-card";
+
+            const icon = document.createElement("div");
+            icon.className = "archive-doc-icon";
+            icon.innerHTML = '<i class="fas fa-file-lines"></i>';
+
+            const info = document.createElement("div");
+            const title = document.createElement("div");
+            title.className = "archive-file-title";
+            title.textContent = file.name || "Dokumentum";
+            info.appendChild(title);
+
+            const actions = document.createElement("div");
+            actions.className = "archive-doc-actions";
+            const openBtn = document.createElement("button");
+            openBtn.type = "button";
+            openBtn.className = "secondary-btn";
+            openBtn.textContent = "Megnyitás";
+            openBtn.addEventListener("click", () => openArchiveDocument(file.url, file.name));
+            const downloadBtn = document.createElement("a");
+            downloadBtn.className = "secondary-btn";
+            downloadBtn.href = file.url;
+            downloadBtn.textContent = "Letöltés";
+            downloadBtn.setAttribute("download", file.name || "");
+            actions.appendChild(openBtn);
+            actions.appendChild(downloadBtn);
+
+            docRow.appendChild(icon);
+            docRow.appendChild(info);
+            docRow.appendChild(actions);
+            card.appendChild(docRow);
+          }
+
+          if (type !== "document") {
+            const title = document.createElement("div");
+            title.className = "archive-file-title";
+            title.textContent = file.name || "Fájl";
+            card.appendChild(title);
+          }
+
+          archiveFileGrid.appendChild(card);
+        });
+      }
+      function clampArchiveImageScale(value) {
+        return Math.min(3, Math.max(1, value));
+      }
+
+      function isArchiveImageModalOpen() {
+        return Boolean(archiveImageModal?.classList.contains("is-visible"));
+      }
+
+      function updateArchiveImageNavigation() {
+        const total = currentArchiveImageFiles.length;
+        const hasMultiple = total > 1;
+
+        if (archiveImagePrev) {
+          archiveImagePrev.style.display = hasMultiple ? "inline-flex" : "none";
+          archiveImagePrev.disabled = activeArchiveImageIndex <= 0;
+        }
+        if (archiveImageNext) {
+          archiveImageNext.style.display = hasMultiple ? "inline-flex" : "none";
+          archiveImageNext.disabled = activeArchiveImageIndex < 0 || activeArchiveImageIndex >= total - 1;
+        }
+      }
+
+      function syncArchiveImageZoomControl() {
+        if (!archiveImageZoom) {
+          return;
+        }
+        archiveImageZoom.value = String(archiveImageScale);
+      }
+
+      function applyArchiveImageTransform() {
+        if (!archiveImagePreview) {
+          return;
+        }
+
+        archiveImagePreview.style.transition = archiveImageDragging ? "none" : "transform 0.2s ease";
+        archiveImagePreview.style.transform = `translate(${archiveImagePanX}px, ${archiveImagePanY}px) scale(${archiveImageScale})`;
+
+        const isZoomed = archiveImageScale > 1;
+        const cursor = !isZoomed ? "default" : archiveImageDragging ? "grabbing" : "grab";
+        archiveImagePreview.style.cursor = cursor;
+        if (archiveImageStage) {
+          archiveImageStage.style.cursor = cursor;
+        }
+      }
+
+      function resetArchiveImageTransform() {
+        archiveImageScale = 1;
+        archiveImagePanX = 0;
+        archiveImagePanY = 0;
+        archiveImageDragging = false;
+        syncArchiveImageZoomControl();
+        applyArchiveImageTransform();
+      }
+
+      function setArchiveImageScale(nextScale, anchorClientX = null, anchorClientY = null) {
+        const clampedScale = clampArchiveImageScale(nextScale);
+        if (
+          Number.isFinite(anchorClientX) &&
+          Number.isFinite(anchorClientY) &&
+          archiveImagePreview &&
+          archiveImageScale > 0 &&
+          clampedScale !== archiveImageScale
+        ) {
+          const previewRect = archiveImagePreview.getBoundingClientRect();
+          const centerX = previewRect.left + previewRect.width / 2;
+          const centerY = previewRect.top + previewRect.height / 2;
+          const ratio = clampedScale / archiveImageScale;
+          archiveImagePanX += (1 - ratio) * (anchorClientX - centerX);
+          archiveImagePanY += (1 - ratio) * (anchorClientY - centerY);
+        }
+
+        archiveImageScale = clampedScale;
+        if (archiveImageScale <= 1) {
+          archiveImagePanX = 0;
+          archiveImagePanY = 0;
+        }
+        syncArchiveImageZoomControl();
+        applyArchiveImageTransform();
+      }
+
+      function openArchiveImageByIndex(index) {
+        if (!Array.isArray(currentArchiveImageFiles) || !currentArchiveImageFiles.length) {
+          return;
+        }
+        if (index < 0 || index >= currentArchiveImageFiles.length) {
+          return;
+        }
+
+        activeArchiveImageIndex = index;
+        const target = currentArchiveImageFiles[index];
+        openArchiveImage(target.url, target.name);
+      }
+
+      function showNextArchiveImage() {
+        if (activeArchiveImageIndex >= currentArchiveImageFiles.length - 1) {
+          return;
+        }
+        openArchiveImageByIndex(activeArchiveImageIndex + 1);
+      }
+
+      function showPrevArchiveImage() {
+        if (activeArchiveImageIndex <= 0) {
+          return;
+        }
+        openArchiveImageByIndex(activeArchiveImageIndex - 1);
+      }
+
+      function openArchiveImage(url, name) {
+        if (!archiveImageModal || !archiveImagePreview) {
+          return;
+        }
+        archiveImagePreview.src = url;
+        if (archiveImageTitle) {
+          archiveImageTitle.textContent = name || "Kepnezet";
+        }
+        resetArchiveImageTransform();
+        archiveImageModal.classList.add("is-visible");
+        archiveImageModal.setAttribute("aria-hidden", "false");
+        updateArchiveImageNavigation();
+      }
+
+      function closeArchiveImage() {
+        if (!archiveImageModal || !archiveImagePreview) {
+          return;
+        }
+        archiveImageModal.classList.remove("is-visible");
+        archiveImageModal.setAttribute("aria-hidden", "true");
+        archiveImagePreview.src = "";
+        resetArchiveImageTransform();
+        updateArchiveImageNavigation();
+      }
+
+      function openArchiveDocument(url, name) {
+        if (!archiveDocModal || !archiveDocFrame) {
+          return;
+        }
+        if (archiveDocTitle) {
+          archiveDocTitle.textContent = name || "Dokumentum";
+        }
+        archiveDocFrame.src = url;
+        archiveDocModal.classList.add("is-visible");
+        archiveDocModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeArchiveDocument() {
+        if (!archiveDocModal || !archiveDocFrame) {
+          return;
+        }
+        archiveDocModal.classList.remove("is-visible");
+        archiveDocModal.setAttribute("aria-hidden", "true");
+        archiveDocFrame.src = "";
+      }
+
+      function isArchiveVideoCategory() {
+        return currentArchiveCategory === "videok";
+      }
+
+      function isArchiveVideoFolderOpen() {
+        return isArchiveVideoCategory() && Boolean(openedArchiveFolder);
+      }
+
+      function getArchiveVideoQualityAvailability(video) {
+        return {
+          "720p":
+            Number(video?.has_720p) === 1 ||
+            video?.has_720p === true ||
+            video?.has_720p === "1",
+        };
+      }
+
+      function listAvailableArchiveQualities(video) {
+        const availability = getArchiveVideoQualityAvailability(video);
+        const available = ["720p"].filter((quality) => availability[quality]);
+        if (!available.length) {
+          return ["Eredeti"];
+        }
+        return [...available, "Eredeti"];
+      }
+
+      function getArchiveVideoProcessingState(video) {
+        const status = String(video?.processing_status || "").toLowerCase();
+        const rawError =
+          typeof video?.processing_error === "string" ? video.processing_error.trim() : "";
+        const shortenedError =
+          rawError.length > 180 ? `${rawError.slice(0, 177)}...` : rawError;
+
+        if (status === "processing" || status === "pending") {
+          return { kind: "processing", label: "Feldolgozas", error: "" };
+        }
+
+        if (status === "error" || shortenedError) {
+          return {
+            kind: "error",
+            label: "Feldolgozasi hiba",
+            error: shortenedError || "A video feldolgozasa sikertelen.",
+          };
+        }
+
+        return { kind: "done", label: "Kesz", error: "" };
+      }
+
+      function buildArchiveVideoPath(originalFilename, targetResolution) {
+        if (!originalFilename || !targetResolution) return "";
+        const normalizedPath = String(originalFilename).replace(/^\/+/, "");
+        const segments = normalizedPath.split("/");
+        const eredetiIndex = segments.indexOf("eredeti");
+
+        if (eredetiIndex === -1 || eredetiIndex + 1 >= segments.length) {
+          return "";
+        }
+
+        const folderName = segments[eredetiIndex + 1];
+        const baseFilename = segments[segments.length - 1];
+        const dotIndex = baseFilename.lastIndexOf(".");
+        const nameWithoutExt = dotIndex !== -1 ? baseFilename.slice(0, dotIndex) : baseFilename;
+        const extension = dotIndex !== -1 ? baseFilename.slice(dotIndex) : "";
+
+        return `/uploads/archivum/videok/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}`;
+      }
+
+      function getPreferredArchiveVideoSource(video, qualityPreference) {
+        const requestedQuality = qualityPreference || "original";
+        const normalizedQuality = normalizeQualityPreference(requestedQuality);
+        const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
+        const availability = getArchiveVideoQualityAvailability(video);
+        const originalQuality = (video?.original_quality || "").toString();
+
+        if (normalizedQuality === "original") {
+          return {
+            src: originalSource,
+            originalSource,
+            resolvedQuality: "original",
+            requestedQuality: normalizedQuality,
+            availability,
+          };
+        }
+
+        if (normalizedQuality === "720p" && availability["720p"] && originalQuality !== "720p") {
+          return {
+            src: buildArchiveVideoPath(video?.filename, "720p"),
+            originalSource,
+            resolvedQuality: "720p",
+            requestedQuality: normalizedQuality,
+            availability,
+          };
+        }
+
+        return {
+          src: originalSource,
+          originalSource,
+          resolvedQuality: "original",
+          requestedQuality: normalizedQuality,
+          availability,
+        };
+      }
+
+      function showArchiveVideoToast(message) {
+        if (!archiveVideoToast) return;
+        archiveVideoToast.textContent = message;
+        archiveVideoToast.classList.add("upload-toast--visible");
+        if (archiveVideoToastTimeout) {
+          clearTimeout(archiveVideoToastTimeout);
+        }
+        archiveVideoToastTimeout = setTimeout(
+          () => archiveVideoToast.classList.remove("upload-toast--visible"),
+          2200
+        );
+      }
+
+      function formatArchiveThumbnailTimecode(seconds, includeFraction = false) {
+        const safeSeconds = Number.isFinite(seconds) && seconds >= 0 ? seconds : 0;
+        const wholeSeconds = Math.floor(safeSeconds);
+        const hours = Math.floor(wholeSeconds / 3600);
+        const minutes = Math.floor((wholeSeconds % 3600) / 60);
+        const secs = wholeSeconds % 60;
+        const base = hours > 0
+          ? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+          : `${minutes}:${String(secs).padStart(2, "0")}`;
+
+        if (!includeFraction) {
+          return base;
+        }
+
+        const hundredths = Math.floor((safeSeconds - wholeSeconds) * 100);
+        return `${base}.${String(Math.max(hundredths, 0)).padStart(2, "0")}`;
+      }
+
+      function isArchiveThumbnailPickerOpen() {
+        return Boolean(archiveThumbnailPickerModal?.classList.contains("modal-overlay--visible"));
+      }
+
+      function getArchiveThumbnailPickerDurationSeconds() {
+        const rawDuration = archiveThumbnailPickerVideo?.duration;
+        return Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
+      }
+
+      function getArchiveThumbnailPickerCurrentSeconds() {
+        const rawCurrent = archiveThumbnailPickerVideo?.currentTime;
+        const safeCurrent = Number.isFinite(rawCurrent) && rawCurrent >= 0 ? rawCurrent : 0;
+        const duration = getArchiveThumbnailPickerDurationSeconds();
+        if (duration <= 0) {
+          return safeCurrent;
+        }
+        const maxSeek = Math.max(duration - 0.04, 0);
+        return Math.max(Math.min(safeCurrent, maxSeek), 0);
+      }
+
+      function setArchiveThumbnailPickerControlsEnabled(enabled) {
+        const canUse = Boolean(enabled);
+        if (archiveThumbnailPickerSlider) {
+          archiveThumbnailPickerSlider.disabled = !canUse;
+        }
+        if (archiveThumbnailPickerStepBackBtn) {
+          archiveThumbnailPickerStepBackBtn.disabled = !canUse;
+        }
+        if (archiveThumbnailPickerStepForwardBtn) {
+          archiveThumbnailPickerStepForwardBtn.disabled = !canUse;
+        }
+      }
+
+      function setArchiveThumbnailPickerBusyState(isBusy) {
+        const busy = Boolean(isBusy);
+        if (archiveThumbnailPickerSaveBtn) {
+          archiveThumbnailPickerSaveBtn.disabled = busy || getArchiveThumbnailPickerDurationSeconds() <= 0;
+          archiveThumbnailPickerSaveBtn.textContent = busy ? "Mentes..." : "Indexkep mentese";
+        }
+        if (archiveThumbnailPickerCancelBtn) {
+          archiveThumbnailPickerCancelBtn.disabled = busy;
+        }
+        if (archiveThumbnailPickerCloseBtn) {
+          archiveThumbnailPickerCloseBtn.disabled = busy;
+        }
+      }
+
+      function syncArchiveThumbnailPickerTimeline(secondsOverride = null) {
+        const duration = getArchiveThumbnailPickerDurationSeconds();
+        const safeCurrent = Number.isFinite(secondsOverride)
+          ? Math.max(Math.min(secondsOverride, Math.max(duration - 0.04, 0)), 0)
+          : getArchiveThumbnailPickerCurrentSeconds();
+
+        if (archiveThumbnailPickerSlider) {
+          archiveThumbnailPickerSlider.value = String(duration > 0 ? Math.min(safeCurrent, duration) : 0);
+        }
+        if (archiveThumbnailPickerCurrentEl) {
+          archiveThumbnailPickerCurrentEl.textContent = formatArchiveThumbnailTimecode(safeCurrent, true);
+        }
+        if (archiveThumbnailPickerDurationEl) {
+          archiveThumbnailPickerDurationEl.textContent = formatArchiveThumbnailTimecode(duration);
+        }
+      }
+
+      function closeArchiveThumbnailPicker(options = {}) {
+        const restoreFocus = options?.restoreFocus !== false;
+        const activeState = archiveThumbnailPickerState;
+        if (activeState?.isSaving) {
+          return;
+        }
+
+        if (archiveThumbnailPickerModal) {
+          archiveThumbnailPickerModal.classList.remove("modal-overlay--visible");
+          archiveThumbnailPickerModal.style.display = "none";
+          archiveThumbnailPickerModal.setAttribute("aria-hidden", "true");
+        }
+
+        if (archiveThumbnailPickerVideo) {
+          archiveThumbnailPickerVideo.pause();
+          archiveThumbnailPickerVideo.removeAttribute("src");
+          archiveThumbnailPickerVideo.load();
+        }
+
+        archiveThumbnailPickerState = null;
+        setArchiveThumbnailPickerControlsEnabled(false);
+        setArchiveThumbnailPickerBusyState(false);
+        if (archiveThumbnailPickerSlider) {
+          archiveThumbnailPickerSlider.max = "0";
+          archiveThumbnailPickerSlider.value = "0";
+        }
+        if (archiveThumbnailPickerCurrentEl) {
+          archiveThumbnailPickerCurrentEl.textContent = "0:00.00";
+        }
+        if (archiveThumbnailPickerDurationEl) {
+          archiveThumbnailPickerDurationEl.textContent = "0:00";
+        }
+        if (archiveThumbnailPickerHintEl) {
+          archiveThumbnailPickerHintEl.textContent =
+            "Lejatszas kozben allitsd meg ott, amelyik kepkockat indexkepnek szeretned.";
+        }
+        if (archiveThumbnailPickerTitleEl) {
+          archiveThumbnailPickerTitleEl.textContent = "";
+        }
+
+        if (restoreFocus && activeState?.triggerButton && typeof activeState.triggerButton.focus === "function") {
+          activeState.triggerButton.focus({ preventScroll: true });
+        }
+      }
+
+      function openArchiveThumbnailPicker(video, previewElement, triggerButton) {
+        if (!archiveThumbnailPickerModal || !archiveThumbnailPickerVideo || !archiveThumbnailPickerSlider) {
+          showArchiveVideoToast("Az indexkep-kivalaszto nem erheto el.");
+          return;
+        }
+
+        if (!video?.filename || !Number.isFinite(Number(video?.id))) {
+          showArchiveVideoToast("Ervenytelen video.");
+          return;
+        }
+
+        if (archiveThumbnailPickerState?.isSaving) {
+          return;
+        }
+
+        if (isArchiveThumbnailPickerOpen()) {
+          closeArchiveThumbnailPicker({ restoreFocus: false });
+        }
+
+        const { src, originalSource } = getPreferredArchiveVideoSource(video, currentVideoQuality);
+        const playbackSource = src || originalSource || `/uploads/${video.filename}`;
+        const fallbackSource = originalSource || `/uploads/${video.filename}`;
+        const titleText = cleanVideoTitle(video.original_name || video.filename) || "Nevtelen video";
+
+        archiveThumbnailPickerState = {
+          video,
+          previewElement: previewElement || null,
+          triggerButton: triggerButton || null,
+          originalSource: fallbackSource,
+          isUsingOriginalSource: playbackSource === fallbackSource,
+          isSaving: false,
+        };
+
+        if (archiveThumbnailPickerTitleEl) {
+          archiveThumbnailPickerTitleEl.textContent = titleText;
+        }
+        if (archiveThumbnailPickerHintEl) {
+          archiveThumbnailPickerHintEl.textContent = "Video betoltese...";
+        }
+
+        if (archiveThumbnailPickerSlider) {
+          archiveThumbnailPickerSlider.min = "0";
+          archiveThumbnailPickerSlider.max = "0";
+          archiveThumbnailPickerSlider.value = "0";
+        }
+        if (archiveThumbnailPickerCurrentEl) {
+          archiveThumbnailPickerCurrentEl.textContent = "0:00.00";
+        }
+        if (archiveThumbnailPickerDurationEl) {
+          archiveThumbnailPickerDurationEl.textContent = "0:00";
+        }
+
+        setArchiveThumbnailPickerControlsEnabled(false);
+        setArchiveThumbnailPickerBusyState(false);
+
+        archiveThumbnailPickerModal.style.display = "flex";
+        archiveThumbnailPickerModal.classList.add("modal-overlay--visible");
+        archiveThumbnailPickerModal.setAttribute("aria-hidden", "false");
+
+        archiveThumbnailPickerVideo.pause();
+        archiveThumbnailPickerVideo.currentTime = 0;
+        archiveThumbnailPickerVideo.src = playbackSource;
+        archiveThumbnailPickerVideo.load();
+        archiveThumbnailPickerCloseBtn?.focus({ preventScroll: true });
+      }
+
+      function nudgeArchiveThumbnailPicker(secondsDelta) {
+        if (!archiveThumbnailPickerState || !archiveThumbnailPickerVideo) {
+          return;
+        }
+        const safeDelta = Number.isFinite(secondsDelta) ? secondsDelta : 0;
+        if (!safeDelta) {
+          return;
+        }
+
+        const duration = getArchiveThumbnailPickerDurationSeconds();
+        const maxSeek = duration > 0 ? Math.max(duration - 0.04, 0) : 0;
+        const nextTime = Math.max(Math.min(getArchiveThumbnailPickerCurrentSeconds() + safeDelta, maxSeek), 0);
+        archiveThumbnailPickerVideo.currentTime = nextTime;
+        syncArchiveThumbnailPickerTimeline(nextTime);
+      }
+
+      async function saveArchiveThumbnailFromPicker() {
+        const stateAtStart = archiveThumbnailPickerState;
+        if (!stateAtStart || !archiveThumbnailPickerVideo || stateAtStart.isSaving) {
+          return;
+        }
+
+        const videoId = Number.parseInt(stateAtStart.video?.id, 10);
+        if (!Number.isFinite(videoId)) {
+          alert("Ervenytelen video azonosito.");
+          return;
+        }
+
+        const seekSeconds = getArchiveThumbnailPickerCurrentSeconds();
+        stateAtStart.isSaving = true;
+        setArchiveThumbnailPickerBusyState(true);
+        setArchiveThumbnailPickerControlsEnabled(false);
+        if (archiveThumbnailPickerHintEl) {
+          archiveThumbnailPickerHintEl.textContent = "Indexkep mentese folyamatban...";
+        }
+
+        try {
+          const response = await fetch(`/api/archive/videos/${videoId}/thumbnail/regenerate`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...buildAuthHeaders(),
+            },
+            body: JSON.stringify({ seekSeconds }),
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error((result && result.message) || "Nem sikerult indexkepet menteni.");
+          }
+
+          const refreshedThumbnail = typeof result?.thumbnail_filename === "string"
+            ? result.thumbnail_filename.trim()
+            : "";
+          if (refreshedThumbnail) {
+            stateAtStart.video.thumbnail_filename = refreshedThumbnail;
+            if (stateAtStart.previewElement) {
+              stateAtStart.previewElement.poster = `/uploads/${refreshedThumbnail}?v=${Date.now()}`;
+              stateAtStart.previewElement.load();
+            }
+          }
+
+          showArchiveVideoToast(result?.message || "Indexkep frissitve.");
+          closeArchiveThumbnailPicker();
+        } catch (error) {
+          console.error("Archiv indexkep mentesi hiba:", error);
+          alert(error.message || "Nem sikerult elmenteni az indexkepet.");
+        } finally {
+          if (archiveThumbnailPickerState === stateAtStart) {
+            stateAtStart.isSaving = false;
+            setArchiveThumbnailPickerBusyState(false);
+            setArchiveThumbnailPickerControlsEnabled(getArchiveThumbnailPickerDurationSeconds() > 0);
+            if (archiveThumbnailPickerHintEl) {
+              archiveThumbnailPickerHintEl.textContent =
+                "Lejatszas kozben allitsd meg ott, amelyik kepkockat indexkepnek szeretned.";
+            }
+          }
+        }
+      }
+
+      function updateArchiveVideoPanelVisibility() {
+        const visible = isArchiveVideoFolderOpen();
+        if (archiveVideoPanel) {
+          archiveVideoPanel.style.display = visible ? "block" : "none";
+        }
+        if (archiveFileGrid) {
+          archiveFileGrid.style.display = visible ? "none" : "";
+        }
+        if (archiveFileEmpty && visible) {
+          archiveFileEmpty.style.display = "none";
+        }
+        if (archiveVideoPanelHint) {
+          archiveVideoPanelHint.textContent = visible
+            ? `Mappa: ${openedArchiveFolder}`
+            : "Nyiss meg egy mappát az archív videók megjelenítéséhez.";
+        }
+      }
+
+      function renderArchiveSelectedTagChips() {
+        if (!archiveTagSelectBox) return;
+        archiveTagSelectBox.innerHTML = "";
+
+        if (!archiveVideoFilters.tag.length) {
+          const placeholder = document.createElement("span");
+          placeholder.className = "custom-select-placeholder";
+          placeholder.textContent = "Válassz címkéket...";
+          archiveTagSelectBox.appendChild(placeholder);
+          return;
+        }
+
+        archiveVideoFilters.tag.forEach((tagId) => {
+          const tagData = archiveAvailableTags.find((tag) => String(tag.id) === String(tagId));
+          const chip = document.createElement("span");
+          chip.className = "custom-select-chip";
+          chip.dataset.value = String(tagId);
+
+          const colorBar = document.createElement("span");
+          colorBar.className = "custom-select-chip__color";
+          colorBar.style.background = normalizeColor(tagData?.color || DEFAULT_TAG_COLOR);
+
+          const label = document.createElement("span");
+          label.textContent = tagData?.name || `Címke #${tagId}`;
+
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "custom-select-chip__remove";
+          removeBtn.setAttribute("aria-label", `${label.textContent} törlése`);
+          removeBtn.textContent = "×";
+
+          chip.append(colorBar, label, removeBtn);
+          archiveTagSelectBox.appendChild(chip);
+        });
+      }
+
+      function renderArchiveTagDropdownOptions() {
+        if (!archiveTagSelectDropdown) return;
+        archiveTagSelectDropdown.innerHTML = "";
+
+        const selectedValues = new Set(archiveVideoFilters.tag.map((value) => String(value)));
+
+        if (!archiveAvailableTags.length) {
+          const emptyState = document.createElement("div");
+          emptyState.className = "custom-select-placeholder";
+          emptyState.style.padding = "0.35rem 0.65rem";
+          emptyState.textContent = "Nincs elérhető címke";
+          archiveTagSelectDropdown.appendChild(emptyState);
+          return;
+        }
+
+        archiveAvailableTags.forEach((tag) => {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = "custom-select-option";
+          option.dataset.value = String(tag.id);
+          option.disabled = selectedValues.has(option.dataset.value);
+
+          const colorBar = document.createElement("span");
+          colorBar.className = "custom-select-option__color";
+          colorBar.style.background = normalizeColor(tag.color);
+
+          const label = document.createElement("span");
+          label.textContent = tag.name;
+
+          option.append(colorBar, label);
+          archiveTagSelectDropdown.appendChild(option);
+        });
+      }
+
+      function renderArchiveTagSelector() {
+        renderArchiveSelectedTagChips();
+        renderArchiveTagDropdownOptions();
+      }
+
+      function selectArchiveVideoTag(tagId) {
+        if (!tagId) return;
+        const tagValue = String(tagId);
+        const alreadySelected = archiveVideoFilters.tag.some((value) => String(value) === tagValue);
+        if (alreadySelected) return;
+        archiveVideoFilters.tag = [...archiveVideoFilters.tag, tagValue];
+        archiveVideoFilters.page = 1;
+        renderArchiveTagSelector();
+        loadArchiveVideos();
+      }
+
+      function getArchiveTagIdFromChip(chip) {
+        if (!chip) return null;
+        const directId = chip.dataset.tagId;
+        if (directId) return directId;
+        const tagName = chip.dataset.tagName;
+        if (!tagName) return null;
+        const match = archiveAvailableTags.find((tag) => tag.name === tagName);
+        return match ? String(match.id) : null;
+      }
+
+      function attachArchiveVideoTagHandlers() {
+        if (!archiveVideoGridContainer || archiveVideoTagHandlersAttached) return;
+
+        archiveVideoGridContainer.addEventListener("click", (event) => {
+          const chip = event.target.closest(".tag-chip");
+          if (!chip || !archiveVideoGridContainer.contains(chip)) return;
+          event.stopPropagation();
+          const tagId = getArchiveTagIdFromChip(chip);
+          if (!tagId) return;
+          selectArchiveVideoTag(tagId);
+        });
+
+        archiveVideoGridContainer.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          const chip = event.target.closest(".tag-chip");
+          if (!chip || !archiveVideoGridContainer.contains(chip)) return;
+          event.preventDefault();
+          const tagId = getArchiveTagIdFromChip(chip);
+          if (!tagId) return;
+          selectArchiveVideoTag(tagId);
+        });
+
+        archiveVideoTagHandlersAttached = true;
+      }
+
+      function bindArchiveTagSelectorHandlers() {
+        if (!archiveTagSelectContainer || !archiveTagSelectDropdown || !archiveTagSelectBox || archiveTagSelectHandlersAttached) {
+          return;
+        }
+
+        archiveTagSelectContainer.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (event.target.closest(".custom-select-chip__remove")) {
+            return;
+          }
+          if (event.target.closest(".custom-select-option")) {
+            return;
+          }
+          archiveTagSelectContainer.classList.toggle("active");
+        });
+
+        archiveTagSelectDropdown.addEventListener("click", (event) => {
+          const option = event.target.closest(".custom-select-option");
+          if (!option) return;
+          event.stopPropagation();
+          if (option.disabled) return;
+          selectArchiveVideoTag(option.dataset.value);
+        });
+
+        archiveTagSelectBox.addEventListener("click", (event) => {
+          const removeBtn = event.target.closest(".custom-select-chip__remove");
+          if (!removeBtn) return;
+          const chip = removeBtn.closest(".custom-select-chip");
+          const tagId = chip?.dataset?.value;
+          if (!tagId) return;
+          event.stopPropagation();
+          archiveVideoFilters.tag = archiveVideoFilters.tag.filter((id) => String(id) !== String(tagId));
+          archiveVideoFilters.page = 1;
+          renderArchiveTagSelector();
+          loadArchiveVideos();
+        });
+
+        document.addEventListener("click", (event) => {
+          if (!archiveTagSelectContainer.contains(event.target)) {
+            archiveTagSelectContainer.classList.remove("active");
+          }
+        });
+
+        archiveTagSelectHandlersAttached = true;
+      }
+
+      function renderArchiveGlobalTagSelect() {
+        if (!archiveGlobalTagSelect) return;
+        const currentSelection = getSelectValues(archiveGlobalTagSelect);
+        archiveGlobalTagSelect.innerHTML = "";
+        archiveAvailableTags.forEach((tag) => {
+          const option = document.createElement("option");
+          option.value = String(tag.id);
+          option.textContent = tag.name;
+          option.selected = currentSelection.includes(tag.id);
+          styleTagOption(option, tag.color);
+          archiveGlobalTagSelect.appendChild(option);
+        });
+      }
+
+      async function fetchArchiveVideoTags() {
+        if (!hasArchiveViewAccess()) {
+          archiveAvailableTags = [];
+          renderArchiveTagSelector();
+          renderArchiveGlobalTagSelect();
+          return;
+        }
+        try {
+          const response = await fetch("/api/archive/videos/tags", {
+            headers: buildAuthHeaders(),
+          });
+          if (!response.ok) throw new Error("Nem sikerült lekérni a címkéket.");
+          const payload = await response.json();
+          archiveAvailableTags = Array.isArray(payload)
+            ? payload.map((tag) => ({ ...tag, color: normalizeColor(tag.color) }))
+            : [];
+          renderArchiveTagSelector();
+          renderArchiveGlobalTagSelect();
+          renderArchiveUploadQueue();
+          if (archiveCreateTagWrapper) {
+            archiveCreateTagWrapper.style.display = isAdminUser() ? "block" : "none";
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      }
+
+      function buildArchiveVideoQueryParams() {
+        const params = new URLSearchParams();
+        Object.entries(archiveVideoFilters).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            if (value.length) {
+              value.forEach((entry) => params.append(key, entry));
+            }
+          } else if (value !== undefined && value !== null && value !== "") {
+            params.append(key, value);
+          }
+        });
+        return params;
+      }
+
+      function renderArchiveVideoPagination(pagination) {
+        if (!archiveVideoPagination || !pagination || pagination.totalPages <= 1) {
+          if (archiveVideoPagination) {
+            archiveVideoPagination.innerHTML = "";
+          }
+          return;
+        }
+
+        archiveVideoPagination.innerHTML = "";
+        const { currentPage, totalPages } = pagination;
+
+        const createButton = (pageNumber, text = null) => {
+          const btn = document.createElement("button");
+          btn.textContent = text || pageNumber;
+          btn.classList.toggle("active", pageNumber === currentPage);
+          btn.addEventListener("click", () => {
+            if (pageNumber === currentPage) return;
+            archiveVideoFilters.page = pageNumber;
+            loadArchiveVideos();
+          });
+          return btn;
+        };
+
+        const windowSize = 2;
+        const start = Math.max(1, currentPage - windowSize);
+        const end = Math.min(totalPages, currentPage + windowSize);
+
+        if (start > 1) {
+          archiveVideoPagination.appendChild(createButton(1));
+          if (start > 2) {
+            const ellipsis = document.createElement("span");
+            ellipsis.textContent = "...";
+            archiveVideoPagination.appendChild(ellipsis);
+          }
+        }
+
+        for (let page = start; page <= end; page += 1) {
+          archiveVideoPagination.appendChild(createButton(page));
+        }
+
+        if (end < totalPages) {
+          if (end < totalPages - 1) {
+            const ellipsis = document.createElement("span");
+            ellipsis.textContent = "...";
+            archiveVideoPagination.appendChild(ellipsis);
+          }
+          archiveVideoPagination.appendChild(createButton(totalPages));
+        }
+      }
+
+      function renderArchiveVideoGrid(videos) {
+        if (!archiveVideoGridContainer) {
+          return;
+        }
+        archiveVideoGridContainer.innerHTML = "";
+
+        videos.forEach((video, index) => {
+          const card = document.createElement("div");
+          card.className = "video-card";
+          const processingState = getArchiveVideoProcessingState(video);
+          if (processingState.kind === "error") {
+            card.classList.add("video-card--error");
+          }
+
+          const header = document.createElement("div");
+          header.className = "video-card__header";
+
+          const title = document.createElement("p");
+          title.className = "video-card__title";
+          title.textContent = cleanVideoTitle(video.original_name || video.filename) || "Névtelen videó";
+          header.appendChild(title);
+
+          const statusBadge = document.createElement("span");
+          statusBadge.className = "video-card__status video-card__status--" + processingState.kind;
+          statusBadge.textContent = processingState.label;
+          header.appendChild(statusBadge);
+
+          if (isAdminUser()) {
+            const refreshThumbnailBtn = document.createElement("button");
+            refreshThumbnailBtn.type = "button";
+            refreshThumbnailBtn.className = "video-card__thumb-refresh";
+            refreshThumbnailBtn.textContent = "Uj indexkep";
+            refreshThumbnailBtn.title = "Indexkep ujrageneralasa";
+            refreshThumbnailBtn.setAttribute("aria-label", "Indexkep ujrageneralasa");
+            refreshThumbnailBtn.addEventListener("click", (event) => {
+              event.stopPropagation();
+              openArchiveThumbnailPicker(video, videoElement, refreshThumbnailBtn);
+            });
+            header.appendChild(refreshThumbnailBtn);
+
+            const editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.className = "video-card__edit";
+            editBtn.title = "Videó címének szerkesztése";
+            editBtn.setAttribute("aria-label", "Videó címének szerkesztése");
+            editBtn.innerHTML = `
+              <svg class="video-card__edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M3.6 16.8 3 21l4.2-.6L19.1 8.5 15.5 4.9 3.6 16.8Zm16.8-9.2c.2-.2.2-.5 0-.7l-2.3-2.3c-.2-.2-.5-.2-.7 0l-1.9 1.9 3 3 1.9-1.9Z"
+                />
+              </svg>
+            `;
+            editBtn.addEventListener("click", async (event) => {
+              event.stopPropagation();
+              const currentTitle = cleanVideoTitle(video.original_name || video.filename || "") || "Névtelen videó";
+              const updatedTitle = window.prompt("Add meg az új videócímét:", currentTitle);
+              if (updatedTitle === null) return;
+              const normalizedTitle = updatedTitle.trim();
+              if (!normalizedTitle || normalizedTitle === currentTitle) return;
+              try {
+                const response = await fetch(`/api/archive/videos/${video.id}/title`, {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...buildAuthHeaders(),
+                  },
+                  body: JSON.stringify({ title: normalizedTitle }),
+                });
+                const data = await response.json().catch(() => null);
+                if (!response.ok) {
+                  throw new Error(data?.message || "Nem sikerült frissíteni a videó címét.");
+                }
+                video.original_name = data?.original_name || normalizedTitle;
+                title.textContent = cleanVideoTitle(video.original_name || video.filename) || "Névtelen videó";
+                showArchiveVideoToast(data?.message || "A videó címe frissült.");
+              } catch (error) {
+                console.error("Archív videó cím módosítási hiba:", error);
+                alert(error.message || "Nem sikerült frissíteni a videó címét.");
+              }
+            });
+            header.appendChild(editBtn);
+          }
+
+          card.appendChild(header);
+
+          const videoElement = document.createElement("video");
+          videoElement.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}` : "";
+          videoElement.dataset.src = `/uploads/${video.filename}`;
+          videoElement.controls = false;
+          videoElement.preload = "none";
+          videoElement.playsInline = true;
+          videoElement.setAttribute("playsinline", "");
+          videoElement.setAttribute("webkit-playsinline", "");
+          let hasPlaybackError = false;
+
+          const removePlaybackError = () => {
+            const existing = card.querySelector(".video-card__error--playback");
+            if (existing) {
+              existing.remove();
+            }
+          };
+
+          videoElement.addEventListener("click", () => openArchiveVideoModal(index));
+          videoElement.addEventListener("error", () => {
+            if (hasPlaybackError) {
+              return;
+            }
+
+            hasPlaybackError = true;
+            card.classList.add("video-card--error");
+            removePlaybackError();
+
+            const errorMessage = document.createElement("p");
+            errorMessage.className = "video-card__error video-card__error--playback";
+            errorMessage.textContent =
+              "Nem sikerult betolteni a videot. Frissitsd az oldalt, vagy probald ujra kesobb.";
+            card.appendChild(errorMessage);
+          });
+          videoElement.addEventListener("loadeddata", () => {
+            hasPlaybackError = false;
+            removePlaybackError();
+            if (processingState.kind !== "error") {
+              card.classList.remove("video-card--error");
+            }
+          });
+          card.appendChild(videoElement);
+
+          const meta = document.createElement("div");
+          meta.className = "video-card__meta";
+          const uploader = document.createElement("span");
+          uploader.textContent = `Feltöltötte: ${video.username || "Ismeretlen"}`;
+          const uploadedAt = document.createElement("span");
+          const displayedDate = video.content_created_at || video.uploaded_at;
+          uploadedAt.textContent = formatDate(displayedDate);
+          meta.append(uploader, uploadedAt);
+
+          const qualityInfo = document.createElement("div");
+          qualityInfo.className = "video-card__qualities";
+          qualityInfo.textContent = `Elérhető minőségek: ${listAvailableArchiveQualities(video).join(", ")}`;
+
+          const tagList = document.createElement("div");
+          tagList.className = "tag-list";
+          (video.tags || []).forEach((tag) => {
+            const chip = document.createElement("span");
+            chip.className = "tag-chip";
+            chip.style.setProperty("--tag-color", normalizeColor(tag.color));
+            chip.textContent = tag.name;
+            chip.setAttribute("role", "button");
+            chip.tabIndex = 0;
+            chip.dataset.tagId = String(tag.id);
+            tagList.appendChild(chip);
+          });
+
+          card.appendChild(meta);
+          card.appendChild(qualityInfo);
+          if (processingState.error) {
+            const processingError = document.createElement("p");
+            processingError.className = "video-card__error";
+            processingError.textContent = `Hiba: ${processingState.error}`;
+            card.appendChild(processingError);
+          }
+          if (tagList.childElementCount) {
+            card.appendChild(tagList);
+          }
+
+          if (isAdminUser()) {
+            const actions = document.createElement("div");
+            actions.className = "video-card__actions";
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "delete-btn";
+            deleteBtn.textContent = "Törlés";
+            deleteBtn.addEventListener("click", async () => {
+              if (!confirm("Biztosan törlöd a videót?")) return;
+              try {
+                const response = await fetch(`/api/archive/videos/${video.id}`, {
+                  method: "DELETE",
+                  headers: buildAuthHeaders(),
+                });
+                const result = await response.json().catch(() => null);
+                if (!response.ok) {
+                  throw new Error((result && result.message) || "Nem sikerült törölni a videót.");
+                }
+                await loadArchiveVideos();
+              } catch (error) {
+                alert(error.message);
+              }
+            });
+            actions.appendChild(deleteBtn);
+            card.appendChild(actions);
+          }
+
+          archiveVideoGridContainer.appendChild(card);
+        });
+      }
+
+      async function loadArchiveVideos() {
+        if (!archiveVideoGridContainer) return;
+        if (!isArchiveVideoFolderOpen() || !hasArchiveViewAccess()) {
+          archiveVideoGridContainer.innerHTML = "";
+          if (archiveVideoPagination) {
+            archiveVideoPagination.innerHTML = "";
+          }
+          archiveVideoList = [];
+          return;
+        }
+
+        archiveVideoGridContainer.innerHTML = "";
+        if (archiveVideoPagination) archiveVideoPagination.innerHTML = "";
+
+        const params = buildArchiveVideoQueryParams();
+
+        try {
+          const response = await fetch(
+            `/api/archive/videos/folders/${encodeURIComponent(openedArchiveFolder)}?${params.toString()}`,
+            {
+              headers: buildAuthHeaders(),
+            }
+          );
+
+          if (response.status === 401) {
+            updateUIForLoggedOut();
+            throw new Error("Be kell jelentkezned az archív videók megtekintéséhez.");
+          }
+
+          if (response.status === 403) {
+            localStorage.setItem(SESSION_KEYS.canViewArchive, "false");
+            updateArchiveAccessUI();
+            throw new Error("Nincs jogosultságod az archív videók megtekintéséhez.");
+          }
+
+          if (!response.ok) {
+            throw new Error("Nem sikerült betölteni az archív videókat.");
+          }
+
+          const { data, pagination } = await response.json();
+          archiveVideoFilters.page = pagination?.currentPage || archiveVideoFilters.page;
+          archiveVideoList = Array.isArray(data) ? data : [];
+          const newlyFailedVideos = archiveVideoList.filter((video) => {
+            const state = getArchiveVideoProcessingState(video);
+            if (state.kind !== "error") {
+              return false;
+            }
+            const videoId = Number.parseInt(video?.id, 10);
+            if (!Number.isFinite(videoId) || archiveNotifiedProcessingErrorIds.has(videoId)) {
+              return false;
+            }
+            archiveNotifiedProcessingErrorIds.add(videoId);
+            return true;
+          });
+
+          if (newlyFailedVideos.length) {
+            const countText =
+              newlyFailedVideos.length === 1
+                ? "1 video feldolgozasa hibaval leallt."
+                : `${newlyFailedVideos.length} video feldolgozasa hibaval leallt.`;
+            showArchiveVideoToast(`${countText} Reszlet a videokartyan lathato.`);
+          }
+          if (!archiveVideoList.length) {
+            archiveVideoGridContainer.innerHTML = "<p>Még nincs videó ebben a mappában.</p>";
+            return;
+          }
+
+          renderArchiveVideoGrid(archiveVideoList);
+          renderArchiveVideoPagination(pagination);
+        } catch (error) {
+          console.error("Archív videók betöltési hibája:", error);
+          archiveVideoList = [];
+          archiveVideoGridContainer.innerHTML = "<p>Nem sikerült betölteni az archív videókat.</p>";
+        }
+      }
+
+      function openArchiveVideoModal(index) {
+        if (!videoPlayerModal || !modalVideoPlayer || !Array.isArray(archiveVideoList)) {
+          return;
+        }
+        if (!archiveVideoList.length) {
+          return;
+        }
+
+        activeVideoModalContext = "archive";
+        archiveVideoIndex =
+          ((index % archiveVideoList.length) + archiveVideoList.length) % archiveVideoList.length;
+        const activeVideo = archiveVideoList[archiveVideoIndex];
+        if (!activeVideo) {
+          return;
+        }
+
+        modalVideoTitle.textContent =
+          cleanVideoTitle(activeVideo.original_name || activeVideo.filename) || "Névtelen videó";
+        const videoElements = archiveVideoGridContainer?.querySelectorAll(".video-card video") || [];
+        const { src, originalSource } = getPreferredArchiveVideoSource(activeVideo, currentVideoQuality);
+        const originalSrc = originalSource || `/uploads/${activeVideo.filename}`;
+        const sourceFromGrid = videoElements[archiveVideoIndex]?.dataset?.src || "";
+        const resolvedSource = src || sourceFromGrid || originalSrc;
+
+        modalVideoPlayer.addEventListener(
+          "error",
+          () => {
+            if (modalVideoPlayer.src !== originalSrc) {
+              modalVideoPlayer.src = originalSrc;
+              modalVideoPlayer.load();
+              modalVideoPlayer.play().catch(() => {});
+            }
+          },
+          { once: true }
+        );
+
+        modalVideoPlayer.src = resolvedSource;
+        modalVideoPlayer.load();
+        modalVideoPlayer.play().catch(() => {});
+
+        videoPlayerModal.classList.add("open");
+        videoPlayerModal.setAttribute("aria-hidden", "false");
+        closeVideoModalBtn?.focus({ preventScroll: true });
+      }
+
+      function showNextArchiveVideo() {
+        if (!archiveVideoList.length) {
+          return;
+        }
+        const nextIndex = (archiveVideoIndex + 1) % archiveVideoList.length;
+        openArchiveVideoModal(nextIndex);
+      }
+
+      function showPrevArchiveVideo() {
+        if (!archiveVideoList.length) {
+          return;
+        }
+        const prevIndex = (archiveVideoIndex - 1 + archiveVideoList.length) % archiveVideoList.length;
+        openArchiveVideoModal(prevIndex);
+      }
+
+      function createArchiveQueueTagSelect(selectedValues = [], onChange) {
+        const normalized = Array.isArray(selectedValues) ? [...selectedValues] : [];
+        const container = document.createElement("div");
+        container.className = "tag-pill-list";
+
+        const syncSelection = () => {
+          container.querySelectorAll(".tag-pill").forEach((pill) => {
+            const tagId = Number(pill.dataset.tagId);
+            pill.classList.toggle("tag-pill--selected", normalized.includes(tagId));
+          });
+        };
+
+        const toggleTag = (tagId) => {
+          const idx = normalized.indexOf(tagId);
+          if (idx >= 0) {
+            normalized.splice(idx, 1);
+          } else {
+            normalized.push(tagId);
+          }
+          syncSelection();
+          if (typeof onChange === "function") {
+            onChange([...normalized]);
+          }
+        };
+
+        archiveAvailableTags.forEach((tag) => {
+          const pill = document.createElement("button");
+          pill.type = "button";
+          pill.className = "tag-pill";
+          pill.dataset.tagId = String(tag.id);
+          pill.style.setProperty("--tag-color", normalizeColor(tag.color));
+          pill.innerHTML = `<span class="tag-pill__dot"></span><span class="tag-pill__label">${tag.name}</span>`;
+          pill.addEventListener("click", () => {
+            toggleTag(tag.id);
+            pill.blur();
+          });
+          container.appendChild(pill);
+        });
+
+        container.getSelectedValues = () => [...normalized];
+        container.setSelectedValues = (values) => {
+          if (Array.isArray(values)) {
+            normalized.splice(0, normalized.length, ...values);
+            syncSelection();
+          }
+        };
+
+        syncSelection();
+        return container;
+      }
+
+      function renderArchiveUploadQueue() {
+        if (!archiveUploadQueueContainer) return;
+        archiveUploadQueueContainer.innerHTML = "";
+        const hasItems = archiveUploadQueue.length > 0;
+
+        if (archiveAddMoreVideosBtn) {
+          archiveAddMoreVideosBtn.style.display = hasItems ? "inline-flex" : "none";
+        }
+
+        if (!hasItems && archiveDropZone) {
+          archiveUploadQueueContainer.appendChild(archiveDropZone);
+        }
+
+        archiveUploadQueue.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "upload-queue-item";
+
+          const thumbnail = document.createElement("div");
+          thumbnail.className = "queue-thumbnail";
+          if (item.thumbnail) {
+            const img = document.createElement("img");
+            img.src = item.thumbnail;
+            img.alt = item.displayName || item.file.name;
+            thumbnail.appendChild(img);
+          } else {
+            thumbnail.textContent = "🎞";
+          }
+
+          const details = document.createElement("div");
+          details.className = "queue-details";
+
+          const nameInput = document.createElement("input");
+          nameInput.type = "text";
+          nameInput.value = item.displayName || item.file.name;
+          nameInput.placeholder = "Videó neve";
+          nameInput.addEventListener("input", (event) => {
+            item.displayName = event.target.value || item.file.name;
+            updateArchiveUploadSummary();
+          });
+          details.appendChild(nameInput);
+
+          const tagSelector = createArchiveQueueTagSelect(item.tags || [], (values) => {
+            item.tags = values;
+          });
+          tagSelector.setAttribute("aria-label", "Címke kiválasztása");
+          details.appendChild(tagSelector);
+
+          const actions = document.createElement("div");
+          actions.className = "queue-actions";
+
+          const removeBtn = document.createElement("button");
+          removeBtn.className = "queue-remove";
+          removeBtn.type = "button";
+          removeBtn.innerHTML = "&times;";
+          removeBtn.addEventListener("click", () => {
+            archiveUploadQueue = archiveUploadQueue.filter((entry) => entry.signature !== item.signature);
+            archiveFileSignatures.delete(item.signature);
+            renderArchiveUploadQueue();
+            updateArchiveUploadSummary();
+            if (archiveUploadSubmitBtn) {
+              archiveUploadSubmitBtn.disabled = archiveUploadQueue.length === 0;
+            }
+          });
+          actions.appendChild(removeBtn);
+
+          row.appendChild(thumbnail);
+          row.appendChild(details);
+          row.appendChild(actions);
+          archiveUploadQueueContainer.appendChild(row);
+        });
+      }
+
+      function updateArchiveUploadSummary() {
+        if (!archiveUploadSummary || !archiveSelectedFileName) return;
+        const count = archiveUploadQueue.length;
+        if (!count) {
+          archiveUploadSummary.textContent = "Nincs kiválasztott fájl.";
+          archiveSelectedFileName.textContent = "Nincs kiválasztott fájl.";
+          return;
+        }
+        archiveUploadSummary.textContent = `${count} fájl kiválasztva.`;
+        archiveSelectedFileName.textContent = archiveUploadSummary.textContent;
+      }
+
+      function resetArchiveUploadProgress() {
+        if (archiveUploadProgress) {
+          archiveUploadProgress.style.display = "none";
+        }
+        if (archiveUploadProgressFill) {
+          archiveUploadProgressFill.style.width = "0%";
+        }
+        if (archiveUploadProgressCount) {
+          archiveUploadProgressCount.textContent = "0 / 0 videó";
+        }
+        if (archiveUploadProgressEta) {
+          archiveUploadProgressEta.textContent = "Hátralévő idő: --";
+        }
+        if (archiveUploadProgressDetails) {
+          archiveUploadProgressDetails.textContent = "";
+        }
+      }
+
+      function updateArchiveUploadProgressUI({
+        uploadedBytes,
+        totalBytes,
+        completedFiles,
+        totalFiles,
+        etaSeconds,
+      }) {
+        if (!archiveUploadProgress || !archiveUploadProgressFill || !archiveUploadProgressCount || !archiveUploadProgressEta) {
+          return;
+        }
+
+        const safeTotalBytes = totalBytes || 0;
+        const percent = safeTotalBytes > 0 ? Math.min(100, (uploadedBytes / safeTotalBytes) * 100) : 0;
+
+        archiveUploadProgress.style.display = "flex";
+        archiveUploadProgressFill.style.width = `${percent}%`;
+        archiveUploadProgressCount.textContent = `${completedFiles} / ${totalFiles} videó`;
+        archiveUploadProgressEta.textContent = `Hátralévő idő: ${formatDuration(etaSeconds)}`;
+
+        if (archiveUploadProgressDetails) {
+          const remainingBytes = Math.max(safeTotalBytes - uploadedBytes, 0);
+          archiveUploadProgressDetails.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(
+            safeTotalBytes
+          )} • Hátra: ${formatBytes(remainingBytes)}`;
+        }
+      }
+
+      function showArchiveUploadToast(message) {
+        if (!archiveUploadToast) return;
+        archiveUploadToast.textContent = message;
+        archiveUploadToast.classList.add("upload-toast--visible");
+        const modalContent = archiveVideoUploadModal?.querySelector(".upload-modal-content");
+        if (modalContent) {
+          modalContent.classList.remove("shake");
+          modalContent.offsetWidth;
+          modalContent.classList.add("shake");
+        }
+        setTimeout(() => archiveUploadToast.classList.remove("upload-toast--visible"), 1800);
+      }
+
+      function resetArchiveUploadModal() {
+        archiveUploadQueue = [];
+        archiveFileSignatures.clear();
+        archiveUploadedVideoIds = [];
+        archiveIsUploadCancelled = false;
+        archiveIsUploading = false;
+        archiveCurrentUploadXhr = null;
+        renderArchiveUploadQueue();
+        updateArchiveUploadSummary();
+        if (archiveUploadSubmitBtn) {
+          archiveUploadSubmitBtn.disabled = true;
+        }
+        if (archiveCancelUploadBtn) {
+          archiveCancelUploadBtn.disabled = false;
+        }
+        if (archiveUploadStatusText) {
+          archiveUploadStatusText.textContent = "";
+        }
+        resetArchiveUploadProgress();
+        if (archiveUploadToast) {
+          archiveUploadToast.classList.remove("upload-toast--visible");
+          archiveUploadToast.textContent = "";
+        }
+        if (archiveVideoFileInput) {
+          archiveVideoFileInput.value = "";
+        }
+        if (archiveDropZone) {
+          archiveDropZone.classList.remove("drag-over");
+        }
+        if (archiveGlobalTagSelect) {
+          archiveGlobalTagSelect.selectedIndex = -1;
+        }
+        if (archiveCreateTagStatus) {
+          archiveCreateTagStatus.textContent = "";
+        }
+        if (archiveNewTagColorInput) {
+          archiveNewTagColorInput.value = DEFAULT_TAG_COLOR;
+        }
+        if (archiveTagColorButton) {
+          archiveTagColorButton.style.setProperty("--tag-color", DEFAULT_TAG_COLOR);
+        }
+      }
+
+      async function rollbackArchiveUploadedVideos(videoIds) {
+        const normalizedIds = Array.isArray(videoIds)
+          ? Array.from(new Set(videoIds.map((id) => Number(id)).filter(Number.isFinite)))
+          : [];
+        if (!normalizedIds.length) {
+          return { deletedVideoIds: [] };
+        }
+
+        const response = await fetch("/api/archive/videos/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...buildAuthHeaders() },
+          body: JSON.stringify({ videoIds: normalizedIds }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.message || "Nem sikerült visszavonni a feltöltött videókat.");
+        }
+        return result;
+      }
+
+      function openArchiveVideoUploadModal() {
+        if (archiveVideoUploadModal) {
+          archiveVideoUploadModal.style.display = "flex";
+          archiveVideoUploadModal.classList.add("modal-overlay--visible");
+        }
+        fetchArchiveVideoTags();
+        resetArchiveUploadModal();
+      }
+
+      function closeArchiveVideoUploadModal() {
+        if (archiveVideoUploadModal) {
+          archiveVideoUploadModal.classList.remove("modal-overlay--visible");
+          archiveVideoUploadModal.style.display = "none";
+        }
+        resetArchiveUploadModal();
+      }
+
+      async function handleArchiveFileSelection(files) {
+        const normalized = Array.isArray(files)
+          ? files.filter(Boolean)
+          : Array.from(files || []).filter(Boolean);
+
+        if (!normalized.length) {
+          return;
+        }
+
+        const remainingSlots = MAX_UPLOAD_FILES - archiveUploadQueue.length;
+        if (remainingSlots <= 0) {
+          showArchiveUploadToast(`Egyszerre legfeljebb ${MAX_UPLOAD_FILES} fájl tölthető fel.`);
+          return;
+        }
+
+        const limitedFiles = normalized.slice(0, remainingSlots);
+        if (limitedFiles.length < normalized.length) {
+          showArchiveUploadToast(
+            `Csak az első ${remainingSlots} fájl került a sorba (maximum ${MAX_UPLOAD_FILES} egyszerre).`
+          );
+        }
+
+        const globalTags = getSelectValues(archiveGlobalTagSelect);
+        for (const file of limitedFiles) {
+          const signature = getFileSignature(file);
+          if (archiveFileSignatures.has(signature)) {
+            showArchiveUploadToast("Ez a videó már a listán van!");
+            continue;
+          }
+
+          archiveFileSignatures.add(signature);
+          let thumbnail = null;
+          try {
+            thumbnail = await generateVideoThumbnail(file);
+          } catch (error) {
+            console.warn("Nem sikerült indexképet generálni:", error);
+          }
+
+          archiveUploadQueue.push({
+            file,
+            signature,
+            displayName: file.name,
+            tags: [...globalTags],
+            thumbnail,
+          });
+        }
+
+        renderArchiveUploadQueue();
+        updateArchiveUploadSummary();
+        if (archiveUploadSubmitBtn) {
+          archiveUploadSubmitBtn.disabled = archiveUploadQueue.length === 0;
+        }
+        if (archiveUploadStatusText) {
+          archiveUploadStatusText.textContent = "";
+        }
+      }
+
+      const archiveCategoryButtons = document.querySelectorAll("[data-archive-category]");
+      if (archiveCategoryButtons.length) {
+        archiveCategoryButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            const categoryId = button.dataset.archiveCategory;
+            openArchiveCategory(categoryId);
+          });
+        });
+      }
+
+      if (archiveBackBtn) {
+        archiveBackBtn.addEventListener("click", () => {
+          if (openedArchiveFolder) {
+            closeArchiveFolderView();
+            return;
+          }
+          resetArchiveBrowser();
+        });
+      }
+
+      if (archiveCreateFolderBtn) {
+        archiveCreateFolderBtn.addEventListener("click", async () => {
+          if (!hasArchiveEditAccess() || !currentArchiveCategory) {
+            return;
+          }
+          const rawName = archiveFolderNameInput?.value || "";
+          const name = rawName.trim();
+          if (!name) {
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "Adj meg egy mappanevet.";
+            }
+            return;
+          }
+
+          try {
+            const response = await fetch(`/api/archive/${currentArchiveCategory}/folders`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...buildAuthHeaders(),
+              },
+              body: JSON.stringify({ name }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(data?.message || "Nem sikerült létrehozni a mappát.");
+            }
+            if (archiveFolderNameInput) {
+              archiveFolderNameInput.value = "";
+            }
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "Mappa létrehozva.";
+            }
+            selectedArchiveFolder = name;
+            openedArchiveFolder = name;
+            await loadArchiveFolders();
+          } catch (error) {
+            console.error("Archívum mappa létrehozási hiba:", error);
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = error.message || "Nem sikerült létrehozni a mappát.";
+            }
+          }
+        });
+      }
+
+      if (archiveDeleteFolderBtn) {
+        archiveDeleteFolderBtn.addEventListener("click", async () => {
+          if (!hasArchiveEditAccess() || !isActualAdmin() || !currentArchiveCategory || !openedArchiveFolder) {
+            return;
+          }
+
+          const confirmed = window.confirm(`Biztosan törlöd a "${openedArchiveFolder}" mappát?`);
+          if (!confirmed) {
+            return;
+          }
+
+          try {
+            const response = await fetch(`/api/archive/${currentArchiveCategory}/folders`, {
+              method: "DELETE",
+              headers: {
+                "Content-Type": "application/json",
+                ...buildAuthHeaders(),
+              },
+              body: JSON.stringify({ name: openedArchiveFolder }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(data?.message || "Nem sikerült törölni a mappát.");
+            }
+            if (selectedArchiveFolder === openedArchiveFolder) {
+              selectedArchiveFolder = null;
+            }
+            openedArchiveFolder = null;
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "Mappa törölve.";
+            }
+            await loadArchiveFolders();
+          } catch (error) {
+            console.error("Archívum mappa törlési hiba:", error);
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = error.message || "Nem sikerült törölni a mappát.";
+            }
+          }
+        });
+      }
+
+      if (archiveRenameFolderBtn) {
+        archiveRenameFolderBtn.addEventListener("click", async () => {
+          if (!hasArchiveEditAccess() || !isActualAdmin() || !currentArchiveCategory || !openedArchiveFolder) {
+            return;
+          }
+
+          const rawNextName = window.prompt("Új mappanév:", openedArchiveFolder);
+          if (rawNextName === null) {
+            return;
+          }
+          const nextName = rawNextName.trim();
+          if (!nextName) {
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "Adj meg egy mappanevet.";
+            }
+            return;
+          }
+          if (nextName === openedArchiveFolder) {
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "A mappanév nem változott.";
+            }
+            return;
+          }
+
+          try {
+            const response = await fetch(`/api/archive/${currentArchiveCategory}/folders/rename`, {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                ...buildAuthHeaders(),
+              },
+              body: JSON.stringify({
+                oldName: openedArchiveFolder,
+                newName: nextName,
+              }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(data?.message || "Nem sikerült átnevezni a mappát.");
+            }
+
+            selectedArchiveFolder = nextName;
+            openedArchiveFolder = nextName;
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "Mappa átnevezve.";
+            }
+            await loadArchiveFolders();
+          } catch (error) {
+            console.error("Archívum mappa átnevezési hiba:", error);
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = error.message || "Nem sikerült átnevezni a mappát.";
+            }
+          }
+        });
+      }
+
+      if (archiveUploadBtn && archiveUploadInput) {
+        archiveUploadBtn.addEventListener("click", () => {
+          if (!hasArchiveEditAccess()) {
+            return;
+          }
+          if (!openedArchiveFolder) {
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "Válassz mappát a feltöltéshez.";
+            }
+            return;
+          }
+          archiveUploadInput.click();
+        });
+
+        archiveUploadInput.addEventListener("change", async () => {
+          if (!hasArchiveEditAccess() || !currentArchiveCategory || !openedArchiveFolder) {
+            return;
+          }
+          const files = Array.from(archiveUploadInput.files || []);
+          if (!files.length) {
+            return;
+          }
+
+          const formData = new FormData();
+          files.forEach((file) => formData.append("files", file));
+
+          if (archiveUploadStatus) {
+            archiveUploadStatus.textContent = "Feltöltés...";
+          }
+
+          try {
+            const response = await fetch(`/api/archive/${currentArchiveCategory}/folders/${encodeURIComponent(openedArchiveFolder)}/files`, {
+              method: "POST",
+              headers: buildAuthHeaders(),
+              body: formData,
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(data?.message || "Nem sikerült feltölteni a fájlokat.");
+            }
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = "Feltöltés kész.";
+            }
+            archiveUploadInput.value = "";
+            await loadArchiveFiles(openedArchiveFolder);
+          } catch (error) {
+            console.error("Archívum feltöltési hiba:", error);
+            if (archiveUploadStatus) {
+              archiveUploadStatus.textContent = error.message || "Nem sikerült feltölteni a fájlokat.";
+            }
+          }
+        });
+      }
+
+      if (archiveVideoSearchInput) {
+        archiveVideoSearchInput.addEventListener("input", () => {
+          archiveVideoFilters.search = archiveVideoSearchInput.value.trim();
+          archiveVideoFilters.page = 1;
+          if (archiveVideoSearchTimeout) {
+            clearTimeout(archiveVideoSearchTimeout);
+          }
+          archiveVideoSearchTimeout = setTimeout(() => {
+            loadArchiveVideos();
+          }, 450);
+        });
+      }
+
+      if (archiveSortOrderSelect) {
+        archiveSortOrderSelect.addEventListener("change", () => {
+          archiveVideoFilters.sort = archiveSortOrderSelect.value === "oldest" ? "oldest" : "newest";
+          localStorage.setItem(ARCHIVE_VIDEO_SORT_ORDER_KEY, archiveVideoFilters.sort);
+          archiveVideoFilters.page = 1;
+          loadArchiveVideos();
+        });
+      }
+
+      if (archivePageSizeSelect) {
+        archivePageSizeSelect.addEventListener("change", () => {
+          const selected = Number.parseInt(archivePageSizeSelect.value, 10);
+          const allowed = [12, 24, 40, 80];
+          archiveVideoFilters.limit = allowed.includes(selected) ? selected : archiveVideoFilters.limit;
+          localStorage.setItem(ARCHIVE_VIDEO_PAGE_SIZE_KEY, archiveVideoFilters.limit);
+          archiveVideoFilters.page = 1;
+          loadArchiveVideos();
+        });
+      }
+
+      if (archiveFilterResetBtn) {
+        archiveFilterResetBtn.addEventListener("click", () => {
+          archiveVideoFilters.page = 1;
+          archiveVideoFilters.search = "";
+          archiveVideoFilters.tag = [];
+          archiveVideoFilters.sort = "newest";
+          if (archiveVideoSearchTimeout) {
+            clearTimeout(archiveVideoSearchTimeout);
+            archiveVideoSearchTimeout = null;
+          }
+          if (archiveVideoSearchInput) archiveVideoSearchInput.value = "";
+          if (archiveSortOrderSelect) {
+            archiveSortOrderSelect.value = archiveVideoFilters.sort;
+            localStorage.setItem(ARCHIVE_VIDEO_SORT_ORDER_KEY, archiveVideoFilters.sort);
+          }
+          renderArchiveTagSelector();
+          loadArchiveVideos();
+        });
+      }
+
+      if (archiveVideoQualitySelect) {
+        archiveVideoQualitySelect.addEventListener("change", async () => {
+          const selectedQuality = normalizeQualityPreference(archiveVideoQualitySelect.value);
+          const previousQuality = currentVideoQuality;
+          applyQualityPreference(selectedQuality);
+          archiveVideoQualitySelect.value = currentVideoQuality;
+
+          if (!isUserLoggedIn()) {
+            return;
+          }
+
+          try {
+            await saveQualityPreferenceToServer(selectedQuality);
+          } catch (error) {
+            console.error("Minőség beállítás mentése sikertelen:", error);
+            showArchiveVideoToast(error.message || "Nem sikerült menteni a minőségi beállítást.");
+            applyQualityPreference(previousQuality);
+            archiveVideoQualitySelect.value = currentVideoQuality;
+          }
+        });
+      }
+
+      if (archiveShowUploadModalBtn) {
+        archiveShowUploadModalBtn.addEventListener("click", () => {
+          if (!isUserLoggedIn()) {
+            alert("A feltöltéshez be kell jelentkezned.");
+            return;
+          }
+          if (!hasArchiveEditAccess()) {
+            alert("A feltöltéshez archívum szerkesztési jogosultság szükséges.");
+            return;
+          }
+          if (!isArchiveVideoFolderOpen()) {
+            alert("Nyiss meg egy mappát a feltöltéshez.");
+            return;
+          }
+          openArchiveVideoUploadModal();
+        });
+      }
+
+      if (archiveCloseUploadModalBtn) {
+        archiveCloseUploadModalBtn.addEventListener("click", closeArchiveVideoUploadModal);
+      }
+
+      if (archiveVideoUploadModal) {
+        archiveVideoUploadModal.addEventListener("click", (event) => {
+          if (event.target === archiveVideoUploadModal) {
+            closeArchiveVideoUploadModal();
+          }
+        });
+      }
+
+      if (archiveThumbnailPickerCloseBtn) {
+        archiveThumbnailPickerCloseBtn.addEventListener("click", () => {
+          closeArchiveThumbnailPicker();
+        });
+      }
+
+      if (archiveThumbnailPickerCancelBtn) {
+        archiveThumbnailPickerCancelBtn.addEventListener("click", () => {
+          closeArchiveThumbnailPicker();
+        });
+      }
+
+      if (archiveThumbnailPickerModal) {
+        archiveThumbnailPickerModal.addEventListener("click", (event) => {
+          if (event.target === archiveThumbnailPickerModal) {
+            closeArchiveThumbnailPicker();
+          }
+        });
+      }
+
+      if (archiveThumbnailPickerSaveBtn) {
+        archiveThumbnailPickerSaveBtn.addEventListener("click", () => {
+          saveArchiveThumbnailFromPicker();
+        });
+      }
+
+      if (archiveThumbnailPickerStepBackBtn) {
+        archiveThumbnailPickerStepBackBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailPicker(-ARCHIVE_THUMBNAIL_STEP_SECONDS);
+        });
+      }
+
+      if (archiveThumbnailPickerStepForwardBtn) {
+        archiveThumbnailPickerStepForwardBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailPicker(ARCHIVE_THUMBNAIL_STEP_SECONDS);
+        });
+      }
+
+      if (archiveThumbnailPickerSlider) {
+        archiveThumbnailPickerSlider.addEventListener("input", () => {
+          if (!archiveThumbnailPickerState || !archiveThumbnailPickerVideo) {
+            return;
+          }
+          const nextTime = Number.parseFloat(archiveThumbnailPickerSlider.value);
+          if (!Number.isFinite(nextTime)) {
+            return;
+          }
+          archiveThumbnailPickerVideo.currentTime = nextTime;
+          syncArchiveThumbnailPickerTimeline(nextTime);
+        });
+      }
+
+      if (archiveThumbnailPickerVideo) {
+        archiveThumbnailPickerVideo.addEventListener("loadedmetadata", () => {
+          if (!archiveThumbnailPickerState) {
+            return;
+          }
+          const duration = getArchiveThumbnailPickerDurationSeconds();
+          if (archiveThumbnailPickerSlider) {
+            archiveThumbnailPickerSlider.max = String(duration);
+            archiveThumbnailPickerSlider.value = "0";
+          }
+
+          setArchiveThumbnailPickerControlsEnabled(duration > 0);
+          setArchiveThumbnailPickerBusyState(false);
+          syncArchiveThumbnailPickerTimeline(0);
+          if (archiveThumbnailPickerHintEl) {
+            archiveThumbnailPickerHintEl.textContent = duration > 0
+              ? "Allitsd meg a videot a kivant kepkockanal, majd kattints az Indexkep mentese gombra."
+              : "Nem sikerult beolvasni a video hosszat.";
+          }
+        });
+
+        archiveThumbnailPickerVideo.addEventListener("timeupdate", () => {
+          if (!archiveThumbnailPickerState) {
+            return;
+          }
+          syncArchiveThumbnailPickerTimeline();
+        });
+
+        archiveThumbnailPickerVideo.addEventListener("error", () => {
+          if (!archiveThumbnailPickerState) {
+            return;
+          }
+
+          if (!archiveThumbnailPickerState.isUsingOriginalSource && archiveThumbnailPickerState.originalSource) {
+            archiveThumbnailPickerState.isUsingOriginalSource = true;
+            archiveThumbnailPickerVideo.src = archiveThumbnailPickerState.originalSource;
+            archiveThumbnailPickerVideo.load();
+            return;
+          }
+
+          setArchiveThumbnailPickerControlsEnabled(false);
+          setArchiveThumbnailPickerBusyState(false);
+          if (archiveThumbnailPickerSaveBtn) {
+            archiveThumbnailPickerSaveBtn.disabled = true;
+          }
+          if (archiveThumbnailPickerHintEl) {
+            archiveThumbnailPickerHintEl.textContent = "Nem sikerult betolteni a videot.";
+          }
+        });
+      }
+
+      if (archiveDropZone && archiveVideoFileInput) {
+        archiveDropZone.addEventListener("click", () => archiveVideoFileInput.click());
+        archiveDropZone.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          archiveDropZone.classList.add("drag-over");
+        });
+        ["dragleave", "dragend"].forEach((eventName) => {
+          archiveDropZone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            archiveDropZone.classList.remove("drag-over");
+          });
+        });
+        archiveDropZone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          archiveDropZone.classList.remove("drag-over");
+          const files = event.dataTransfer?.files;
+          if (files && files.length > 0) {
+            handleArchiveFileSelection(files);
+          }
+        });
+      }
+
+      if (archiveAddFilesBtn && archiveVideoFileInput) {
+        archiveAddFilesBtn.addEventListener("click", () => archiveVideoFileInput.click());
+      }
+
+      if (archiveAddMoreVideosBtn && archiveVideoFileInput) {
+        archiveAddMoreVideosBtn.addEventListener("click", () => archiveVideoFileInput.click());
+      }
+
+      if (archiveVideoFileInput) {
+        archiveVideoFileInput.addEventListener("change", (event) => {
+          const files = event.target.files;
+          if (files && files.length > 0) {
+            handleArchiveFileSelection(files);
+          }
+        });
+      }
+
+      if (archiveGlobalTagSelect) {
+        archiveGlobalTagSelect.addEventListener("change", () => {
+          const selected = getSelectValues(archiveGlobalTagSelect);
+          archiveUploadQueue = archiveUploadQueue.map((item) => ({ ...item, tags: [...selected] }));
+          renderArchiveUploadQueue();
+        });
+      }
+
+      if (archiveNewTagColorInput && archiveTagColorButton) {
+        const updateArchiveTagColorPreview = () => {
+          const color = normalizeColor(archiveNewTagColorInput.value || DEFAULT_TAG_COLOR);
+          archiveTagColorButton.style.setProperty("--tag-color", color);
+        };
+        archiveTagColorButton.addEventListener("click", () => archiveNewTagColorInput.click());
+        archiveNewTagColorInput.addEventListener("input", updateArchiveTagColorPreview);
+        updateArchiveTagColorPreview();
+      }
+
+      async function handleArchiveCreateTag() {
+        if (!archiveNewTagNameInput || !archiveCreateTagStatus) return;
+        const name = archiveNewTagNameInput.value.trim();
+        if (!name) {
+          archiveCreateTagStatus.textContent = "Add meg a címke nevét.";
+          return;
+        }
+        const color = normalizeColor(archiveNewTagColorInput?.value || DEFAULT_TAG_COLOR);
+        archiveCreateTagStatus.textContent = "Mentés...";
+        try {
+          const response = await fetch("/api/archive/videos/tags", {
+            method: "POST",
+            headers: {
+              ...buildAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ name, color }),
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error((result && result.message) || "Nem sikerült létrehozni a címkét.");
+          }
+          archiveNewTagNameInput.value = "";
+          if (archiveNewTagColorInput) {
+            archiveNewTagColorInput.value = DEFAULT_TAG_COLOR;
+          }
+          if (archiveTagColorButton) {
+            archiveTagColorButton.style.setProperty("--tag-color", DEFAULT_TAG_COLOR);
+          }
+          archiveCreateTagStatus.textContent = "Címke létrehozva.";
+          await fetchArchiveVideoTags();
+        } catch (error) {
+          archiveCreateTagStatus.textContent = error.message;
+        }
+      }
+
+      async function handleArchiveDeleteTag() {
+        if (!archiveCreateTagStatus) return;
+        const selectedOption = archiveGlobalTagSelect?.selectedOptions?.[0];
+        const tagId = Number.parseInt(selectedOption?.value, 10);
+        if (!tagId) {
+          archiveCreateTagStatus.textContent = "Válassz ki egy címkét a törléshez.";
+          return;
+        }
+
+        archiveCreateTagStatus.textContent = "Címke törlése...";
+        try {
+          const response = await fetch(`/api/archive/videos/tags/${tagId}`, {
+            method: "DELETE",
+            headers: buildAuthHeaders(),
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error((result && result.message) || "Nem sikerült törölni a címkét.");
+          }
+          archiveCreateTagStatus.textContent = "Címke törölve.";
+          if (archiveGlobalTagSelect) {
+            archiveGlobalTagSelect.value = "";
+          }
+          await fetchArchiveVideoTags();
+        } catch (error) {
+          archiveCreateTagStatus.textContent = error.message;
+        }
+      }
+
+      if (archiveCreateTagButton) {
+        archiveCreateTagButton.addEventListener("click", handleArchiveCreateTag);
+      }
+
+      if (archiveDeleteTagButton) {
+        archiveDeleteTagButton.addEventListener("click", handleArchiveDeleteTag);
+      }
+
+      if (archiveCancelUploadBtn) {
+        archiveCancelUploadBtn.addEventListener("click", () => {
+          if (!archiveIsUploading) {
+            closeArchiveVideoUploadModal();
+            return;
+          }
+
+          archiveIsUploadCancelled = true;
+          archiveCancelUploadBtn.disabled = true;
+          if (archiveUploadStatusText) {
+            archiveUploadStatusText.textContent = "Feltöltés megszakítása folyamatban...";
+          }
+
+          if (archiveCurrentUploadXhr) {
+            archiveCurrentUploadXhr.abort();
+          }
+        });
+      }
+
+      if (archiveUploadSubmitBtn) {
+        archiveUploadSubmitBtn.addEventListener("click", async () => {
+          if (!isUserLoggedIn()) {
+            alert("A feltöltéshez be kell jelentkezned.");
+            return;
+          }
+          if (!isArchiveVideoFolderOpen()) {
+            alert("Nyiss meg egy mappát a feltöltéshez.");
+            return;
+          }
+          if (!archiveUploadQueue.length) {
+            alert("Válassz ki legalább egy videófájlt a feltöltéshez.");
+            return;
+          }
+          if (archiveIsUploading) {
+            return;
+          }
+
+          archiveIsUploading = true;
+          archiveIsUploadCancelled = false;
+          archiveUploadedVideoIds = [];
+          archiveUploadSubmitBtn.disabled = true;
+          if (archiveCancelUploadBtn) {
+            archiveCancelUploadBtn.disabled = false;
+          }
+          if (archiveUploadStatusText) {
+            archiveUploadStatusText.textContent = "Feltöltés folyamatban...";
+          }
+
+          const totalUploadBytes = archiveUploadQueue.reduce((sum, item) => sum + (item.file?.size || 0), 0);
+          const totalFiles = archiveUploadQueue.length;
+          const uploadStartTime = performance.now();
+          let uploadedBytesSoFar = 0;
+
+          updateArchiveUploadProgressUI({
+            uploadedBytes: 0,
+            totalBytes: totalUploadBytes,
+            completedFiles: 0,
+            totalFiles,
+            etaSeconds: Infinity,
+          });
+
+          const extractArchiveUploadErrorMessage = (xhr, result) => {
+            let message = result && result.message;
+            if (!message && xhr.status === 413) {
+              message = "A fajl tul nagy a szerver jelenlegi feltoltesi limitjehez.";
+            }
+            if (!message) {
+              let rawText = "";
+              try {
+                rawText = typeof xhr.responseText === "string" ? xhr.responseText.trim() : "";
+              } catch (_error) {
+                rawText = "";
+              }
+              if (rawText && rawText.length <= 280) {
+                message = rawText;
+              }
+            }
+            if (!message) {
+              message = `Nem sikerult feltolteni a videot. (HTTP ${xhr.status || 0})`;
+            }
+            return message;
+          };
+
+          const updateArchiveRuntimeProgress = (uploadedBytes, index, item) => {
+            const elapsedSeconds = Math.max((performance.now() - uploadStartTime) / 1000, 0.001);
+            const speed = uploadedBytes / elapsedSeconds;
+            const remainingBytes = Math.max(totalUploadBytes - uploadedBytes, 0);
+            const etaSeconds = speed > 0 ? remainingBytes / speed : Infinity;
+
+            let completedFiles = 0;
+            let remainingForCount = uploadedBytes;
+            for (const queuedItem of archiveUploadQueue) {
+              const fileSize = queuedItem.file?.size || 0;
+              if (fileSize === 0) {
+                completedFiles += 1;
+                continue;
+              }
+              if (remainingForCount >= fileSize) {
+                completedFiles += 1;
+                remainingForCount -= fileSize;
+              } else {
+                break;
+              }
+            }
+
+            if (archiveUploadStatusText) {
+              archiveUploadStatusText.textContent = `Feltöltés: ${index + 1} / ${totalFiles} - "${
+                item.displayName || item.file.name
+              }"...`;
+            }
+
+            updateArchiveUploadProgressUI({
+              uploadedBytes,
+              totalBytes: totalUploadBytes,
+              completedFiles,
+              totalFiles,
+              etaSeconds,
+            });
+          };
+
+          const finalizeArchiveUploadedFile = (item, index, result) => {
+            const finishedBytes = uploadedBytesSoFar + (item.file?.size || 0);
+            const uploadedBytes = Math.min(finishedBytes, totalUploadBytes);
+            const elapsedSeconds = Math.max((performance.now() - uploadStartTime) / 1000, 0.001);
+            const speed = uploadedBytes / elapsedSeconds;
+            const remainingBytes = Math.max(totalUploadBytes - uploadedBytes, 0);
+            const etaSeconds = speed > 0 ? remainingBytes / speed : Infinity;
+
+            const completedFiles = index + 1;
+            updateArchiveUploadProgressUI({
+              uploadedBytes,
+              totalBytes: totalUploadBytes,
+              completedFiles,
+              totalFiles,
+              etaSeconds,
+            });
+            uploadedBytesSoFar = uploadedBytes;
+
+            const idsFromResponse = Array.isArray(result?.videoIds)
+              ? result.videoIds.filter((id) => Number.isFinite(Number(id)))
+              : [];
+            if (idsFromResponse.length) {
+              archiveUploadedVideoIds.push(...idsFromResponse);
+            }
+          };
+
+          const uploadSingleFileDirect = (item, index) =>
+            new Promise((resolve, reject) => {
+              const formData = new FormData();
+              const metadata = [
+                {
+                  name: item.displayName || item.file.name,
+                  tags: item.tags || [],
+                  signature: item.signature,
+                },
+              ];
+
+              formData.append("videos", item.file);
+              formData.append("metadata", JSON.stringify(metadata));
+
+              const xhr = new XMLHttpRequest();
+              xhr.open("POST", `/api/archive/videos/folders/${encodeURIComponent(openedArchiveFolder)}/upload`);
+              xhr.responseType = "json";
+              archiveCurrentUploadXhr = xhr;
+
+              const headers = buildAuthHeaders();
+              if (headers && typeof headers === "object") {
+                Object.entries(headers).forEach(([key, value]) => {
+                  if (value) {
+                    xhr.setRequestHeader(key, value);
+                  }
+                });
+              }
+
+              xhr.addEventListener("abort", () => reject(new Error(UPLOAD_ABORT_MESSAGE)));
+
+              xhr.addEventListener("loadend", () => {
+                if (archiveCurrentUploadXhr === xhr) {
+                  archiveCurrentUploadXhr = null;
+                }
+              });
+
+              xhr.upload.addEventListener("progress", (event) => {
+                const currentFileUploaded = event.loaded || 0;
+                const uploadedBytes = Math.min(uploadedBytesSoFar + currentFileUploaded, totalUploadBytes);
+                updateArchiveRuntimeProgress(uploadedBytes, index, item);
+              });
+
+              xhr.addEventListener("load", () => {
+                const result = xhr.response;
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  finalizeArchiveUploadedFile(item, index, result);
+                  resolve(result);
+                } else {
+                  reject(new Error(extractArchiveUploadErrorMessage(xhr, result)));
+                }
+              });
+
+              xhr.addEventListener("error", () => {
+                reject(new Error("Hálózati hiba történt a feltöltés során."));
+              });
+
+              xhr.send(formData);
+            });
+
+          const uploadSingleFileChunked = (item, index) =>
+            new Promise((resolve, reject) => {
+              const file = item.file;
+              const fileSize = file?.size || 0;
+              if (!file || fileSize <= 0) {
+                reject(new Error("Ervenytelen videofajl."));
+                return;
+              }
+
+              const totalChunks = Math.max(1, Math.ceil(fileSize / ARCHIVE_UPLOAD_CHUNK_SIZE_BYTES));
+              const uploadId = `archive-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+              let chunkIndex = 0;
+
+              const sendNextChunk = () => {
+                if (archiveIsUploadCancelled) {
+                  reject(new Error(UPLOAD_ABORT_MESSAGE));
+                  return;
+                }
+
+                const chunkStart = chunkIndex * ARCHIVE_UPLOAD_CHUNK_SIZE_BYTES;
+                const chunkEnd = Math.min(chunkStart + ARCHIVE_UPLOAD_CHUNK_SIZE_BYTES, fileSize);
+                const chunkBlob = file.slice(chunkStart, chunkEnd);
+                const formData = new FormData();
+
+                formData.append("chunk", chunkBlob, `${file.name || "video.mp4"}.part${chunkIndex}`);
+                formData.append("uploadId", uploadId);
+                formData.append("chunkIndex", String(chunkIndex));
+                formData.append("totalChunks", String(totalChunks));
+                formData.append("totalSize", String(fileSize));
+                formData.append("originalName", file.name || "video.mp4");
+                formData.append("name", item.displayName || file.name || "video");
+                formData.append("tags", JSON.stringify(item.tags || []));
+
+                const xhr = new XMLHttpRequest();
+                xhr.open(
+                  "POST",
+                  `/api/archive/videos/folders/${encodeURIComponent(openedArchiveFolder)}/upload-chunk`
+                );
+                xhr.responseType = "json";
+                archiveCurrentUploadXhr = xhr;
+
+                const headers = buildAuthHeaders();
+                if (headers && typeof headers === "object") {
+                  Object.entries(headers).forEach(([key, value]) => {
+                    if (value) {
+                      xhr.setRequestHeader(key, value);
+                    }
+                  });
+                }
+
+                xhr.addEventListener("abort", () => reject(new Error(UPLOAD_ABORT_MESSAGE)));
+
+                xhr.addEventListener("loadend", () => {
+                  if (archiveCurrentUploadXhr === xhr) {
+                    archiveCurrentUploadXhr = null;
+                  }
+                });
+
+                xhr.upload.addEventListener("progress", (event) => {
+                  const uploadedInChunk = event.loaded || 0;
+                  const uploadedBytes = Math.min(
+                    uploadedBytesSoFar + chunkStart + uploadedInChunk,
+                    totalUploadBytes
+                  );
+                  updateArchiveRuntimeProgress(uploadedBytes, index, item);
+                });
+
+                xhr.addEventListener("load", () => {
+                  const result = xhr.response;
+                  if (xhr.status < 200 || xhr.status >= 300) {
+                    reject(new Error(extractArchiveUploadErrorMessage(xhr, result)));
+                    return;
+                  }
+
+                  const isLastChunk = chunkIndex >= totalChunks - 1 || result?.completed === true;
+                  if (isLastChunk) {
+                    finalizeArchiveUploadedFile(item, index, result);
+                    resolve(result);
+                    return;
+                  }
+
+                  chunkIndex += 1;
+                  sendNextChunk();
+                });
+
+                xhr.addEventListener("error", () => {
+                  reject(new Error("Hálózati hiba történt a chunk feltöltése során."));
+                });
+
+                xhr.send(formData);
+              };
+
+              sendNextChunk();
+            });
+
+          const uploadSingleFile = (item, index) => {
+            const size = item?.file?.size || 0;
+            if (size > ARCHIVE_UPLOAD_CHUNK_THRESHOLD_BYTES) {
+              return uploadSingleFileChunked(item, index);
+            }
+            return uploadSingleFileDirect(item, index);
+          };
+
+          try {
+            for (const [index, item] of archiveUploadQueue.entries()) {
+              await uploadSingleFile(item, index);
+            }
+
+            if (archiveUploadStatusText) {
+              archiveUploadStatusText.textContent = "Videók sikeresen feltöltve.";
+            }
+            await loadArchiveVideos();
+            setTimeout(() => {
+              closeArchiveVideoUploadModal();
+            }, 800);
+          } catch (error) {
+            console.error("Archív videó feltöltési hiba:", error);
+            if (archiveIsUploadCancelled || error?.message === UPLOAD_ABORT_MESSAGE) {
+              if (archiveUploadStatusText) {
+                archiveUploadStatusText.textContent = "Feltöltés megszakítva, videók törlése...";
+              }
+              try {
+                if (archiveUploadedVideoIds.length) {
+                  await rollbackArchiveUploadedVideos([...new Set(archiveUploadedVideoIds)]);
+                  if (archiveUploadStatusText) {
+                    archiveUploadStatusText.textContent = "Feltöltés megszakítva, már feltöltött videók törölve.";
+                  }
+                } else if (archiveUploadStatusText) {
+                  archiveUploadStatusText.textContent = "Feltöltés megszakítva.";
+                }
+              } catch (rollbackError) {
+                console.error("Archív visszavonási hiba:", rollbackError);
+                if (archiveUploadStatusText) {
+                  archiveUploadStatusText.textContent =
+                    rollbackError.message || "Nem sikerült törölni a feltöltött videókat.";
+                }
+              } finally {
+                archiveUploadQueue = [];
+                archiveFileSignatures.clear();
+                renderArchiveUploadQueue();
+                updateArchiveUploadSummary();
+                if (archiveVideoFileInput) {
+                  archiveVideoFileInput.value = "";
+                }
+                resetArchiveUploadProgress();
+              }
+            } else if (archiveUploadStatusText) {
+              archiveUploadStatusText.textContent = error.message || "Nem sikerült feltölteni a videót.";
+            }
+          } finally {
+            if (archiveUploadSubmitBtn) {
+              archiveUploadSubmitBtn.disabled = archiveUploadQueue.length === 0;
+            }
+            if (archiveCancelUploadBtn) {
+              archiveCancelUploadBtn.disabled = false;
+            }
+            archiveIsUploading = false;
+            archiveIsUploadCancelled = false;
+            archiveCurrentUploadXhr = null;
+            archiveUploadedVideoIds = [];
+          }
+        });
+      }
+
+      if (archiveImageClose) {
+        archiveImageClose.addEventListener("click", closeArchiveImage);
+      }
+      if (archiveImageModal) {
+        archiveImageModal.addEventListener("click", (event) => {
+          if (event.target === archiveImageModal) {
+            closeArchiveImage();
+          }
+        });
+      }
+      if (archiveImageZoom && archiveImagePreview) {
+        archiveImageZoom.addEventListener("input", (event) => {
+          const zoomValue = parseFloat(event.target.value);
+          setArchiveImageScale(zoomValue);
+        });
+      }
+      if (archiveImagePrev) {
+        archiveImagePrev.addEventListener("click", showPrevArchiveImage);
+      }
+      if (archiveImageNext) {
+        archiveImageNext.addEventListener("click", showNextArchiveImage);
+      }
+      if (archiveImageStage) {
+        archiveImageStage.addEventListener("wheel", (event) => {
+          if (!archiveImageModal || !archiveImageModal.classList.contains("is-visible")) {
+            return;
+          }
+          event.preventDefault();
+          const zoomStep = event.deltaY < 0 ? 0.12 : -0.12;
+          setArchiveImageScale(archiveImageScale + zoomStep, event.clientX, event.clientY);
+        }, { passive: false });
+
+        archiveImageStage.addEventListener("mousedown", (event) => {
+          if (event.button !== 0 || archiveImageScale <= 1 || !archiveImageModal?.classList.contains("is-visible")) {
+            return;
+          }
+          event.preventDefault();
+          archiveImageDragging = true;
+          archiveImageDragStartX = event.clientX - archiveImagePanX;
+          archiveImageDragStartY = event.clientY - archiveImagePanY;
+          applyArchiveImageTransform();
+        });
+      }
+      if (archiveImagePreview) {
+        archiveImagePreview.addEventListener("dragstart", (event) => {
+          event.preventDefault();
+        });
+      }
+      window.addEventListener("mousemove", (event) => {
+        if (!archiveImageDragging || !archiveImageModal?.classList.contains("is-visible")) {
+          return;
+        }
+        archiveImagePanX = event.clientX - archiveImageDragStartX;
+        archiveImagePanY = event.clientY - archiveImageDragStartY;
+        applyArchiveImageTransform();
+      });
+      window.addEventListener("mouseup", () => {
+        if (!archiveImageDragging) {
+          return;
+        }
+        archiveImageDragging = false;
+        applyArchiveImageTransform();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!isArchiveImageModalOpen()) {
+          return;
+        }
+
+        const eventTarget = event.target;
+        const targetTag = typeof eventTarget?.tagName === "string" ? eventTarget.tagName.toLowerCase() : "";
+        if (targetTag === "input" || targetTag === "textarea" || eventTarget?.isContentEditable) {
+          return;
+        }
+
+        if (event.key === "Escape") {
+          closeArchiveImage();
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          showNextArchiveImage();
+        } else if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          showPrevArchiveImage();
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (!isArchiveThumbnailPickerOpen()) {
+          return;
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeArchiveThumbnailPicker();
+        }
+      });
+
+      if (archiveDocClose) {
+        archiveDocClose.addEventListener("click", closeArchiveDocument);
+      }
+      if (archiveDocModal) {
+        archiveDocModal.addEventListener("click", (event) => {
+          if (event.target === archiveDocModal) {
+            closeArchiveDocument();
+          }
+        });
       }
 
       function getAccessibleNavLinks() {
@@ -5595,6 +9065,9 @@
         if (videoQualitySelect) {
           videoQualitySelect.value = normalizedQuality;
         }
+        if (archiveVideoQualitySelect) {
+          archiveVideoQualitySelect.value = normalizedQuality;
+        }
 
         return normalizedQuality;
       }
@@ -6062,6 +9535,7 @@
           return;
         }
 
+        activeVideoModalContext = "clips";
         currentVideoIndex = ((index % currentVideoList.length) + currentVideoList.length) % currentVideoList.length;
         const activeVideo = currentVideoList[currentVideoIndex];
         if (!activeVideo) {
@@ -6107,24 +9581,31 @@
         modalVideoPlayer.load();
         videoPlayerModal.classList.remove("open");
         videoPlayerModal.setAttribute("aria-hidden", "true");
+        activeVideoModalContext = "clips";
       }
 
       function showNextVideo() {
-        if (!currentVideoList.length) {
-          return;
+        if (activeVideoModalContext === "archive") {
+          showNextArchiveVideo();
+        } else {
+          if (!currentVideoList.length) {
+            return;
+          }
+          const nextIndex = (currentVideoIndex + 1) % currentVideoList.length;
+          openVideoModal(nextIndex);
         }
-
-        const nextIndex = (currentVideoIndex + 1) % currentVideoList.length;
-        openVideoModal(nextIndex);
       }
 
       function showPrevVideo() {
-        if (!currentVideoList.length) {
-          return;
+        if (activeVideoModalContext === "archive") {
+          showPrevArchiveVideo();
+        } else {
+          if (!currentVideoList.length) {
+            return;
+          }
+          const prevIndex = (currentVideoIndex - 1 + currentVideoList.length) % currentVideoList.length;
+          openVideoModal(prevIndex);
         }
-
-        const prevIndex = (currentVideoIndex - 1 + currentVideoList.length) % currentVideoList.length;
-        openVideoModal(prevIndex);
       }
 
       function renderPagination(pagination) {
@@ -6183,7 +9664,8 @@
           const videoLink = modalVideoPlayer.src;
           if (!videoLink) return;
           navigator.clipboard.writeText(videoLink).then(() => {
-            showClipToast("Link másolva a vágólapra!");
+            const toast = activeVideoModalContext === "archive" ? showArchiveVideoToast : showClipToast;
+            toast("Link másolva a vágólapra!");
           }).catch(err => {
             console.error("Nem sikerült másolni: ", err);
           });
@@ -6308,6 +9790,9 @@
           const previousQuality = currentVideoQuality;
 
           applyQualityPreference(selectedQuality);
+          if (archiveVideoQualitySelect) {
+            archiveVideoQualitySelect.value = currentVideoQuality;
+          }
 
           if (!isUserLoggedIn()) {
             return;
@@ -6319,6 +9804,9 @@
             console.error("Minőségi beállítás mentése sikertelen:", error);
             showClipToast(error.message || "Nem sikerült menteni a minőségi beállítást.");
             applyQualityPreference(previousQuality);
+            if (archiveVideoQualitySelect) {
+              archiveVideoQualitySelect.value = currentVideoQuality;
+            }
           }
         });
       }
@@ -7098,6 +10586,14 @@
 
         if (target === "szavazas") {
           refreshPollsIfVisible();
+        }
+
+        if (target === "archivum") {
+          resetArchiveBrowser({ preserveNavState: !shouldPushState });
+          updateArchiveAccessUI();
+          if (!shouldPushState) {
+            restoreArchiveNavState();
+          }
         }
 
         if (target === "programok") {
