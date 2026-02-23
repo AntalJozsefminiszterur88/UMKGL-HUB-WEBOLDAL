@@ -29,7 +29,7 @@
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
       referrerpolicy="no-referrer"
     ></script>
-    <link rel="stylesheet" href="css/index.css?v=20260209-1">
+    <link rel="stylesheet" href="css/index.css?v=20260217-8">
   </head>
   <body>
     <header>
@@ -49,6 +49,14 @@
       </div>
       <nav>
         <a href="#home" data-section="home" class="active">Főoldal</a>
+        <a
+          href="#discord2"
+          data-section="discord2"
+          id="discord2NavBtn"
+          data-requires-discord2="true"
+          style="display: none;"
+          >Discord 2</a
+        >
         <a
           href="#fajlkuldes"
           data-section="fajlkuldes"
@@ -198,6 +206,374 @@
               </button>
             </article>
           </div>
+        </div>
+      </section>
+
+      <section id="discord2">
+        <div class="discord2-shell">
+          <aside class="discord2-servers">
+            <button class="discord2-server-icon discord2-server-icon--home" type="button" title="Discord Home">
+              <span aria-hidden="true">🏠</span>
+            </button>
+            <div class="discord2-server-separator" aria-hidden="true"></div>
+            <button id="discord2ServerIconBtn" class="discord2-server-icon discord2-server-icon--umkgl is-active" type="button" title="UMKGL Szerver">
+              <img id="discord2ServerIconImage" src="" alt="Szerver logó" style="display:none;">
+              <span id="discord2ServerIconFallback" aria-hidden="true">U</span>
+            </button>
+          </aside>
+
+          <aside class="discord2-channels">
+            <div class="discord2-sidebar-header">
+              <h3 id="discord2ServerTitle">UMKGL Szerver</h3>
+              <button id="discord2ServerSettingsBtn" class="discord2-icon-btn discord2-admin-only" type="button" title="Szerverbeállítások">
+                <i class="fa-solid fa-gear"></i>
+              </button>
+            </div>
+            <div id="discord2ChannelTree" class="discord2-channel-tree"></div>
+            <div id="discord2Userbar" class="discord2-userbar">
+              <div id="discord2VoiceSessionBar" class="discord2-voice-session" style="display:none;">
+                <div class="discord2-voice-session-status">
+                  <span class="discord2-voice-session-icon" aria-hidden="true">
+                    <i class="fa-solid fa-signal"></i>
+                  </span>
+                  <div class="discord2-voice-session-meta">
+                    <span class="discord2-voice-session-title">Voice Connected</span>
+                    <span id="discord2VoiceSessionChannel" class="discord2-voice-session-channel">Játszunk # szoba</span>
+                  </div>
+                </div>
+                <div class="discord2-voice-session-actions">
+                  <button
+                    id="discord2VoiceLatencyBtn"
+                    class="discord2-voice-session-btn discord2-voice-session-btn--latency is-unknown"
+                    type="button"
+                    title="Latency: measuring..."
+                    aria-label="Latency: measuring..."
+                    data-latency-tip="Measuring..."
+                  >
+                    <i class="fa-solid fa-wifi"></i>
+                  </button>
+                  <div class="discord2-voice-krisp-wrap">
+                    <button
+                      id="discord2VoiceKrispBtn"
+                      class="discord2-voice-session-btn discord2-voice-session-btn--krisp"
+                      type="button"
+                      aria-haspopup="true"
+                      aria-expanded="false"
+                      title="Krisp zajszűrés"
+                    >
+                      <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </button>
+                    <div id="discord2KrispPopover" class="discord2-krisp-popover" aria-hidden="true">
+                      <div class="discord2-krisp-popover__header">
+                        <span>Noise Suppression</span>
+                        <input id="discord2KrispToggle" type="checkbox" role="switch" aria-label="Krisp be/ki" />
+                      </div>
+                      <p class="discord2-krisp-popover__text">
+                        Enable Krisp noise suppression! Your friends hear your voice, not the background.
+                      </p>
+                      <div class="discord2-krisp-popover__test-row">
+                        <button id="discord2KrispMicTestBtn" type="button" class="discord2-settings-button">Test</button>
+                        <canvas id="discord2KrispMicTestCanvas" width="316" height="44"></canvas>
+                      </div>
+                      <div class="discord2-krisp-popover__footer">
+                        <div class="discord2-krisp-popover__powered">
+                          <span>Powered by</span>
+                          <strong>krisp</strong>
+                        </div>
+                        <a href="https://krisp.ai/" target="_blank" rel="noopener noreferrer">Learn More</a>
+                      </div>
+                    </div>
+                  </div>
+                  <button id="discord2LeaveVoiceBtn" class="discord2-userbar-btn discord2-userbar-btn--danger" type="button" title="Kilépés a hangcsatornából">
+                    <i class="fa-solid fa-phone-slash"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="discord2-userbar-main">
+                <div class="discord2-userbar-profile">
+                  <img id="discord2UserbarAvatar" src="program_icons/default-avatar.png" alt="Profilkép" />
+                  <div class="discord2-userbar-meta">
+                    <span id="discord2UserbarName">Felhasználó</span>
+                    <span id="discord2UserbarState">Nincs csatlakoztatva</span>
+                  </div>
+                </div>
+                <div class="discord2-userbar-actions">
+                  <button id="discord2MuteBtn" class="discord2-userbar-btn" type="button" title="Mikrofon némítás">
+                    <i class="fa-solid fa-microphone"></i>
+                  </button>
+                  <button id="discord2DeafenBtn" class="discord2-userbar-btn" type="button" title="Süketítés">
+                    <i class="fa-solid fa-headphones"></i>
+                  </button>
+                  <button id="discord2PersonalSettingsBtn" class="discord2-userbar-btn" type="button" title="Személyes beállítások">
+                    <i class="fa-solid fa-gear"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div class="discord2-chat">
+            <header class="discord2-chat-header">
+              <div>
+                <h3 id="discord2ChannelTitle"># általános</h3>
+                <p id="discord2ChannelDescription">A fő közösségi szövegcsatorna.</p>
+              </div>
+            </header>
+
+            <div id="discord2MessageList" class="discord2-message-list"></div>
+
+            <div class="discord2-composer">
+              <input id="discord2MessageInput" type="text" placeholder="Üzenet küldése..." autocomplete="off" />
+              <input id="discord2UploadInput" type="file" style="display: none;" />
+              <button id="discord2UploadBtn" class="discord2-composer-btn" type="button" title="Fájl csatolása">📎</button>
+              <button id="discord2SendBtn" class="discord2-composer-btn discord2-composer-btn--send" type="button">Küldés</button>
+            </div>
+            <p id="discord2UploadLabel" class="discord2-upload-label"></p>
+          </div>
+
+          <aside class="discord2-members">
+            <h4>Tagok</h4>
+            <div id="discord2MemberList" class="discord2-member-list"></div>
+          </aside>
+        </div>
+
+        <div id="discord2ManageModal" class="discord2-modal" aria-hidden="true">
+          <div class="discord2-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="discord2ManageTitle">
+            <h3 id="discord2ManageTitle">Művelet</h3>
+            <form id="discord2ManageForm">
+              <label for="discord2ManageName">Név</label>
+              <input id="discord2ManageName" type="text" required />
+
+              <div id="discord2ManageTypeWrap">
+                <label for="discord2ManageType">Csatorna típusa</label>
+                <select id="discord2ManageType">
+                  <option value="text">Szöveg (#)</option>
+                  <option value="voice">Hang (🔊)</option>
+                </select>
+              </div>
+
+              <div id="discord2ManageCategoryWrap">
+                <label for="discord2ManageCategory">Kategória</label>
+                <select id="discord2ManageCategory"></select>
+              </div>
+
+              <div class="discord2-modal__actions">
+                <button id="discord2ManageDeleteBtn" type="button" class="discord2-modal__danger" style="display:none;">Törlés</button>
+                <button id="discord2ManageCancel" type="button">Mégse</button>
+                <button id="discord2ManageSubmit" type="submit">Mentés</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div id="discord2ServerSettingsModal" class="discord2-modal" aria-hidden="true">
+          <div class="discord2-modal__dialog discord2-modal__dialog--server" role="dialog" aria-modal="true" aria-labelledby="discord2ServerSettingsTitle">
+            <h3 id="discord2ServerSettingsTitle">Szerverbeállítások</h3>
+            <form id="discord2ServerSettingsForm">
+              <label for="discord2ServerNameInput">Szerver neve</label>
+              <input id="discord2ServerNameInput" type="text" maxlength="60" required />
+
+              <label>Szerver logó</label>
+              <div class="discord2-server-logo-picker">
+                <img id="discord2ServerLogoPreview" src="program_icons/default-avatar.png" alt="Szerver logó előnézet">
+                <div class="discord2-server-logo-picker__actions">
+                  <button id="discord2ServerLogoChooseBtn" type="button">Logó kiválasztása</button>
+                  <input id="discord2ServerLogoInput" type="file" accept="image/png,image/jpeg,image/jpg,image/webp" style="display:none;">
+                </div>
+              </div>
+
+              <div class="discord2-server-create-row">
+                <button id="discord2CreateCategoryFromSettings" type="button">Új kategória</button>
+                <button id="discord2CreateTextChannelFromSettings" type="button">Új szövegcsatorna</button>
+                <button id="discord2CreateVoiceChannelFromSettings" type="button">Új hangcsatorna</button>
+              </div>
+
+              <p id="discord2ServerSettingsStatus" class="discord2-server-settings-status"></p>
+
+              <div class="discord2-modal__actions">
+                <button id="discord2ServerSettingsCancel" type="button">Mégse</button>
+                <button id="discord2ServerSettingsSave" type="submit">Mentés</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div id="discord2PersonalSettingsModal" class="discord2-modal" aria-hidden="true">
+          <div class="discord2-modal__dialog discord2-modal__dialog--personal" role="dialog" aria-modal="true" aria-labelledby="discord2PersonalSettingsTitle">
+            <div class="discord2-settings">
+              <div class="discord2-settings-header">
+                <h3 id="discord2PersonalSettingsTitle">Voice</h3>
+                <p>Input and output devices, mic testing, sensitivity, and advanced audio options.</p>
+              </div>
+
+              <form id="discord2PersonalSettingsForm" class="discord2-settings-form" autocomplete="off">
+                <section class="discord2-settings-section">
+                  <div class="discord2-settings-device-grid">
+                    <div class="discord2-settings-field">
+                      <label for="discord2PersonalInputDevice">Microphone</label>
+                      <select id="discord2PersonalInputDevice">
+                        <option value="default">Default microphone</option>
+                      </select>
+                    </div>
+                    <div class="discord2-settings-field">
+                      <label for="discord2PersonalOutputDevice">Speaker</label>
+                      <select id="discord2PersonalOutputDevice">
+                        <option value="default">Default output</option>
+                      </select>
+                      <p id="discord2PersonalOutputDeviceHint" class="discord2-settings-help"></p>
+                    </div>
+                  </div>
+
+                  <div class="discord2-settings-device-grid">
+                    <div class="discord2-settings-field">
+                      <label for="discord2PersonalMicVolume">Microphone Volume</label>
+                      <div class="discord2-settings-slider-row">
+                        <input id="discord2PersonalMicVolume" class="discord2-settings-slider" type="range" min="0" max="200" step="1" value="100" />
+                        <span id="discord2PersonalMicVolumeValue">100%</span>
+                      </div>
+                    </div>
+                    <div class="discord2-settings-field">
+                      <label for="discord2PersonalOutputVolume">Speaker Volume</label>
+                      <div class="discord2-settings-slider-row">
+                        <input id="discord2PersonalOutputVolume" class="discord2-settings-slider" type="range" min="0" max="200" step="1" value="100" />
+                        <span id="discord2PersonalOutputVolumeValue">100%</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="discord2-settings-section">
+                  <h4>Mic Test</h4>
+                  <p class="discord2-settings-help">Having mic issues? Start a test and say something fun. We'll play your voice back to you.</p>
+                  <div class="discord2-mic-test-row">
+                    <button id="discord2MicTestButton" type="button" class="discord2-settings-button discord2-settings-button--blurple">Let's Check</button>
+                    <canvas id="discord2MicTestCanvas" class="discord2-mic-test-bar" width="620" height="72"></canvas>
+                  </div>
+                  <p class="discord2-settings-help">Need help with voice or video? Check out the troubleshooting guide.</p>
+                </section>
+
+                <div class="discord2-settings-divider" aria-hidden="true"></div>
+
+                <section class="discord2-settings-section">
+                  <h4>Input Profile</h4>
+                  <div class="discord2-input-profile-list">
+                    <label class="discord2-profile-option" for="discord2InputProfileVoiceIsolation">
+                      <input id="discord2InputProfileVoiceIsolation" name="discord2InputProfile" type="radio" value="voice-isolation" />
+                      <span class="discord2-profile-option__title">Voice Isolation</span>
+                      <span class="discord2-profile-option__desc">Just your beautiful voice: let Discord cut through the noise</span>
+                    </label>
+                    <label class="discord2-profile-option" for="discord2InputProfileStudio">
+                      <input id="discord2InputProfileStudio" name="discord2InputProfile" type="radio" value="studio" />
+                      <span class="discord2-profile-option__title">Studio</span>
+                      <span class="discord2-profile-option__desc">Pure audio: open mic with no processing</span>
+                    </label>
+                    <label class="discord2-profile-option" for="discord2InputProfileCustom">
+                      <input id="discord2InputProfileCustom" name="discord2InputProfile" type="radio" value="custom" checked />
+                      <span class="discord2-profile-option__title">Custom</span>
+                      <span class="discord2-profile-option__desc">Advanced mode: give me all the buttons and dials!</span>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="discord2-settings-section">
+                  <h4>Input Mode</h4>
+
+                  <label class="discord2-radio-row" for="discord2InputModeVoiceActivity">
+                    <input id="discord2InputModeVoiceActivity" name="discord2InputMode" type="radio" value="voice" checked />
+                    <span>Voice Activity</span>
+                  </label>
+                  <label class="discord2-radio-row" for="discord2InputModePushToTalk">
+                    <input id="discord2InputModePushToTalk" name="discord2InputMode" type="radio" value="ptt" />
+                    <span>Push To Talk</span>
+                  </label>
+
+                  <div id="discord2VoiceActivityControls" class="discord2-input-activity-wrap">
+                    <label class="discord2-toggle-row" for="discord2PersonalInputSensitivityAuto">
+                      <span>Automatically adjust input sensitivity</span>
+                      <input id="discord2PersonalInputSensitivityAuto" type="checkbox" checked />
+                    </label>
+                    <p class="discord2-settings-help">Controls how much sound Discord transmits from your mic.</p>
+
+                    <div class="discord2-input-sensitivity-track-wrap">
+                      <span id="discord2PersonalInputSensitivityValue" class="discord2-sensitivity-badge">-50dB</span>
+                      <input
+                        id="discord2PersonalInputSensitivity"
+                        class="discord2-settings-slider discord2-settings-slider--sensitivity"
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value="50"
+                        aria-label="Input sensitivity"
+                      />
+                      <div id="discord2PersonalInputMeter" class="discord2-input-meter" aria-hidden="true">
+                        <div id="discord2PersonalInputMeterFill" class="discord2-input-meter__fill"></div>
+                        <div id="discord2PersonalInputThresholdHandle" class="discord2-input-meter__threshold"></div>
+                      </div>
+                      <div class="discord2-input-meter-meta">
+                        <span id="discord2PersonalInputLevelValue">Input level: -100dB</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p id="discord2PushToTalkHint" class="discord2-settings-help" style="display:none;">
+                    Hold Space to transmit your voice.
+                  </p>
+                </section>
+
+                <section class="discord2-settings-section">
+                  <h4>Advanced Audio</h4>
+
+                  <label for="discord2PersonalNoiseSuppression">Noise Suppression</label>
+                  <select id="discord2PersonalNoiseSuppression">
+                    <option value="none">None</option>
+                    <option value="standard" selected>Standard</option>
+                    <option value="krisp">Krisp</option>
+                  </select>
+
+                  <label class="discord2-toggle-row" for="discord2PersonalEchoCancellation">
+                    <span>Echo Cancellation</span>
+                    <input id="discord2PersonalEchoCancellation" type="checkbox" checked />
+                  </label>
+                </section>
+
+                <div class="discord2-modal__actions">
+                  <button id="discord2PersonalSettingsClose" type="button">Close</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div id="discord2ServerLogoCropperModal" class="avatar-cropper-modal" aria-hidden="true">
+          <div class="avatar-cropper-dialog" role="dialog" aria-modal="true" aria-labelledby="discord2ServerLogoCropperTitle">
+            <div class="avatar-cropper-header">
+              <h3 id="discord2ServerLogoCropperTitle">Szerver logó szerkesztése</h3>
+            </div>
+            <div class="avatar-cropper-body">
+              <div class="avatar-cropper-canvas">
+                <img id="discord2ServerLogoCropperImage" src="" alt="Szerver logó kivágás" />
+              </div>
+              <label for="discord2ServerLogoZoomRange">Nagyítás</label>
+              <input
+                type="range"
+                id="discord2ServerLogoZoomRange"
+                min="0.5"
+                max="3"
+                step="0.01"
+                value="1"
+              />
+            </div>
+            <div class="avatar-cropper-footer">
+              <button type="button" id="discord2ServerLogoCropperCancel" class="ghost-button">Mégse</button>
+              <button type="button" id="discord2ServerLogoCropperSave" class="primary-button">Mentés</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="discord2ContextMenu" class="discord2-context-menu" aria-hidden="true">
+          <button type="button" data-action="rename">Átnevezés</button>
+          <button type="button" data-action="delete">Törlés</button>
         </div>
       </section>
 
@@ -1029,12 +1405,19 @@
       </div>
     </div>
 
-  <script src="js/index.js?v=20260209-1"></script>
+  <script src="js/libs/vad/ort.js"></script>
+  <script src="js/libs/vad/vad.js"></script>
+  <script>
+    window.vad = window.vad || window.import_vad;
+  </script>
+  <script src="js/discord2.js?v=20260223-1"></script>
+  <script src="js/index.js?v=20260218-17"></script>
 
 
 
 
   </body>
 </html>
+
 
 

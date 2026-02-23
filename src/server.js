@@ -1,4 +1,4 @@
-// 1. A szükséges csomagok betöltése
+// 1. A szĂĽksĂ©ges csomagok betĂ¶ltĂ©se
 const express = require('express');
 const http = require('http');
 const fs = require('fs');
@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const { Server } = require('socket.io');
 const db = require('./database');
 const cinemaScraper = require('../cinema-scraper');
+const { createDiscord2Module } = require('./discord2');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
 const DEFAULT_TAG_COLOR = '#5865F2';
@@ -20,7 +21,7 @@ function generateAuthToken(payload) {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
-// 2. Az Express alkalmazás létrehozása
+// 2. Az Express alkalmazĂˇs lĂ©trehozĂˇsa
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
@@ -49,11 +50,11 @@ server.setTimeout(0); // Added to prevent timeouts during large uploads
 const io = new Server(server);
 app.settings = app.settings || {};
 
-// 3. Middleware-ek (köztes szoftverek) beállítása
+// 3. Middleware-ek (kĂ¶ztes szoftverek) beĂˇllĂ­tĂˇsa
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Fájlfeltöltés beállítása a videókhoz
+// FĂˇjlfeltĂ¶ltĂ©s beĂˇllĂ­tĂˇsa a videĂłkhoz
 const uploadsRootDirectory = DEFAULT_UPLOADS_DIR;
 const clipsDirectory = path.join(uploadsRootDirectory, 'klippek');
 const clipsOriginalDirectory = path.join(clipsDirectory, 'eredeti');
@@ -105,7 +106,7 @@ async function getUploadFileSize(filename) {
         return stats.size;
     } catch (err) {
         if (err.code !== 'ENOENT') {
-            console.error(`Hiba a fájlméret olvasásakor (${filename}):`, err);
+            console.error(`Hiba a fĂˇjlmĂ©ret olvasĂˇsakor (${filename}):`, err);
         }
 
         return null;
@@ -119,6 +120,7 @@ async function getVideoFileSize(filename) {
 const programImagesDirectory = path.join(uploadsRootDirectory, 'programs', 'images');
 const programFilesDirectory = path.join(uploadsRootDirectory, 'programs', 'files');
 const academyDirectory = path.join(uploadsRootDirectory, 'akademia');
+const discord2UploadsDirectory = path.join(uploadsRootDirectory, 'discord2');
 const archiveDirectory = path.join(uploadsRootDirectory, 'archivum');
 const archiveVideosDirectory = path.join(archiveDirectory, 'videok');
 const archiveVideosOriginalDirectory = path.join(archiveVideosDirectory, 'eredeti');
@@ -127,13 +129,13 @@ const archiveVideoChunkTempDirectory = path.join(archiveVideosDirectory, '_chunk
 const archiveCategoryMap = {
     kepek: {
         key: 'kepek',
-        label: 'Képek',
+        label: 'KĂ©pek',
         dir: path.join(archiveDirectory, 'kepek'),
         allowedExtensions: ['.png', '.jpg', '.jpeg', '.webp', '.gif'],
     },
     videok: {
         key: 'videok',
-        label: 'Videók',
+        label: 'VideĂłk',
         dir: path.join(archiveDirectory, 'videok'),
         allowedExtensions: ['.mp4', '.mkv', '.mov', '.webm', '.ogg'],
     },
@@ -157,6 +159,7 @@ const archiveVideoAllowedExtensions = new Set(
 ensureDirectoryExists(programImagesDirectory);
 ensureDirectoryExists(programFilesDirectory);
 ensureDirectoryExists(academyDirectory);
+ensureDirectoryExists(discord2UploadsDirectory);
 ensureDirectoryExists(archiveDirectory);
 ensureDirectoryExists(archiveVideosDirectory);
 ensureDirectoryExists(archiveVideosOriginalDirectory);
@@ -178,7 +181,7 @@ async function ensureTagColorColumn() {
     try {
         await db.query('ALTER TABLE tags ADD COLUMN IF NOT EXISTS color TEXT');
     } catch (err) {
-        console.error('Nem sikerült biztosítani a color oszlopot a tags táblában:', err);
+        console.error('Nem sikerĂĽlt biztosĂ­tani a color oszlopot a tags tĂˇblĂˇban:', err);
     }
 }
 
@@ -844,7 +847,7 @@ const programStorage = multer.diskStorage({
         if (file.fieldname === 'file') {
             return cb(null, programFilesDirectory);
         }
-        cb(new Error('Ismeretlen fájl mező.'));
+        cb(new Error('Ismeretlen fĂˇjl mezĹ‘.'));
     },
     filename: (_req, file, cb) => {
         const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`;
@@ -868,14 +871,14 @@ const academyFileFilter = (_req, file, cb) => {
         const allowed = ['.png', '.jpg', '.jpeg', '.webp'];
         return allowed.includes(ext)
             ? cb(null, true)
-            : cb(new Error('Csak PNG, JPG vagy WEBP borítókép engedélyezett.'));
+            : cb(new Error('Csak PNG, JPG vagy WEBP borĂ­tĂłkĂ©p engedĂ©lyezett.'));
     }
     if (file.fieldname === 'pdf') {
         return ext === '.pdf'
             ? cb(null, true)
-            : cb(new Error('Csak PDF fájl tölthető fel.'));
+            : cb(new Error('Csak PDF fĂˇjl tĂ¶lthetĹ‘ fel.'));
     }
-    return cb(new Error('Ismeretlen fájl mező.'));
+    return cb(new Error('Ismeretlen fĂˇjl mezĹ‘.'));
 };
 
 const uploadAcademyFiles = multer({ storage: academyStorage, fileFilter: academyFileFilter });
@@ -885,7 +888,7 @@ const academyImageFileFilter = (_req, file, cb) => {
     const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
     return allowed.includes(ext)
         ? cb(null, true)
-        : cb(new Error('Csak PNG, JPG, WEBP vagy GIF képfájl tölthető fel.'));
+        : cb(new Error('Csak PNG, JPG, WEBP vagy GIF kĂ©pfĂˇjl tĂ¶lthetĹ‘ fel.'));
 };
 
 const uploadAcademyImage = multer({ storage: academyStorage, fileFilter: academyImageFileFilter });
@@ -895,7 +898,7 @@ const archiveStorage = multer.diskStorage({
         const categoryInfo = resolveArchiveCategory(req.params.category);
         const folderPath = resolveArchiveFolderPath(categoryInfo, req.params.folder);
         if (!categoryInfo || !folderPath) {
-            return cb(new Error('Érvénytelen archívum kategória vagy mappa.'));
+            return cb(new Error('Ă‰rvĂ©nytelen archĂ­vum kategĂłria vagy mappa.'));
         }
         ensureDirectoryExists(folderPath);
         req.archiveTargetDir = folderPath;
@@ -911,13 +914,13 @@ const archiveStorage = multer.diskStorage({
 const archiveFileFilter = (req, file, cb) => {
     const categoryInfo = resolveArchiveCategory(req.params.category);
     if (!categoryInfo) {
-        return cb(new Error('Ismeretlen archívum kategória.'));
+        return cb(new Error('Ismeretlen archĂ­vum kategĂłria.'));
     }
     const ext = path.extname(file.originalname || '').toLowerCase();
     if (categoryInfo.allowedExtensions.includes(ext)) {
         return cb(null, true);
     }
-    return cb(new Error('Nem engedélyezett fájltípus.'));
+    return cb(new Error('Nem engedĂ©lyezett fĂˇjltĂ­pus.'));
 };
 
 const uploadArchiveFiles = multer({ storage: archiveStorage, fileFilter: archiveFileFilter });
@@ -927,7 +930,7 @@ const archiveVideoStorage = multer.diskStorage({
         const categoryInfo = resolveArchiveCategory('videok');
         const folderPath = resolveArchiveFolderPath(categoryInfo, req.params.folder);
         if (!categoryInfo || !folderPath) {
-            return cb(new Error('Érvénytelen videó mappa.'));
+            return cb(new Error('Ă‰rvĂ©nytelen videĂł mappa.'));
         }
         ensureDirectoryExists(folderPath);
         req.archiveVideoTargetDir = folderPath;
@@ -987,23 +990,23 @@ async function loadAppSettings() {
         Object.assign(app.settings, settings);
         return settings;
     } catch (err) {
-        console.error('Hiba a beállítások betöltésekor:', err);
+        console.error('Hiba a beĂˇllĂ­tĂˇsok betĂ¶ltĂ©sekor:', err);
         throw err;
     }
 }
 
-// Hitelesítési middleware a védett végpontokhoz
+// HitelesĂ­tĂ©si middleware a vĂ©dett vĂ©gpontokhoz
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-        return res.status(401).json({ message: 'Hiányzó hitelesítési token.' });
+        return res.status(401).json({ message: 'HiĂˇnyzĂł hitelesĂ­tĂ©si token.' });
     }
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) {
-            return res.status(403).json({ message: 'Érvénytelen vagy lejárt token.' });
+            return res.status(403).json({ message: 'Ă‰rvĂ©nytelen vagy lejĂˇrt token.' });
         }
 
         req.user = {
@@ -1045,7 +1048,7 @@ async function ensureClipViewPermission(req, res, next) {
     const userId = req.user && req.user.id;
 
     if (!userId) {
-        return res.status(401).json({ message: 'Bejelentkezés szükséges.' });
+        return res.status(401).json({ message: 'BejelentkezĂ©s szĂĽksĂ©ges.' });
     }
 
     if (req.user.isAdmin) {
@@ -1057,17 +1060,17 @@ async function ensureClipViewPermission(req, res, next) {
         const user = rows[0];
 
         if (!user) {
-            return res.status(404).json({ message: 'A felhasználó nem található.' });
+            return res.status(404).json({ message: 'A felhasznĂˇlĂł nem talĂˇlhatĂł.' });
         }
 
         if (Number(user.can_view_clips) !== 1) {
-            return res.status(403).json({ message: 'Nincs jogosultság a klipek megtekintésére.' });
+            return res.status(403).json({ message: 'Nincs jogosultsĂˇg a klipek megtekintĂ©sĂ©re.' });
         }
 
         return next();
     } catch (err) {
-        console.error('Hiba a klipekhez való jogosultság ellenőrzésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jogosultságot.' });
+        console.error('Hiba a klipekhez valĂł jogosultsĂˇg ellenĹ‘rzĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt ellenĹ‘rizni a jogosultsĂˇgot.' });
     }
 }
 
@@ -1331,7 +1334,7 @@ async function ensureArchiveViewPermission(req, res, next) {
     const userId = req.user && req.user.id;
 
     if (!userId) {
-        return res.status(401).json({ message: 'Bejelentkezés szükséges.' });
+        return res.status(401).json({ message: 'BejelentkezĂ©s szĂĽksĂ©ges.' });
     }
 
     if (req.user.isAdmin) {
@@ -1343,20 +1346,20 @@ async function ensureArchiveViewPermission(req, res, next) {
         const user = rows[0];
 
         if (!user) {
-            return res.status(404).json({ message: 'A felhasználó nem található.' });
+            return res.status(404).json({ message: 'A felhasznĂˇlĂł nem talĂˇlhatĂł.' });
         }
 
         const canEditArchive = Number(user.can_edit_archive) === 1;
         const canViewArchive = Number(user.can_view_archive) === 1 || canEditArchive;
 
         if (!canViewArchive) {
-            return res.status(403).json({ message: 'Nincs jogosultság az archívum megtekintéséhez.' });
+            return res.status(403).json({ message: 'Nincs jogosultsĂˇg az archĂ­vum megtekintĂ©sĂ©hez.' });
         }
 
         return next();
     } catch (err) {
-        console.error('Hiba az archívum jogosultság ellenőrzésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jogosultságot.' });
+        console.error('Hiba az archĂ­vum jogosultsĂˇg ellenĹ‘rzĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt ellenĹ‘rizni a jogosultsĂˇgot.' });
     }
 }
 
@@ -1364,7 +1367,7 @@ async function ensureArchiveEditPermission(req, res, next) {
     const userId = req.user && req.user.id;
 
     if (!userId) {
-        return res.status(401).json({ message: 'Bejelentkezés szükséges.' });
+        return res.status(401).json({ message: 'BejelentkezĂ©s szĂĽksĂ©ges.' });
     }
 
     if (req.user.isAdmin) {
@@ -1376,17 +1379,17 @@ async function ensureArchiveEditPermission(req, res, next) {
         const user = rows[0];
 
         if (!user) {
-            return res.status(404).json({ message: 'A felhasználó nem található.' });
+            return res.status(404).json({ message: 'A felhasznĂˇlĂł nem talĂˇlhatĂł.' });
         }
 
         if (Number(user.can_edit_archive) !== 1) {
-            return res.status(403).json({ message: 'Nincs jogosultság az archívum szerkesztéséhez.' });
+            return res.status(403).json({ message: 'Nincs jogosultsĂˇg az archĂ­vum szerkesztĂ©sĂ©hez.' });
         }
 
         return next();
     } catch (err) {
-        console.error('Hiba az archívum szerkesztési jogosultság ellenőrzésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jogosultságot.' });
+        console.error('Hiba az archĂ­vum szerkesztĂ©si jogosultsĂˇg ellenĹ‘rzĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt ellenĹ‘rizni a jogosultsĂˇgot.' });
     }
 }
 
@@ -1394,7 +1397,7 @@ async function loadUserUploadSettings(req, res, next) {
     const userId = req.user && req.user.id;
 
     if (!userId) {
-        return res.status(403).json({ message: 'Hiányzó felhasználói információ.' });
+        return res.status(403).json({ message: 'HiĂˇnyzĂł felhasznĂˇlĂłi informĂˇciĂł.' });
     }
 
     try {
@@ -1402,11 +1405,11 @@ async function loadUserUploadSettings(req, res, next) {
         const user = rows[0];
 
         if (!user) {
-            return res.status(404).json({ message: 'A felhasználó nem található.' });
+            return res.status(404).json({ message: 'A felhasznĂˇlĂł nem talĂˇlhatĂł.' });
         }
 
         if (Number(user.can_upload) !== 1) {
-            return res.status(403).json({ message: 'Nincs feltöltési jogosultságod.' });
+            return res.status(403).json({ message: 'Nincs feltĂ¶ltĂ©si jogosultsĂˇgod.' });
         }
 
         const defaultMaxFileSizeMb = getNumberSetting(app.settings && app.settings.max_file_size_mb, 50);
@@ -1415,7 +1418,7 @@ async function loadUserUploadSettings(req, res, next) {
         const uploadCount = Number(user.upload_count) || 0;
 
         if (maxVideos > 0 && uploadCount >= maxVideos) {
-            return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
+            return res.status(403).json({ message: 'ElĂ©rted a maximĂˇlis feltĂ¶ltĂ©si limitet.' });
         }
 
         req.uploadSettings = {
@@ -1426,12 +1429,12 @@ async function loadUserUploadSettings(req, res, next) {
 
         return next();
     } catch (err) {
-        console.error('Hiba a felhasználói beállítások lekérdezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült lekérdezni a feltöltési beállításokat.' });
+        console.error('Hiba a felhasznĂˇlĂłi beĂˇllĂ­tĂˇsok lekĂ©rdezĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a feltĂ¶ltĂ©si beĂˇllĂ­tĂˇsokat.' });
     }
 }
 
-// Videófájlok kiszolgálása szakaszos (Range) kérések támogatásával a stabil lejátszásért
+// VideĂłfĂˇjlok kiszolgĂˇlĂˇsa szakaszos (Range) kĂ©rĂ©sek tĂˇmogatĂˇsĂˇval a stabil lejĂˇtszĂˇsĂ©rt
 const VIDEO_MIME_TYPES = {
     '.mp4': 'video/mp4',
     '.webm': 'video/webm',
@@ -1455,13 +1458,13 @@ app.get('/uploads/*', (req, res) => {
     const safeFilePath = path.normalize(path.join(uploadsRootDirectory, requestedFile));
 
     if (!safeFilePath.startsWith(uploadsRootDirectory)) {
-        return res.status(400).json({ message: 'Érvénytelen fájlnév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen fĂˇjlnĂ©v.' });
     }
 
     const serveFromPath = (filePath) => {
         fs.stat(filePath, (statErr, stats) => {
             if (statErr || !stats.isFile()) {
-                return res.status(404).json({ message: 'A kért videó nem található.' });
+                return res.status(404).json({ message: 'A kĂ©rt videĂł nem talĂˇlhatĂł.' });
             }
 
             if (!isVideoFile(filePath)) {
@@ -1510,20 +1513,25 @@ app.get('/uploads/*', (req, res) => {
             return;
         }
 
-        // Régi struktúrában tárolt fájlok támogatása
+        // RĂ©gi struktĂşrĂˇban tĂˇrolt fĂˇjlok tĂˇmogatĂˇsa
         const legacyPath = path.normalize(path.join(clipsDirectory, requestedFile));
         if (legacyPath.startsWith(uploadsRootDirectory)) {
             return serveFromPath(legacyPath);
         }
 
-        return res.status(404).json({ message: 'A kért videó nem található.' });
+        return res.status(404).json({ message: 'A kĂ©rt videĂł nem talĂˇlhatĂł.' });
     });
 });
 
-// 4. Statikus fájlok kiszolgálása
+// 4. Statikus fĂˇjlok kiszolgĂˇlĂˇsa
+if (express.static?.mime?.define) {
+    express.static.mime.define({ 'application/wasm': ['wasm'] });
+    express.static.mime.define({ 'application/octet-stream': ['onnx'] });
+}
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Serve uploads from D: drive
+app.use('/uploads/discord2', express.static(discord2UploadsDirectory));
 app.use('/uploads', express.static(uploadsRootDirectory));
 
 const activeReceivers = new Map();
@@ -1618,6 +1626,19 @@ function cleanupStaleReceivers() {
 
 const receiverCleanupTimer = setInterval(cleanupStaleReceivers, RECEIVER_CLEANUP_INTERVAL_MS);
 receiverCleanupTimer.unref?.();
+const discord2 = createDiscord2Module({
+    app,
+    io,
+    db,
+    jwt,
+    jwtSecret: JWT_SECRET,
+    fs,
+    path,
+    multer,
+    discord2UploadsDirectory,
+    authenticateToken,
+    isAdmin,
+});
 
 io.on('connection', (socket) => {
     socket.emit('update_receivers_list', getReceiversList());
@@ -1634,7 +1655,7 @@ io.on('connection', (socket) => {
             const user = rows[0];
 
             if (!user || Number(user.can_transfer) !== 1) {
-                socket.emit('receiver_error', { message: 'Nincs jogosultság a fájlküldésre.' });
+                socket.emit('receiver_error', { message: 'Nincs jogosultsĂˇg a fĂˇjlkĂĽldĂ©sre.' });
                 removeReceiverBySocket(socket.id);
                 return;
             }
@@ -1655,8 +1676,8 @@ io.on('connection', (socket) => {
             receiverSockets.set(socket.id, userId);
             broadcastReceiversList();
         } catch (err) {
-            console.error('Hiba a fogadó regisztrációja során:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
+            console.error('Hiba a fogadĂł regisztrĂˇciĂłja sorĂˇn:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
             removeReceiverBySocket(socket.id);
         }
     });
@@ -1672,6 +1693,8 @@ io.on('connection', (socket) => {
         }
     });
 
+    discord2.registerSocketHandlers(socket);
+
     socket.on('disconnect', () => {
         removeReceiverBySocket(socket.id);
     });
@@ -1681,20 +1704,20 @@ app.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-        return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
+        return res.status(400).json({ message: 'FelhasznĂˇlĂłnĂ©v Ă©s jelszĂł megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         const insertQuery = 'INSERT INTO users (username, password) VALUES ($1, $2)';
         await db.query(insertQuery, [username, hashedPassword]);
-        res.status(201).json({ message: 'Sikeres regisztráció.' });
+        res.status(201).json({ message: 'Sikeres regisztrĂˇciĂł.' });
     } catch (err) {
         if (err.code === '23505') { // unique_violation for PostgreSQL
-            return res.status(409).json({ message: 'A felhasználónév már létezik.' });
+            return res.status(409).json({ message: 'A felhasznĂˇlĂłnĂ©v mĂˇr lĂ©tezik.' });
         }
-        console.error('Hiba a felhasználó mentésekor:', err);
-        res.status(500).json({ message: 'Váratlan hiba történt. Próbáld meg később.' });
+        console.error('Hiba a felhasznĂˇlĂł mentĂ©sekor:', err);
+        res.status(500).json({ message: 'VĂˇratlan hiba tĂ¶rtĂ©nt. PrĂłbĂˇld meg kĂ©sĹ‘bb.' });
     }
 });
 
@@ -1702,20 +1725,20 @@ app.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-        return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
+        return res.status(400).json({ message: 'FelhasznĂˇlĂłnĂ©v Ă©s jelszĂł megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     try {
-        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, can_view_archive, can_edit_archive, profile_picture_filename, preferred_quality FROM users WHERE username = $1', [username]);
+        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, can_view_archive, can_edit_archive, can_use_discord, profile_picture_filename, preferred_quality FROM users WHERE username = $1', [username]);
         const user = rows[0];
 
         if (!user) {
-            return res.status(401).json({ message: 'Hibás felhasználónév vagy jelszó.' });
+            return res.status(401).json({ message: 'HibĂˇs felhasznĂˇlĂłnĂ©v vagy jelszĂł.' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(401).json({ message: 'Hibás felhasználónév vagy jelszó.' });
+            return res.status(401).json({ message: 'HibĂˇs felhasznĂˇlĂłnĂ©v vagy jelszĂł.' });
         }
 
         const isAdmin = user.is_admin === 1;
@@ -1725,9 +1748,10 @@ app.post('/login', async (req, res) => {
         const canViewClips = isAdmin || Number(user.can_view_clips) === 1;
         const canEditArchive = isAdmin || Number(user.can_edit_archive) === 1;
         const canViewArchive = isAdmin || Number(user.can_view_archive) === 1 || canEditArchive;
+        const canUseDiscord = isAdmin || Number(user.can_use_discord) === 1;
 
         res.status(200).json({
-            message: 'Sikeres bejelentkezés.',
+            message: 'Sikeres bejelentkezĂ©s.',
             token,
             username: user.username,
             isAdmin,
@@ -1735,17 +1759,18 @@ app.post('/login', async (req, res) => {
             canViewClips,
             canViewArchive,
             canEditArchive,
+            canUseDiscord,
             profile_picture_filename: user.profile_picture_filename,
             preferred_quality: user.preferred_quality || '1080p'
         });
     } catch (err) {
-        console.error('Hiba a bejelentkezés során:', err);
-        res.status(500).json({ message: 'Váratlan hiba történt. Próbáld meg később.' });
+        console.error('Hiba a bejelentkezĂ©s sorĂˇn:', err);
+        res.status(500).json({ message: 'VĂˇratlan hiba tĂ¶rtĂ©nt. PrĂłbĂˇld meg kĂ©sĹ‘bb.' });
     }
 });
 
 app.post('/logout', (req, res) => {
-    res.status(200).json({ message: 'Sikeres kijelentkezés.' });
+    res.status(200).json({ message: 'Sikeres kijelentkezĂ©s.' });
 });
 
 app.post('/api/pico/refresh-movies', async (_req, res) => {
@@ -1783,16 +1808,17 @@ app.get('/api/admin/fetch-movies', authenticateToken, isAdmin, async (_req, res)
 
 app.get('/api/profile', authenticateToken, async (req, res) => {
     try {
-        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, can_view_clips, can_view_archive, can_edit_archive, profile_picture_filename, preferred_quality FROM users WHERE id = $1', [req.user.id]);
+        const { rows } = await db.query('SELECT id, username, is_admin, can_transfer, can_view_clips, can_view_archive, can_edit_archive, can_use_discord, profile_picture_filename, preferred_quality FROM users WHERE id = $1', [req.user.id]);
         const user = rows[0];
 
         if (!user) {
-            return res.status(404).json({ message: 'A felhasználó nem található.' });
+            return res.status(404).json({ message: 'A felhasznĂˇlĂł nem talĂˇlhatĂł.' });
         }
 
         const isAdminUser = user.is_admin === 1;
         const canEditArchive = isAdminUser || Number(user.can_edit_archive) === 1;
         const canViewArchive = isAdminUser || Number(user.can_view_archive) === 1 || canEditArchive;
+        const canUseDiscord = isAdminUser || Number(user.can_use_discord) === 1;
         res.status(200).json({
             id: user.id,
             username: user.username,
@@ -1801,12 +1827,13 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
             canViewClips: isAdminUser || Number(user.can_view_clips) === 1,
             canViewArchive,
             canEditArchive,
+            canUseDiscord,
             profile_picture_filename: user.profile_picture_filename,
             preferred_quality: user.preferred_quality || '1080p'
         });
     } catch (err) {
-        console.error('Hiba a profiladatok lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a profiladatokat.' });
+        console.error('Hiba a profiladatok lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a profiladatokat.' });
     }
 });
 
@@ -1815,35 +1842,35 @@ app.post('/api/profile/update-quality', authenticateToken, async (req, res) => {
     const allowedQualities = ['original', '1440p', '1080p', '720p'];
 
     if (!allowedQualities.includes(quality)) {
-        return res.status(400).json({ message: 'Érvénytelen minőség érték.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen minĹ‘sĂ©g Ă©rtĂ©k.' });
     }
 
     try {
         await db.query('UPDATE users SET preferred_quality = $1 WHERE id = $2', [quality, req.user.id]);
-        res.status(200).json({ message: 'A minőségi beállítás frissítve.', preferred_quality: quality });
+        res.status(200).json({ message: 'A minĹ‘sĂ©gi beĂˇllĂ­tĂˇs frissĂ­tve.', preferred_quality: quality });
     } catch (err) {
-        console.error('Hiba a minőségi beállítás frissítésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült frissíteni a minőségi beállítást.' });
+        console.error('Hiba a minĹ‘sĂ©gi beĂˇllĂ­tĂˇs frissĂ­tĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a minĹ‘sĂ©gi beĂˇllĂ­tĂˇst.' });
     }
 });
 
 app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
     try {
-        const query = 'SELECT id, username, can_upload, can_transfer, can_view_clips, can_view_archive, can_edit_archive, max_file_size_mb, max_videos, upload_count FROM users';
+        const query = 'SELECT id, username, can_upload, can_transfer, can_view_clips, can_view_archive, can_edit_archive, can_use_discord, max_file_size_mb, max_videos, upload_count FROM users';
         const { rows } = await db.query(query);
         res.status(200).json(rows);
     } catch (err) {
-        console.error('Hiba a felhasználók lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a felhasználókat.' });
+        console.error('Hiba a felhasznĂˇlĂłk lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a felhasznĂˇlĂłkat.' });
     }
 });
 
 app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, async (req, res) => {
     if (!Array.isArray(req.body)) {
-        return res.status(400).json({ message: 'A kérés törzsében egy tömbnek kell szerepelnie.' });
+        return res.status(400).json({ message: 'A kĂ©rĂ©s tĂ¶rzsĂ©ben egy tĂ¶mbnek kell szerepelnie.' });
     }
     if (req.body.length === 0) {
-        return res.status(200).json({ message: 'Nincs frissítendő jogosultság.' });
+        return res.status(200).json({ message: 'Nincs frissĂ­tendĹ‘ jogosultsĂˇg.' });
     }
 
     const updates = req.body.map(item => {
@@ -1857,6 +1884,7 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
             canViewClips: item.canViewClips ? 1 : 0,
             canViewArchive,
             canEditArchive,
+            canUseDiscord: item.canUseDiscord ? 1 : 0,
             maxFileSizeMb: Number(item.maxFileSizeMb),
             maxVideos: Number(item.maxVideos)
         });
@@ -1864,7 +1892,7 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
 
     // Simple validation (can be improved)
     if (updates.some(u => isNaN(u.userId) || isNaN(u.maxFileSizeMb) || isNaN(u.maxVideos))) {
-        return res.status(400).json({ message: 'Érvénytelen adatok a kérésben.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen adatok a kĂ©rĂ©sben.' });
     }
 
     const client = await db.pool.connect();
@@ -1872,29 +1900,30 @@ app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, asyn
         await client.query('BEGIN');
         for (const update of updates) {
             const result = await client.query(
-                'UPDATE users SET can_upload = $1, can_transfer = $2, can_view_clips = $3, can_view_archive = $4, can_edit_archive = $5, max_file_size_mb = $6, max_videos = $7 WHERE id = $8',
+                'UPDATE users SET can_upload = $1, can_transfer = $2, can_view_clips = $3, can_view_archive = $4, can_edit_archive = $5, can_use_discord = $6, max_file_size_mb = $7, max_videos = $8 WHERE id = $9',
                 [
                     update.canUpload,
                     update.canTransfer,
                     update.canViewClips,
                     update.canViewArchive,
                     update.canEditArchive,
+                    update.canUseDiscord,
                     Math.round(update.maxFileSizeMb),
                     Math.round(update.maxVideos),
                     update.userId
                 ]
             );
             if (result.rowCount === 0) {
-                throw new Error(`A ${update.userId} azonosítójú felhasználó nem található.`);
+                throw new Error(`A ${update.userId} azonosĂ­tĂłjĂş felhasznĂˇlĂł nem talĂˇlhatĂł.`);
             }
         }
         await client.query('COMMIT');
-        res.status(200).json({ message: 'Jogosultságok sikeresen frissítve.' });
+        res.status(200).json({ message: 'JogosultsĂˇgok sikeresen frissĂ­tve.' });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Hiba a jogosultságok frissítésekor:', err);
-        const userNotFound = err.message.includes('felhasználó nem található');
-        res.status(userNotFound ? 404 : 500).json({ message: userNotFound ? err.message : 'Nem sikerült frissíteni a jogosultságokat.' });
+        console.error('Hiba a jogosultsĂˇgok frissĂ­tĂ©sekor:', err);
+        const userNotFound = err.message.includes('felhasznĂˇlĂł nem talĂˇlhatĂł');
+        res.status(userNotFound ? 404 : 500).json({ message: userNotFound ? err.message : 'Nem sikerĂĽlt frissĂ­teni a jogosultsĂˇgokat.' });
     } finally {
         client.release();
     }
@@ -1909,18 +1938,18 @@ app.get('/api/settings', authenticateToken, isAdmin, async (req, res) => {
         });
         res.status(200).json(settings);
     } catch (err) {
-        console.error('Hiba a beállítások lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a beállításokat.' });
+        console.error('Hiba a beĂˇllĂ­tĂˇsok lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a beĂˇllĂ­tĂˇsokat.' });
     }
 });
 
 app.post('/api/settings', authenticateToken, isAdmin, async (req, res) => {
     if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ message: 'Érvénytelen beállítás adatok.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen beĂˇllĂ­tĂˇs adatok.' });
     }
     const entries = Object.entries(req.body);
     if (entries.length === 0) {
-        return res.status(400).json({ message: 'Nincs frissítendő beállítás.' });
+        return res.status(400).json({ message: 'Nincs frissĂ­tendĹ‘ beĂˇllĂ­tĂˇs.' });
     }
 
     const client = await db.pool.connect();
@@ -1932,11 +1961,11 @@ app.post('/api/settings', authenticateToken, isAdmin, async (req, res) => {
         await client.query('COMMIT');
 
         await loadAppSettings();
-        res.status(200).json({ message: 'Beállítások sikeresen frissítve.', settings: app.settings });
+        res.status(200).json({ message: 'BeĂˇllĂ­tĂˇsok sikeresen frissĂ­tve.', settings: app.settings });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Hiba a beállítások frissítésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült frissíteni a beállításokat.' });
+        console.error('Hiba a beĂˇllĂ­tĂˇsok frissĂ­tĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a beĂˇllĂ­tĂˇsokat.' });
     } finally {
         client.release();
     }
@@ -1947,13 +1976,13 @@ app.post('/api/polls', authenticateToken, async (req, res) => {
     const optionsInput = Array.isArray(req.body?.options) ? req.body.options : [];
 
     if (!question) {
-        return res.status(400).json({ message: 'A kérdés megadása kötelező.' });
+        return res.status(400).json({ message: 'A kĂ©rdĂ©s megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     const uniqueOptions = [...new Set(optionsInput.map(o => String(o).trim()).filter(o => o))];
 
     if (uniqueOptions.length < 2) {
-        return res.status(400).json({ message: 'Legalább két különböző válaszlehetőség szükséges.' });
+        return res.status(400).json({ message: 'LegalĂˇbb kĂ©t kĂĽlĂ¶nbĂ¶zĹ‘ vĂˇlaszlehetĹ‘sĂ©g szĂĽksĂ©ges.' });
     }
 
     const client = await db.pool.connect();
@@ -1967,11 +1996,11 @@ app.post('/api/polls', authenticateToken, async (req, res) => {
         }
 
         await client.query('COMMIT');
-        res.status(201).json({ message: 'Szavazás sikeresen létrehozva.', pollId });
+        res.status(201).json({ message: 'SzavazĂˇs sikeresen lĂ©trehozva.', pollId });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Hiba a szavazás létrehozásakor:', err);
-        res.status(500).json({ message: 'Nem sikerült létrehozni a szavazást.' });
+        console.error('Hiba a szavazĂˇs lĂ©trehozĂˇsakor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lĂ©trehozni a szavazĂˇst.' });
     } finally {
         client.release();
     }
@@ -2043,8 +2072,8 @@ app.get('/api/polls', async (req, res) => {
 
         res.status(200).json(result);
     } catch (err) {
-        console.error('Hiba a szavazások lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a szavazásokat.' });
+        console.error('Hiba a szavazĂˇsok lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a szavazĂˇsokat.' });
     }
 });
 
@@ -2053,66 +2082,66 @@ app.post('/api/polls/:pollId/vote', authenticateToken, async (req, res) => {
     const optionId = Number.parseInt(req.body.optionId, 10);
 
     if (!pollId || !optionId) {
-        return res.status(400).json({ message: 'Érvénytelen kérés.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen kĂ©rĂ©s.' });
     }
 
     try {
         const { rows: polls } = await db.query('SELECT is_active FROM polls WHERE id = $1', [pollId]);
-        if (!polls.length) return res.status(404).json({ message: 'A szavazás nem található.' });
-        if (!polls[0].is_active) return res.status(400).json({ message: 'A szavazás már lezárult.' });
+        if (!polls.length) return res.status(404).json({ message: 'A szavazĂˇs nem talĂˇlhatĂł.' });
+        if (!polls[0].is_active) return res.status(400).json({ message: 'A szavazĂˇs mĂˇr lezĂˇrult.' });
 
         const { rows: options } = await db.query('SELECT id FROM poll_options WHERE id = $1 AND poll_id = $2', [optionId, pollId]);
-        if (!options.length) return res.status(400).json({ message: 'A megadott válaszlehetőség nem található.' });
+        if (!options.length) return res.status(400).json({ message: 'A megadott vĂˇlaszlehetĹ‘sĂ©g nem talĂˇlhatĂł.' });
 
         await db.query('INSERT INTO poll_votes (poll_id, option_id, user_id) VALUES ($1, $2, $3)', [pollId, optionId, req.user.id]);
-        res.status(201).json({ message: 'Szavazat rögzítve.' });
+        res.status(201).json({ message: 'Szavazat rĂ¶gzĂ­tve.' });
     } catch (err) {
         if (err.code === '23505') { // unique_violation
-            return res.status(409).json({ message: 'Már szavaztál ebben a szavazásban.' });
+            return res.status(409).json({ message: 'MĂˇr szavaztĂˇl ebben a szavazĂˇsban.' });
         }
-        console.error('Hiba a szavazat rögzítésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült rögzíteni a szavazatot.' });
+        console.error('Hiba a szavazat rĂ¶gzĂ­tĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt rĂ¶gzĂ­teni a szavazatot.' });
     }
 });
 
 app.post('/api/polls/:pollId/close', authenticateToken, async (req, res) => {
     const pollId = Number.parseInt(req.params.pollId, 10);
-    if (!pollId) return res.status(400).json({ message: 'Érvénytelen szavazás azonosító.' });
+    if (!pollId) return res.status(400).json({ message: 'Ă‰rvĂ©nytelen szavazĂˇs azonosĂ­tĂł.' });
 
     try {
         const { rows: polls } = await db.query('SELECT creator_id, is_active FROM polls WHERE id = $1', [pollId]);
-        if (!polls.length) return res.status(404).json({ message: 'A szavazás nem található.' });
+        if (!polls.length) return res.status(404).json({ message: 'A szavazĂˇs nem talĂˇlhatĂł.' });
         const poll = polls[0];
-        if (!poll.is_active) return res.status(400).json({ message: 'A szavazás már le van zárva.' });
+        if (!poll.is_active) return res.status(400).json({ message: 'A szavazĂˇs mĂˇr le van zĂˇrva.' });
         if (poll.creator_id !== req.user.id && !req.user.isAdmin) {
-            return res.status(403).json({ message: 'Nincs jogosultságod lezárni ezt a szavazást.' });
+            return res.status(403).json({ message: 'Nincs jogosultsĂˇgod lezĂˇrni ezt a szavazĂˇst.' });
         }
 
         await db.query('UPDATE polls SET is_active = 0, closed_at = NOW() WHERE id = $1', [pollId]);
-        res.status(200).json({ message: 'Szavazás sikeresen lezárva.' });
+        res.status(200).json({ message: 'SzavazĂˇs sikeresen lezĂˇrva.' });
     } catch (err) {
-        console.error('Hiba a szavazás lezárásakor:', err);
-        res.status(500).json({ message: 'Nem sikerült lezárni a szavazást.' });
+        console.error('Hiba a szavazĂˇs lezĂˇrĂˇsakor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lezĂˇrni a szavazĂˇst.' });
     }
 });
 
 app.delete('/api/polls/:pollId', authenticateToken, isAdmin, async (req, res) => {
     const pollId = Number.parseInt(req.params.pollId, 10);
     if (!pollId) {
-        return res.status(400).json({ message: 'Érvénytelen szavazás azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen szavazĂˇs azonosĂ­tĂł.' });
     }
 
     try {
         const result = await db.query('DELETE FROM polls WHERE id = $1', [pollId]);
 
         if (result.rowCount === 0) {
-            return res.status(404).json({ message: 'A szavazás nem található.' });
+            return res.status(404).json({ message: 'A szavazĂˇs nem talĂˇlhatĂł.' });
         }
 
-        res.status(200).json({ message: 'Szavazás sikeresen törölve.' });
+        res.status(200).json({ message: 'SzavazĂˇs sikeresen tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba a szavazás törlésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült törölni a szavazást.' });
+        console.error('Hiba a szavazĂˇs tĂ¶rlĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a szavazĂˇst.' });
     }
 });
 
@@ -2124,8 +2153,8 @@ app.get('/api/tags', async (_req, res) => {
         );
         res.status(200).json(rows || []);
     } catch (err) {
-        console.error('Hiba a címkék lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a címkéket.' });
+        console.error('Hiba a cĂ­mkĂ©k lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a cĂ­mkĂ©ket.' });
     }
 });
 
@@ -2135,7 +2164,7 @@ app.post('/api/tags', authenticateToken, isAdmin, async (req, res) => {
     const normalizedColor = normalizeHexColor(color);
 
     if (!trimmedName) {
-        return res.status(400).json({ message: 'A címke neve nem lehet üres.' });
+        return res.status(400).json({ message: 'A cĂ­mke neve nem lehet ĂĽres.' });
     }
 
     try {
@@ -2145,13 +2174,13 @@ app.post('/api/tags', authenticateToken, isAdmin, async (req, res) => {
         );
 
         if (!rows[0]) {
-            return res.status(409).json({ message: 'A címke már létezik.' });
+            return res.status(409).json({ message: 'A cĂ­mke mĂˇr lĂ©tezik.' });
         }
 
         res.status(201).json(rows[0]);
     } catch (err) {
-        console.error('Hiba a címke létrehozása során:', err);
-        res.status(500).json({ message: 'Nem sikerült létrehozni a címkét.' });
+        console.error('Hiba a cĂ­mke lĂ©trehozĂˇsa sorĂˇn:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lĂ©trehozni a cĂ­mkĂ©t.' });
     }
 });
 
@@ -2159,18 +2188,18 @@ app.delete('/api/tags/:tagId', authenticateToken, isAdmin, async (req, res) => {
     const tagId = Number.parseInt(req.params.tagId, 10);
 
     if (!tagId) {
-        return res.status(400).json({ message: 'Érvénytelen címke azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen cĂ­mke azonosĂ­tĂł.' });
     }
 
     try {
         const result = await db.query('DELETE FROM tags WHERE id = $1', [tagId]);
         if (result.rowCount === 0) {
-            return res.status(404).json({ message: 'A címke nem található.' });
+            return res.status(404).json({ message: 'A cĂ­mke nem talĂˇlhatĂł.' });
         }
-        res.status(200).json({ message: 'Címke törölve.' });
+        res.status(200).json({ message: 'CĂ­mke tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba a címke törlése során:', err);
-        res.status(500).json({ message: 'Nem sikerült törölni a címkét.' });
+        console.error('Hiba a cĂ­mke tĂ¶rlĂ©se sorĂˇn:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a cĂ­mkĂ©t.' });
     }
 });
 
@@ -2182,8 +2211,8 @@ app.get('/api/academy/tags', async (_req, res) => {
         );
         res.status(200).json(rows || []);
     } catch (err) {
-        console.error('Hiba az akadémia címkék lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni az akadémia címkéket.' });
+        console.error('Hiba az akadĂ©mia cĂ­mkĂ©k lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni az akadĂ©mia cĂ­mkĂ©ket.' });
     }
 });
 
@@ -2193,7 +2222,7 @@ app.post('/api/academy/tags', authenticateToken, isAdmin, async (req, res) => {
     const normalizedColor = normalizeHexColor(color);
 
     if (!trimmedName) {
-        return res.status(400).json({ message: 'A tag neve nem lehet üres.' });
+        return res.status(400).json({ message: 'A tag neve nem lehet ĂĽres.' });
     }
 
     try {
@@ -2212,8 +2241,8 @@ app.post('/api/academy/tags', authenticateToken, isAdmin, async (req, res) => {
         );
         return res.status(200).json(existing[0]);
     } catch (err) {
-        console.error('Hiba az akadémia tag létrehozása során:', err);
-        res.status(500).json({ message: 'Nem sikerült létrehozni az akadémia taget.' });
+        console.error('Hiba az akadĂ©mia tag lĂ©trehozĂˇsa sorĂˇn:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lĂ©trehozni az akadĂ©mia taget.' });
     }
 });
 
@@ -2222,12 +2251,12 @@ app.post('/api/academy/images', authenticateToken, isAdmin, (req, res) => {
 
     uploadHandler(req, res, (err) => {
         if (err) {
-            return res.status(400).json({ message: err.message || 'Nem sikerült a képek feltöltése.' });
+            return res.status(400).json({ message: err.message || 'Nem sikerĂĽlt a kĂ©pek feltĂ¶ltĂ©se.' });
         }
 
         const files = Array.isArray(req.files) ? req.files : [];
         if (!files.length) {
-            return res.status(400).json({ message: 'Nem sikerült a képek feltöltése.' });
+            return res.status(400).json({ message: 'Nem sikerĂĽlt a kĂ©pek feltĂ¶ltĂ©se.' });
         }
 
         const items = files.map((file) => {
@@ -2268,8 +2297,8 @@ app.get('/api/academy/articles', async (_req, res) => {
 
         res.status(200).json(rows || []);
     } catch (err) {
-        console.error('Hiba az akadémia cikkek lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni az akadémia cikkeket.' });
+        console.error('Hiba az akadĂ©mia cikkek lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni az akadĂ©mia cikkeket.' });
     }
 });
 
@@ -2281,7 +2310,7 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
 
     uploadHandler(req, res, async (err) => {
         if (err) {
-            return res.status(400).json({ message: err.message || 'Hiba történt a fájl feltöltésekor.' });
+            return res.status(400).json({ message: err.message || 'Hiba tĂ¶rtĂ©nt a fĂˇjl feltĂ¶ltĂ©sekor.' });
         }
 
         const coverFile = req.files?.cover?.[0] || null;
@@ -2301,7 +2330,7 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
             if (pdfFile) {
                 await safeUnlink(path.join(academyDirectory, pdfFile.filename));
             }
-            return res.status(400).json({ message: 'A cím megadása kötelező.' });
+            return res.status(400).json({ message: 'A cĂ­m megadĂˇsa kĂ¶telezĹ‘.' });
         }
 
         const rawTagIds = parseAcademyTagIds(req.body.tags);
@@ -2346,8 +2375,8 @@ app.post('/api/academy/articles', authenticateToken, isAdmin, (req, res) => {
             if (pdfFile) {
                 await safeUnlink(path.join(academyDirectory, pdfFile.filename));
             }
-            console.error('Hiba az akadémia cikk mentésekor:', dbErr);
-            res.status(500).json({ message: 'Nem sikerült menteni a cikket.' });
+            console.error('Hiba az akadĂ©mia cikk mentĂ©sekor:', dbErr);
+            res.status(500).json({ message: 'Nem sikerĂĽlt menteni a cikket.' });
         } finally {
             client.release();
         }
@@ -2361,12 +2390,12 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
 
     uploadHandler(req, res, async (err) => {
         if (err) {
-            return res.status(400).json({ message: err.message || 'Hiba történt a fájl feltöltésekor.' });
+            return res.status(400).json({ message: err.message || 'Hiba tĂ¶rtĂ©nt a fĂˇjl feltĂ¶ltĂ©sekor.' });
         }
 
         const articleId = Number.parseInt(req.params.id, 10);
         if (!Number.isFinite(articleId)) {
-            return res.status(400).json({ message: 'Érvénytelen cikk azonosító.' });
+            return res.status(400).json({ message: 'Ă‰rvĂ©nytelen cikk azonosĂ­tĂł.' });
         }
 
         const coverFile = req.files?.cover?.[0] || null;
@@ -2385,7 +2414,7 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
             if (pdfFile) {
                 await safeUnlink(path.join(academyDirectory, pdfFile.filename));
             }
-            return res.status(400).json({ message: 'A cím megadása kötelező.' });
+            return res.status(400).json({ message: 'A cĂ­m megadĂˇsa kĂ¶telezĹ‘.' });
         }
 
         const client = await db.pool.connect();
@@ -2403,7 +2432,7 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
                 if (pdfFile) {
                     await safeUnlink(path.join(academyDirectory, pdfFile.filename));
                 }
-                return res.status(404).json({ message: 'A cikk nem található.' });
+                return res.status(404).json({ message: 'A cikk nem talĂˇlhatĂł.' });
             }
 
             const newCoverFilename = coverFile ? coverFile.filename : existing.cover_filename;
@@ -2457,7 +2486,7 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
                 await safeUnlink(path.join(academyDirectory, existing.pdf_filename));
             }
 
-            res.status(200).json({ message: 'Cikk frissítve.' });
+            res.status(200).json({ message: 'Cikk frissĂ­tve.' });
         } catch (dbErr) {
             await client.query('ROLLBACK');
             if (coverFile) {
@@ -2466,8 +2495,8 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
             if (pdfFile) {
                 await safeUnlink(path.join(academyDirectory, pdfFile.filename));
             }
-            console.error('Hiba az akadémia cikk frissítésekor:', dbErr);
-            res.status(500).json({ message: 'Nem sikerült frissíteni a cikket.' });
+            console.error('Hiba az akadĂ©mia cikk frissĂ­tĂ©sekor:', dbErr);
+            res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a cikket.' });
         } finally {
             client.release();
         }
@@ -2476,7 +2505,7 @@ app.put('/api/academy/articles/:id', authenticateToken, isAdmin, (req, res) => {
 app.delete('/api/academy/articles/:id', authenticateToken, isAdmin, async (req, res) => {
     const articleId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(articleId)) {
-        return res.status(400).json({ message: 'Érvénytelen cikk azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen cikk azonosĂ­tĂł.' });
     }
 
     try {
@@ -2486,7 +2515,7 @@ app.delete('/api/academy/articles/:id', authenticateToken, isAdmin, async (req, 
         );
         const article = rows[0];
         if (!article) {
-            return res.status(404).json({ message: 'A cikk nem található.' });
+            return res.status(404).json({ message: 'A cikk nem talĂˇlhatĂł.' });
         }
 
         await db.query('DELETE FROM academy_articles WHERE id = $1', [articleId]);
@@ -2498,17 +2527,17 @@ app.delete('/api/academy/articles/:id', authenticateToken, isAdmin, async (req, 
             await safeUnlink(path.join(academyDirectory, article.pdf_filename));
         }
 
-        res.status(200).json({ message: 'Cikk törölve.' });
+        res.status(200).json({ message: 'Cikk tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba az akadémia cikk törlésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült törölni a cikket.' });
+        console.error('Hiba az akadĂ©mia cikk tĂ¶rlĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a cikket.' });
     }
 });
 
 app.get('/api/academy/articles/:id/download', async (req, res) => {
     const articleId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(articleId)) {
-        return res.status(400).json({ message: 'Érvénytelen cikk azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen cikk azonosĂ­tĂł.' });
     }
 
     try {
@@ -2518,12 +2547,12 @@ app.get('/api/academy/articles/:id/download', async (req, res) => {
         );
         const article = rows[0];
         if (!article || !article.pdf_filename) {
-            return res.status(404).json({ message: 'A PDF nem található.' });
+            return res.status(404).json({ message: 'A PDF nem talĂˇlhatĂł.' });
         }
 
         const resolvedPath = path.normalize(path.join(academyDirectory, article.pdf_filename));
         if (!resolvedPath.startsWith(academyDirectory)) {
-            return res.status(400).json({ message: 'Érvénytelen fájl útvonal.' });
+            return res.status(400).json({ message: 'Ă‰rvĂ©nytelen fĂˇjl Ăştvonal.' });
         }
 
         await fs.promises.access(resolvedPath);
@@ -2531,17 +2560,17 @@ app.get('/api/academy/articles/:id/download', async (req, res) => {
         return res.download(resolvedPath, downloadName);
     } catch (err) {
         if (err.code === 'ENOENT') {
-            return res.status(404).json({ message: 'A PDF nem található.' });
+            return res.status(404).json({ message: 'A PDF nem talĂˇlhatĂł.' });
         }
-        console.error('Hiba az akadémia PDF letöltésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült letölteni a PDF-et.' });
+        console.error('Hiba az akadĂ©mia PDF letĂ¶ltĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt letĂ¶lteni a PDF-et.' });
     }
 });
 
 app.get('/api/archive/:category/folders', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
     const categoryInfo = resolveArchiveCategory(req.params.category);
     if (!categoryInfo) {
-        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+        return res.status(404).json({ message: 'Ismeretlen archĂ­vum kategĂłria.' });
     }
 
     try {
@@ -2553,8 +2582,8 @@ app.get('/api/archive/:category/folders', authenticateToken, ensureArchiveViewPe
             .sort((a, b) => a.localeCompare(b, 'hu'));
         return res.status(200).json({ folders });
     } catch (err) {
-        console.error('Hiba az archívum mappák lekérdezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült betölteni a mappákat.' });
+        console.error('Hiba az archĂ­vum mappĂˇk lekĂ©rdezĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt betĂ¶lteni a mappĂˇkat.' });
     }
 });
 
@@ -2562,15 +2591,15 @@ app.post('/api/archive/:category/folders', authenticateToken, ensureArchiveEditP
     const categoryInfo = resolveArchiveCategory(req.params.category);
     const folderName = normalizeArchiveFolderName(req.body?.name);
     if (!categoryInfo) {
-        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+        return res.status(404).json({ message: 'Ismeretlen archĂ­vum kategĂłria.' });
     }
     if (!folderName) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     const folderPath = resolveArchiveFolderPath(categoryInfo, folderName);
     if (!folderPath) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     try {
@@ -2581,13 +2610,13 @@ app.post('/api/archive/:category/folders', authenticateToken, ensureArchiveEditP
                 await fs.promises.mkdir(folder720Path, { recursive: true });
             }
         }
-        return res.status(201).json({ message: 'Mappa létrehozva.', name: folderName });
+        return res.status(201).json({ message: 'Mappa lĂ©trehozva.', name: folderName });
     } catch (err) {
         if (err.code === 'EEXIST') {
-            return res.status(409).json({ message: 'A mappa már létezik.' });
+            return res.status(409).json({ message: 'A mappa mĂˇr lĂ©tezik.' });
         }
-        console.error('Hiba az archívum mappa létrehozásakor:', err);
-        return res.status(500).json({ message: 'Nem sikerült létrehozni a mappát.' });
+        console.error('Hiba az archĂ­vum mappa lĂ©trehozĂˇsakor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt lĂ©trehozni a mappĂˇt.' });
     }
 });
 
@@ -2597,41 +2626,41 @@ app.patch('/api/archive/:category/folders/rename', authenticateToken, isAdmin, e
     const newName = normalizeArchiveFolderName(req.body?.newName);
 
     if (!categoryInfo) {
-        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+        return res.status(404).json({ message: 'Ismeretlen archĂ­vum kategĂłria.' });
     }
     if (!oldName || !newName) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
     if (oldName === newName) {
-        return res.status(400).json({ message: 'Az új mappanév megegyezik a jelenlegivel.' });
+        return res.status(400).json({ message: 'Az Ăşj mappanĂ©v megegyezik a jelenlegivel.' });
     }
 
     const sourcePath = resolveArchiveFolderPath(categoryInfo, oldName);
     const targetPath = resolveArchiveFolderPath(categoryInfo, newName);
     if (!sourcePath || !targetPath) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     try {
         const sourceStat = await fs.promises.stat(sourcePath);
         if (!sourceStat.isDirectory()) {
-            return res.status(404).json({ message: 'A mappa nem található.' });
+            return res.status(404).json({ message: 'A mappa nem talĂˇlhatĂł.' });
         }
     } catch (err) {
         if (err.code === 'ENOENT') {
-            return res.status(404).json({ message: 'A mappa nem található.' });
+            return res.status(404).json({ message: 'A mappa nem talĂˇlhatĂł.' });
         }
-        console.error('Hiba az archívum mappa ellenőrzésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült átnevezni a mappát.' });
+        console.error('Hiba az archĂ­vum mappa ellenĹ‘rzĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt Ăˇtnevezni a mappĂˇt.' });
     }
 
     try {
         await fs.promises.access(targetPath, fs.constants.F_OK);
-        return res.status(409).json({ message: 'A cél mappa már létezik.' });
+        return res.status(409).json({ message: 'A cĂ©l mappa mĂˇr lĂ©tezik.' });
     } catch (err) {
         if (err.code !== 'ENOENT') {
-            console.error('Hiba az archívum célmappa ellenőrzésekor:', err);
-            return res.status(500).json({ message: 'Nem sikerült átnevezni a mappát.' });
+            console.error('Hiba az archĂ­vum cĂ©lmappa ellenĹ‘rzĂ©sekor:', err);
+            return res.status(500).json({ message: 'Nem sikerĂĽlt Ăˇtnevezni a mappĂˇt.' });
         }
     }
 
@@ -2640,11 +2669,11 @@ app.patch('/api/archive/:category/folders/rename', authenticateToken, isAdmin, e
         if (target720Path) {
             try {
                 await fs.promises.access(target720Path, fs.constants.F_OK);
-                return res.status(409).json({ message: 'A c�l mappa m�r l�tezik.' });
+                return res.status(409).json({ message: 'A c\u00E9l mappa m\u00E1r l\u00E9tezik.' });
             } catch (err) {
                 if (err.code !== 'ENOENT') {
-                    console.error('Hiba az arch�v 720p c�lmappa ellen�rz�sekor:', err);
-                    return res.status(500).json({ message: 'Nem siker�lt �tnevezni a mapp�t.' });
+                    console.error('Hiba az arch\u00EDv 720p c\u00E9lmappa ellen\u0151rz\u00E9sekor:', err);
+                    return res.status(500).json({ message: 'Nem siker\u00FClt \u00E1tnevezni a mapp\u00E1t.' });
                 }
             }
         }
@@ -2686,10 +2715,10 @@ app.patch('/api/archive/:category/folders/rename', authenticateToken, isAdmin, e
                 );
             }
         }
-        return res.status(200).json({ message: 'Mappa átnevezve.', oldName, newName });
+        return res.status(200).json({ message: 'Mappa Ăˇtnevezve.', oldName, newName });
     } catch (err) {
-        console.error('Hiba az archívum mappa átnevezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült átnevezni a mappát.' });
+        console.error('Hiba az archĂ­vum mappa ĂˇtnevezĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt Ăˇtnevezni a mappĂˇt.' });
     }
 });
 
@@ -2697,15 +2726,15 @@ app.delete('/api/archive/:category/folders', authenticateToken, isAdmin, ensureA
     const categoryInfo = resolveArchiveCategory(req.params.category);
     const folderName = normalizeArchiveFolderName(req.body?.name);
     if (!categoryInfo) {
-        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+        return res.status(404).json({ message: 'Ismeretlen archĂ­vum kategĂłria.' });
     }
     if (!folderName) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     const folderPath = resolveArchiveFolderPath(categoryInfo, folderName);
     if (!folderPath) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     try {
@@ -2727,22 +2756,22 @@ app.delete('/api/archive/:category/folders', authenticateToken, isAdmin, ensureA
             }
             await db.query('DELETE FROM archive_videos WHERE folder_name = $1', [folderName]);
         }
-        return res.status(200).json({ message: 'Mappa törölve.' });
+        return res.status(200).json({ message: 'Mappa tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba az archívum mappa törlésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült törölni a mappát.' });
+        console.error('Hiba az archĂ­vum mappa tĂ¶rlĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a mappĂˇt.' });
     }
 });
 
 app.get('/api/archive/:category/folders/:folder/files', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
     const categoryInfo = resolveArchiveCategory(req.params.category);
     if (!categoryInfo) {
-        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+        return res.status(404).json({ message: 'Ismeretlen archĂ­vum kategĂłria.' });
     }
 
     const folderPath = resolveArchiveFolderPath(categoryInfo, req.params.folder);
     if (!folderPath) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     try {
@@ -2764,35 +2793,35 @@ app.get('/api/archive/:category/folders/:folder/files', authenticateToken, ensur
         files.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
         return res.status(200).json({ files });
     } catch (err) {
-        console.error('Hiba az archívum fájlok lekérdezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült betölteni a fájlokat.' });
+        console.error('Hiba az archĂ­vum fĂˇjlok lekĂ©rdezĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt betĂ¶lteni a fĂˇjlokat.' });
     }
 });
 
 app.post('/api/archive/:category/folders/:folder/files', authenticateToken, ensureArchiveEditPermission, (req, res, next) => {
     const categoryInfo = resolveArchiveCategory(req.params.category);
     if (!categoryInfo) {
-        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+        return res.status(404).json({ message: 'Ismeretlen archĂ­vum kategĂłria.' });
     }
     if (categoryInfo.key === 'videok') {
-        return res.status(400).json({ message: 'Videók feltöltéséhez használd az archív videó feltöltő felületet.' });
+        return res.status(400).json({ message: 'VideĂłk feltĂ¶ltĂ©sĂ©hez hasznĂˇld az archĂ­v videĂł feltĂ¶ltĹ‘ felĂĽletet.' });
     }
     const uploader = uploadArchiveFiles.array('files', 20);
     uploader(req, res, (err) => {
         if (err) {
-            return res.status(400).json({ message: err.message || 'Feltöltési hiba.' });
+            return res.status(400).json({ message: err.message || 'FeltĂ¶ltĂ©si hiba.' });
         }
         return next();
     });
 }, (req, res) => {
     const categoryInfo = resolveArchiveCategory(req.params.category);
     if (!categoryInfo) {
-        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+        return res.status(404).json({ message: 'Ismeretlen archĂ­vum kategĂłria.' });
     }
 
     const folderName = normalizeArchiveFolderName(req.params.folder);
     if (!folderName) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     const files = Array.isArray(req.files) ? req.files : [];
@@ -2802,7 +2831,7 @@ app.post('/api/archive/:category/folders/:folder/files', authenticateToken, ensu
         size: file.size,
     }));
 
-    return res.status(201).json({ message: 'Fájlok feltöltve.', items });
+    return res.status(201).json({ message: 'FĂˇjlok feltĂ¶ltve.', items });
 });
 
 app.get('/api/archive/videos/tags', authenticateToken, ensureArchiveViewPermission, async (_req, res) => {
@@ -2813,8 +2842,8 @@ app.get('/api/archive/videos/tags', authenticateToken, ensureArchiveViewPermissi
         );
         return res.status(200).json(rows || []);
     } catch (err) {
-        console.error('Hiba az archív videó címkék lekérdezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült lekérdezni az archív videó címkéket.' });
+        console.error('Hiba az archĂ­v videĂł cĂ­mkĂ©k lekĂ©rdezĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni az archĂ­v videĂł cĂ­mkĂ©ket.' });
     }
 });
 
@@ -2824,7 +2853,7 @@ app.post('/api/archive/videos/tags', authenticateToken, isAdmin, async (req, res
     const normalizedColor = normalizeHexColor(color);
 
     if (!trimmedName) {
-        return res.status(400).json({ message: 'A címke neve nem lehet üres.' });
+        return res.status(400).json({ message: 'A cĂ­mke neve nem lehet ĂĽres.' });
     }
 
     try {
@@ -2833,37 +2862,37 @@ app.post('/api/archive/videos/tags', authenticateToken, isAdmin, async (req, res
             [trimmedName, normalizedColor]
         );
         if (!rows[0]) {
-            return res.status(409).json({ message: 'A címke már létezik.' });
+            return res.status(409).json({ message: 'A cĂ­mke mĂˇr lĂ©tezik.' });
         }
         return res.status(201).json(rows[0]);
     } catch (err) {
-        console.error('Hiba az archív videó címke létrehozásakor:', err);
-        return res.status(500).json({ message: 'Nem sikerült létrehozni a címkét.' });
+        console.error('Hiba az archĂ­v videĂł cĂ­mke lĂ©trehozĂˇsakor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt lĂ©trehozni a cĂ­mkĂ©t.' });
     }
 });
 
 app.delete('/api/archive/videos/tags/:tagId', authenticateToken, isAdmin, async (req, res) => {
     const tagId = Number.parseInt(req.params.tagId, 10);
     if (!tagId) {
-        return res.status(400).json({ message: 'Érvénytelen címke azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen cĂ­mke azonosĂ­tĂł.' });
     }
 
     try {
         const result = await db.query('DELETE FROM archive_tags WHERE id = $1', [tagId]);
         if (!result.rowCount) {
-            return res.status(404).json({ message: 'A címke nem található.' });
+            return res.status(404).json({ message: 'A cĂ­mke nem talĂˇlhatĂł.' });
         }
-        return res.status(200).json({ message: 'Címke törölve.' });
+        return res.status(200).json({ message: 'CĂ­mke tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba az archív videó címke törlésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült törölni a címkét.' });
+        console.error('Hiba az archĂ­v videĂł cĂ­mke tĂ¶rlĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a cĂ­mkĂ©t.' });
     }
 });
 
 app.get('/api/archive/videos/folders/:folder', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
     const folderName = normalizeArchiveFolderName(req.params.folder);
     if (!folderName) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     try {
@@ -2944,8 +2973,8 @@ app.get('/api/archive/videos/folders/:folder', authenticateToken, ensureArchiveV
             },
         });
     } catch (err) {
-        console.error('Hiba az archív videók lekérdezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült lekérdezni az archív videókat.' });
+        console.error('Hiba az archĂ­v videĂłk lekĂ©rdezĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni az archĂ­v videĂłkat.' });
     }
 });
 
@@ -3150,12 +3179,12 @@ app.post('/api/archive/videos/folders/:folder/upload', authenticateToken, ensure
 }, async (req, res) => {
     const folderName = normalizeArchiveFolderName(req.params.folder);
     if (!folderName) {
-        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen mappanĂ©v.' });
     }
 
     const files = Array.isArray(req.files) ? req.files : [];
     if (!files.length) {
-        return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
+        return res.status(400).json({ message: 'Nincs fĂˇjl feltĂ¶ltve.' });
     }
 
     const parseTagIds = (value) => {
@@ -3196,7 +3225,7 @@ app.post('/api/archive/videos/folders/:folder/upload', authenticateToken, ensure
             }
         }
     } catch (err) {
-        return res.status(400).json({ message: 'Érvénytelen metadata formátum.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen metadata formĂˇtum.' });
     }
 
     const fallbackTagIds = parseTagIds(req.body?.tags);
@@ -3211,8 +3240,8 @@ app.post('/api/archive/videos/folders/:folder/upload', authenticateToken, ensure
             const { rows } = await db.query('SELECT id FROM archive_tags WHERE id = ANY($1)', [Array.from(requestedTagIds)]);
             validTagIds = new Set((rows || []).map((row) => Number(row.id)));
         } catch (err) {
-            console.error('Hiba az archív videó címkék ellenőrzésekor:', err);
-            return res.status(500).json({ message: 'Nem sikerült ellenőrizni a címkéket.' });
+            console.error('Hiba az archĂ­v videĂł cĂ­mkĂ©k ellenĹ‘rzĂ©sekor:', err);
+            return res.status(500).json({ message: 'Nem sikerĂĽlt ellenĹ‘rizni a cĂ­mkĂ©ket.' });
         }
     }
 
@@ -3266,7 +3295,7 @@ app.post('/api/archive/videos/folders/:folder/upload', authenticateToken, ensure
 
         await client.query('COMMIT');
         res.status(201).json({
-            message: 'Archív videók sikeresen feltöltve.',
+            message: 'ArchĂ­v videĂłk sikeresen feltĂ¶ltve.',
             videoIds: createdVideos.map((video) => video.id),
         });
 
@@ -3275,8 +3304,8 @@ app.post('/api/archive/videos/folders/:folder/upload', authenticateToken, ensure
         });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Hiba az archív videó feltöltésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült menteni az archív videó adatait.' });
+        console.error('Hiba az archĂ­v videĂł feltĂ¶ltĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt menteni az archĂ­v videĂł adatait.' });
     } finally {
         client.release();
     }
@@ -3287,7 +3316,7 @@ app.post('/api/archive/videos/cancel', authenticateToken, ensureArchiveEditPermi
     const videoIds = Array.from(new Set(rawIds.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)));
 
     if (!videoIds.length) {
-        return res.status(400).json({ message: 'Nincs törlendő videó.' });
+        return res.status(400).json({ message: 'Nincs tĂ¶rlendĹ‘ videĂł.' });
     }
 
     try {
@@ -3297,12 +3326,12 @@ app.post('/api/archive/videos/cancel', authenticateToken, ensureArchiveEditPermi
         );
 
         if (!rows.length) {
-            return res.status(404).json({ message: 'A megadott videók nem találhatók.' });
+            return res.status(404).json({ message: 'A megadott videĂłk nem talĂˇlhatĂłk.' });
         }
 
         const deletable = rows.filter((video) => video.uploader_id === req.user.id || req.user.isAdmin);
         if (!deletable.length) {
-            return res.status(403).json({ message: 'Nincs jogosultság a videók törléséhez.' });
+            return res.status(403).json({ message: 'Nincs jogosultsĂˇg a videĂłk tĂ¶rlĂ©sĂ©hez.' });
         }
 
         const deletedVideoIds = [];
@@ -3312,19 +3341,19 @@ app.post('/api/archive/videos/cancel', authenticateToken, ensureArchiveEditPermi
         }
 
         return res.status(200).json({
-            message: 'Feltöltés megszakítva, archív videók törölve.',
+            message: 'FeltĂ¶ltĂ©s megszakĂ­tva, archĂ­v videĂłk tĂ¶rĂ¶lve.',
             deletedVideoIds,
         });
     } catch (err) {
-        console.error('Hiba az archív videó feltöltés megszakítása során:', err);
-        return res.status(500).json({ message: 'Nem sikerült törölni a videókat.' });
+        console.error('Hiba az archĂ­v videĂł feltĂ¶ltĂ©s megszakĂ­tĂˇsa sorĂˇn:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a videĂłkat.' });
     }
 });
 
 app.delete('/api/archive/videos/:id', authenticateToken, isAdmin, async (req, res) => {
     const videoId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(videoId)) {
-        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen videĂł azonosĂ­tĂł.' });
     }
 
     try {
@@ -3335,28 +3364,28 @@ app.delete('/api/archive/videos/:id', authenticateToken, isAdmin, async (req, re
         const video = rows[0];
 
         if (!video) {
-            return res.status(404).json({ message: 'A videó nem található.' });
+            return res.status(404).json({ message: 'A videĂł nem talĂˇlhatĂł.' });
         }
 
         await deleteArchiveVideoRecord(video);
-        return res.status(200).json({ message: 'Archív videó sikeresen törölve.' });
+        return res.status(200).json({ message: 'ArchĂ­v videĂł sikeresen tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba az archív videó törlésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült törölni a videót.' });
+        console.error('Hiba az archĂ­v videĂł tĂ¶rlĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a videĂłt.' });
     }
 });
 
 app.patch('/api/archive/videos/:id/title', authenticateToken, isAdmin, async (req, res) => {
     const videoId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(videoId)) {
-        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen videĂł azonosĂ­tĂł.' });
     }
 
     const rawTitle = (req.body?.title || req.body?.original_name || '').toString();
     const normalizedTitle = normalizeFilename(rawTitle).trim();
 
     if (!normalizedTitle) {
-        return res.status(400).json({ message: 'Az új cím megadása kötelező.' });
+        return res.status(400).json({ message: 'Az Ăşj cĂ­m megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     const truncatedTitle = normalizedTitle.slice(0, 255);
@@ -3367,16 +3396,16 @@ app.patch('/api/archive/videos/:id/title', authenticateToken, isAdmin, async (re
             [truncatedTitle, videoId]
         );
         if (!rows.length) {
-            return res.status(404).json({ message: 'A videó nem található.' });
+            return res.status(404).json({ message: 'A videĂł nem talĂˇlhatĂł.' });
         }
         return res.status(200).json({
-            message: 'Archív videó cím frissítve.',
+            message: 'ArchĂ­v videĂł cĂ­m frissĂ­tve.',
             id: rows[0].id,
             original_name: rows[0].original_name,
         });
     } catch (err) {
-        console.error('Hiba az archív videó cím frissítésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült frissíteni az archív videó címét.' });
+        console.error('Hiba az archĂ­v videĂł cĂ­m frissĂ­tĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni az archĂ­v videĂł cĂ­mĂ©t.' });
     }
 });
 
@@ -3533,8 +3562,8 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
             },
         });
     } catch (err) {
-        console.error('Hiba a videók lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a videókat.' });
+        console.error('Hiba a videĂłk lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a videĂłkat.' });
     }
 });
 
@@ -3542,11 +3571,11 @@ app.post('/api/discord/share-video', authenticateToken, async (req, res) => {
     const videoId = Number.parseInt(req.body?.videoId, 10);
 
     if (!Number.isFinite(videoId)) {
-        return res.status(400).json({ message: 'Érvénytelen videóazonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen videĂłazonosĂ­tĂł.' });
     }
 
     if (!BOT_API_URL) {
-        return res.status(500).json({ message: 'A Discord bot API URL nincs konfigurálva.' });
+        return res.status(500).json({ message: 'A Discord bot API URL nincs konfigurĂˇlva.' });
     }
 
     try {
@@ -3561,18 +3590,18 @@ app.post('/api/discord/share-video', authenticateToken, async (req, res) => {
         const video = rows[0];
 
         if (!video) {
-            return res.status(404).json({ message: 'A videó nem található.' });
+            return res.status(404).json({ message: 'A videĂł nem talĂˇlhatĂł.' });
         }
 
         if (!video.filename) {
-            return res.status(500).json({ message: 'A videó fájlneve hiányzik, nem lehet megosztani.' });
+            return res.status(500).json({ message: 'A videĂł fĂˇjlneve hiĂˇnyzik, nem lehet megosztani.' });
         }
 
         const publicUrl = `${BASE_URL}/uploads/${video.filename}`;
         const payload = {
             url: publicUrl,
             title: video.original_name || video.filename,
-            uploader: video.username || 'Ismeretlen feltöltő',
+            uploader: video.username || 'Ismeretlen feltĂ¶ltĹ‘',
         };
 
         const botResponse = await fetch(BOT_API_URL, {
@@ -3584,15 +3613,15 @@ app.post('/api/discord/share-video', authenticateToken, async (req, res) => {
         if (!botResponse.ok) {
             const errorText = await botResponse.text().catch(() => '');
             return res.status(botResponse.status).json({
-                message: 'Nem sikerült elküldeni a videót a Discord botnak.',
+                message: 'Nem sikerĂĽlt elkĂĽldeni a videĂłt a Discord botnak.',
                 details: errorText || undefined,
             });
         }
 
-        return res.status(200).json({ message: 'Videó sikeresen megosztva a Discordon.' });
+        return res.status(200).json({ message: 'VideĂł sikeresen megosztva a Discordon.' });
     } catch (err) {
-        console.error('Hiba a videó Discordra küldésekor:', err);
-        return res.status(502).json({ message: 'Nem sikerült kommunikálni a Discord bottal. Lehet, hogy offline.' });
+        console.error('Hiba a videĂł Discordra kĂĽldĂ©sekor:', err);
+        return res.status(502).json({ message: 'Nem sikerĂĽlt kommunikĂˇlni a Discord bottal. Lehet, hogy offline.' });
     }
 });
 
@@ -3651,7 +3680,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
                 }
                 clips.push({
                     id: thumb.id,
-                    original_name: 'Videó előnézet',
+                    original_name: 'VideĂł elĹ‘nĂ©zet',
                     filename: thumb.thumbnail_filename,
                     uploaded_at: thumb.uploaded_at,
                     content_created_at: thumb.content_created_at,
@@ -3665,7 +3694,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
                 if (program.image_filename) {
                     clips.push({
                         id: program.id,
-                        original_name: `${program.name || 'Program'} - Borítókép`,
+                        original_name: `${program.name || 'Program'} - BorĂ­tĂłkĂ©p`,
                         filename: program.image_filename,
                         uploaded_at: program.created_at,
                         content_created_at: program.created_at,
@@ -3677,7 +3706,7 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
                 if (program.file_filename) {
                     clips.push({
                         id: program.id,
-                        original_name: `${program.name || 'Program'} - Fájl`,
+                        original_name: `${program.name || 'Program'} - FĂˇjl`,
                         filename: program.file_filename,
                         uploaded_at: program.created_at,
                         content_created_at: program.created_at,
@@ -3715,8 +3744,8 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
 
         return buildResponse(clips);
     } catch (err) {
-        console.error('Hiba az admin klip lista lekérdezésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült lekérdezni a klipeket.' });
+        console.error('Hiba az admin klip lista lekĂ©rdezĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a klipeket.' });
     }
 });
 
@@ -3736,8 +3765,8 @@ app.get('/api/admin/processing-status', authenticateToken, isAdmin, async (_req,
             pending: pendingRows,
         });
     } catch (err) {
-        console.error('Hiba a feldolgozási állapot lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a feldolgozási állapotot.' });
+        console.error('Hiba a feldolgozĂˇsi Ăˇllapot lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a feldolgozĂˇsi Ăˇllapotot.' });
     }
 });
 
@@ -3745,8 +3774,8 @@ app.post('/api/admin/radnai-test', authenticateToken, isAdmin, async (req, res) 
     const targetUrl = resolveRadnaiAlertUrl();
     if (!targetUrl) {
         return res.status(500).json({
-            message: 'A Radnai riasztasi vegpont nincs konfigur�lva.',
-            details: 'Allitsd be a BOT_API_URL vagy BOT_RADNAI_ALERT_URL kornyezeti valtozot.',
+            message: 'A Radnai riaszt\u00E1si v\u00E9gpont nincs konfigur\u00E1lva.',
+            details: '\u00C1ll\u00EDtsd be a BOT_API_URL vagy BOT_RADNAI_ALERT_URL k\u00F6rnyezeti v\u00E1ltoz\u00F3t.',
         });
     }
 
@@ -3819,7 +3848,7 @@ app.post('/api/admin/radnai-monitor', authenticateToken, isAdmin, async (req, re
     const requestedEnabled = req.body?.enabled;
     if (typeof requestedEnabled !== 'boolean') {
         return res.status(400).json({
-            message: 'Az enabled mező kötelező és boolean típusú kell legyen.',
+            message: 'Az enabled mezĹ‘ kĂ¶telezĹ‘ Ă©s boolean tĂ­pusĂş kell legyen.',
         });
     }
 
@@ -3856,8 +3885,8 @@ app.get('/api/videos/get-uploaded-titles', authenticateToken, ensureClipViewPerm
 
         res.status(200).json(titles);
     } catch (err) {
-        console.error('Hiba a videók neveinek lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a videók neveit.' });
+        console.error('Hiba a videĂłk neveinek lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a videĂłk neveit.' });
     }
 });
 
@@ -3883,8 +3912,8 @@ app.get(PUBLIC_VIDEO_HASHES_ENDPOINT, async (_req, res) => {
         const hashes = (rows || []).map((row) => row.file_hash).filter(Boolean);
         res.status(200).json(hashes);
     } catch (err) {
-        console.error('Hiba a videók hash értékeinek lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a videók hash értékeit.' });
+        console.error('Hiba a videĂłk hash Ă©rtĂ©keinek lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a videĂłk hash Ă©rtĂ©keit.' });
     }
 });
 
@@ -3904,15 +3933,15 @@ app.get('/api/admin/generate-missing-thumbnails', async (_req, res) => {
                 await db.query('UPDATE videos SET thumbnail_filename = $1 WHERE id = $2', [thumbnailFilename, video.id]);
                 results.push({ videoId: video.id, thumbnail: thumbnailFilename, status: 'generated' });
             } catch (err) {
-                console.error(`Hiba az előnézeti kép generálásakor (video ID: ${video.id}):`, err);
+                console.error(`Hiba az elĹ‘nĂ©zeti kĂ©p generĂˇlĂˇsakor (video ID: ${video.id}):`, err);
                 results.push({ videoId: video.id, status: 'error', message: err.message });
             }
         }
 
         res.status(200).json({ processed: results.length, results });
     } catch (err) {
-        console.error('Hiba a hiányzó előnézeti képek generálásakor:', err);
-        res.status(500).json({ message: 'Nem sikerült előállítani a hiányzó előnézeti képeket.' });
+        console.error('Hiba a hiĂˇnyzĂł elĹ‘nĂ©zeti kĂ©pek generĂˇlĂˇsakor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt elĹ‘ĂˇllĂ­tani a hiĂˇnyzĂł elĹ‘nĂ©zeti kĂ©peket.' });
     }
 });
 
@@ -3947,15 +3976,15 @@ app.post('/api/admin/transcode-missing', authenticateToken, isAdmin, async (_req
 
         await processVideoQueue();
 
-        res.status(200).json({ message: 'A hiányzó vagy hibás 720p fájlok újra ütemezve.', queued: queuedVideos });
+        res.status(200).json({ message: 'A hiĂˇnyzĂł vagy hibĂˇs 720p fĂˇjlok Ăşjra ĂĽtemezve.', queued: queuedVideos });
     } catch (err) {
-        console.error('Hiba a hiányzó 720p videók újraütemezése során:', err);
-        res.status(500).json({ message: 'Nem sikerült elvégezni a 720p feldolgozás ütemezését.' });
+        console.error('Hiba a hiĂˇnyzĂł 720p videĂłk ĂşjraĂĽtemezĂ©se sorĂˇn:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt elvĂ©gezni a 720p feldolgozĂˇs ĂĽtemezĂ©sĂ©t.' });
     }
 });
 
 app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, res) => {
-    res.status(200).json({ message: 'A javítás elindult a háttérben.' });
+    res.status(200).json({ message: 'A javĂ­tĂˇs elindult a hĂˇttĂ©rben.' });
 
     (async () => {
         const MIN_VALID_SIZE_BYTES = 1000;
@@ -3973,7 +4002,7 @@ app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, re
                 }
             } catch (err) {
                 if (err.code !== 'ENOENT') {
-                    console.error(`Nem sikerült ellenőrizni a fájlt (${filePath}):`, err);
+                    console.error(`Nem sikerĂĽlt ellenĹ‘rizni a fĂˇjlt (${filePath}):`, err);
                 }
             }
 
@@ -3994,16 +4023,16 @@ app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, re
                         originalStats = await fs.promises.stat(originalPath);
                     } catch (err) {
                         if (err.code === 'ENOENT') {
-                            console.log(`Hiányzó eredeti fájl (video_id=${video.id}): ${originalPath}`);
+                            console.log(`HiĂˇnyzĂł eredeti fĂˇjl (video_id=${video.id}): ${originalPath}`);
                         } else {
-                            console.error(`Hiba az eredeti fájl ellenőrzésekor (video_id=${video.id}):`, err);
+                            console.error(`Hiba az eredeti fĂˇjl ellenĹ‘rzĂ©sekor (video_id=${video.id}):`, err);
                         }
 
                         continue;
                     }
 
                     if (!originalStats.isFile() || originalStats.size <= MIN_VALID_SIZE_BYTES) {
-                        console.log(`Érvénytelen eredeti fájl (video_id=${video.id}): ${originalPath}`);
+                        console.log(`Ă‰rvĂ©nytelen eredeti fĂˇjl (video_id=${video.id}): ${originalPath}`);
                         continue;
                     }
 
@@ -4057,7 +4086,7 @@ app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, re
                         updatedVideoIds.push(video.id);
                     }
                 } catch (err) {
-                    console.error(`Hiba a(z) ${video.id} videó javítása során:`, err);
+                    console.error(`Hiba a(z) ${video.id} videĂł javĂ­tĂˇsa sorĂˇn:`, err);
                 }
             }
 
@@ -4065,7 +4094,7 @@ app.post('/api/admin/repair-videos', authenticateToken, isAdmin, async (_req, re
                 await processVideoQueue();
             }
         } catch (err) {
-            console.error('Hiba a videók háttérben történő javítása során:', err);
+            console.error('Hiba a videĂłk hĂˇttĂ©rben tĂ¶rtĂ©nĹ‘ javĂ­tĂˇsa sorĂˇn:', err);
         }
     })();
 });
@@ -4112,10 +4141,10 @@ async function deleteZeroByteMp4Files(rootDir) {
 app.post('/api/admin/cleanup-bad-files', authenticateToken, isAdmin, async (_req, res) => {
     try {
         const deletedFiles = await deleteZeroByteMp4Files(uploadsRootDirectory);
-        res.status(200).json({ message: '0 byte-os fájlok törölve.', deleted: deletedFiles.length, files: deletedFiles });
+        res.status(200).json({ message: '0 byte-os fĂˇjlok tĂ¶rĂ¶lve.', deleted: deletedFiles.length, files: deletedFiles });
     } catch (err) {
-        console.error('Hiba a hibás fájlok takarítása során:', err);
-        res.status(500).json({ message: 'Nem sikerült eltávolítani a hibás fájlokat.' });
+        console.error('Hiba a hibĂˇs fĂˇjlok takarĂ­tĂˇsa sorĂˇn:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt eltĂˇvolĂ­tani a hibĂˇs fĂˇjlokat.' });
     }
 });
 
@@ -4161,24 +4190,24 @@ async function optimizeVideoForFaststart(filePath) {
                     await fs.promises.rename(tempOutputPath, filePath);
                     resolve(true);
                 } catch (renameErr) {
-                    console.error(`Hiba az optimalizált fájl átnevezésekor (${filePath}):`, renameErr);
+                    console.error(`Hiba az optimalizĂˇlt fĂˇjl ĂˇtnevezĂ©sekor (${filePath}):`, renameErr);
                     try {
                         await fs.promises.rm(tempOutputPath, { force: true });
                     } catch (cleanupErr) {
                         if (cleanupErr.code !== 'ENOENT') {
-                            console.error('Hiba az ideiglenes fájl törlésekor:', cleanupErr);
+                            console.error('Hiba az ideiglenes fĂˇjl tĂ¶rlĂ©sekor:', cleanupErr);
                         }
                     }
                     resolve(false);
                 }
             })
             .on('error', async (err) => {
-                console.error(`Hiba a videó optimalizálása során (${filePath}):`, err);
+                console.error(`Hiba a videĂł optimalizĂˇlĂˇsa sorĂˇn (${filePath}):`, err);
                 try {
                     await fs.promises.rm(tempOutputPath, { force: true });
                 } catch (cleanupErr) {
                     if (cleanupErr.code !== 'ENOENT') {
-                        console.error('Hiba az ideiglenes fájl törlésekor:', cleanupErr);
+                        console.error('Hiba az ideiglenes fĂˇjl tĂ¶rlĂ©sekor:', cleanupErr);
                     }
                 }
                 resolve(false);
@@ -4189,7 +4218,7 @@ async function optimizeVideoForFaststart(filePath) {
 
 app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, (_req, res) => {
     res.json({
-        message: 'Az optimalizálás elindult a háttérben. Figyeld a szerver konzolt a részletekért.',
+        message: 'Az optimalizĂˇlĂˇs elindult a hĂˇttĂ©rben. Figyeld a szerver konzolt a rĂ©szletekĂ©rt.',
     });
 
     (async () => {
@@ -4202,7 +4231,7 @@ app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, (_req, re
                 allMp4Files.push(...mp4Files);
             }
 
-            console.log(`Összesen ${allMp4Files.length} fájlt találtam.`);
+            console.log(`Ă–sszesen ${allMp4Files.length} fĂˇjlt talĂˇltam.`);
 
             let optimizedCount = 0;
 
@@ -4215,14 +4244,14 @@ app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, (_req, re
                         console.log(`[OK] ${path.basename(filePath)}`);
                     }
                 } catch (err) {
-                    console.error(`Hiba a(z) ${filePath} videó optimalizálása során:`, err);
+                    console.error(`Hiba a(z) ${filePath} videĂł optimalizĂˇlĂˇsa sorĂˇn:`, err);
                 }
             }
 
-            console.log('Optimalizálás befejezve.');
-            console.log(`Sikeresen optimalizált fájlok száma: ${optimizedCount}`);
+            console.log('OptimalizĂˇlĂˇs befejezve.');
+            console.log(`Sikeresen optimalizĂˇlt fĂˇjlok szĂˇma: ${optimizedCount}`);
         } catch (err) {
-            console.error('Hiba a videók optimalizálása során:', err);
+            console.error('Hiba a videĂłk optimalizĂˇlĂˇsa sorĂˇn:', err);
         }
     })();
 });
@@ -4308,8 +4337,8 @@ app.post('/api/admin/fix-720p-filenames', authenticateToken, isAdmin, async (_re
 
         res.status(200).json({ renamedCount: renamedFiles.length, renamedFiles });
     } catch (err) {
-        console.error('Hiba a 720p fájlnevek javításakor:', err);
-        res.status(500).json({ message: 'Nem sikerült kijavítani a 720p fájlneveket.' });
+        console.error('Hiba a 720p fĂˇjlnevek javĂ­tĂˇsakor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt kijavĂ­tani a 720p fĂˇjlneveket.' });
     }
 });
 
@@ -4414,8 +4443,8 @@ app.post('/api/admin/rescue-720p-files', authenticateToken, isAdmin, async (_req
 
         res.status(200).json({ processed: rows.length, results });
     } catch (err) {
-        console.error('Hiba az árva 720p fájlok áthelyezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült áthelyezni az árva 720p fájlokat.' });
+        console.error('Hiba az Ăˇrva 720p fĂˇjlok ĂˇthelyezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt Ăˇthelyezni az Ăˇrva 720p fĂˇjlokat.' });
     }
 });
 
@@ -4451,7 +4480,7 @@ app.post('/api/admin/remove-phantom-720p', authenticateToken, isAdmin, async (_r
                 await db.query('UPDATE videos SET has_720p = 0 WHERE id = $1', [video.id]);
 
                 console.log(
-                    `Fantom 720p jelölés javítva | videoId=${video.id} | path=${path.relative(uploadsRootDirectory, outputPath)}`
+                    `Fantom 720p jelĂ¶lĂ©s javĂ­tva | videoId=${video.id} | path=${path.relative(uploadsRootDirectory, outputPath)}`
                 );
 
                 corrected.push({
@@ -4464,8 +4493,8 @@ app.post('/api/admin/remove-phantom-720p', authenticateToken, isAdmin, async (_r
 
         res.status(200).json({ inspected: videos.length, correctedCount: corrected.length, corrected });
     } catch (err) {
-        console.error('Hiba a fantom 720p jelölések eltávolításakor:', err);
-        res.status(500).json({ message: 'Nem sikerült eltávolítani a fantom 720p jelöléseket.' });
+        console.error('Hiba a fantom 720p jelĂ¶lĂ©sek eltĂˇvolĂ­tĂˇsakor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt eltĂˇvolĂ­tani a fantom 720p jelĂ¶lĂ©seket.' });
     }
 });
 
@@ -4533,7 +4562,7 @@ app.post('/api/admin/reorganize-files', authenticateToken, isAdmin, async (_req,
 
                 results.push({ videoId: video.id, status: 'moved', folder: folderName });
             } catch (err) {
-                console.error(`Hiba a(z) ${video.id} videó átszervezésekor:`, err);
+                console.error(`Hiba a(z) ${video.id} videĂł ĂˇtszervezĂ©sekor:`, err);
                 results.push({ videoId: video.id, status: 'failed', error: err.message });
             }
         }
@@ -4542,8 +4571,8 @@ app.post('/api/admin/reorganize-files', authenticateToken, isAdmin, async (_req,
 
         res.status(200).json({ processed: results.length, results });
     } catch (err) {
-        console.error('Hiba a fájlok átszervezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült átszervezni a fájlokat.' });
+        console.error('Hiba a fĂˇjlok ĂˇtszervezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt Ăˇtszervezni a fĂˇjlokat.' });
     }
 });
 
@@ -4554,13 +4583,12 @@ function normalizeFilename(originalName) {
 
     const trimmedName = originalName.trim();
 
-    // A böngészőkből érkező fájlnevek gyakran Latin-1 kódolással érkeznek,
-    // ezért a magyar ékezetes karakterek hibásan jelenhetnek meg (pl. "Ã¡" az "á" helyett).
-    // Ha ilyen mintát érzékelünk, újrakódoljuk UTF-8-ra.
-    const looksLikeMojibake = /[Ã�Â]/.test(trimmedName);
+    // Some browsers pass UTF-8 filenames through a Latin-1-like path,
+    // which can produce mojibake patterns (for example, broken accented characters).
+    const looksLikeMojibake = /[\u00C3\u00C2\u00C4\u0102\uFFFD]/.test(trimmedName);
     if (looksLikeMojibake) {
         const decoded = Buffer.from(trimmedName, 'latin1').toString('utf8').trim();
-        if (decoded && !decoded.includes('�')) {
+        if (decoded && !decoded.includes('\uFFFD')) {
             return decoded;
         }
     }
@@ -4598,9 +4626,9 @@ function sanitizeFolderName(name) {
 
 const BLACKLISTED_FOLDER_NAMES = new Set([
     'balazs',
-    'balázs',
+    'balĂˇzs',
     'david',
-    'dávid'
+    'dĂˇvid'
 ].map((name) => sanitizeFolderName(name)));
 
 function resolveFolderNameFromTagNames(tagNames = []) {
@@ -4680,7 +4708,7 @@ async function processVideoQueue() {
             try {
                 await optimizeVideoForFaststart(videoPath);
             } catch (optErr) {
-                console.error(`Hiba a(z) ${currentVideo.id} videó faststart optimalizálása során:`, optErr);
+                console.error(`Hiba a(z) ${currentVideo.id} videĂł faststart optimalizĂˇlĂˇsa sorĂˇn:`, optErr);
             }
 
             const videoHeight = await getVideoHeight(videoPath);
@@ -4701,7 +4729,7 @@ async function processVideoQueue() {
                     }
                 } catch (statErr) {
                     if (statErr.code !== 'ENOENT') {
-                        console.error(`Nem sikerült ellenőrizni a ${height}p verziót (${currentVideo.id}):`, statErr);
+                        console.error(`Nem sikerĂĽlt ellenĹ‘rizni a ${height}p verziĂłt (${currentVideo.id}):`, statErr);
                     }
                 }
 
@@ -4724,7 +4752,7 @@ async function processVideoQueue() {
                         availability[height] = 1;
                     }
                 } catch (transcodeErr) {
-                    console.error(`Hiba a ${height}p verzió készítésekor (${currentVideo.id}):`, transcodeErr);
+                    console.error(`Hiba a ${height}p verziĂł kĂ©szĂ­tĂ©sekor (${currentVideo.id}):`, transcodeErr);
                 }
             }
 
@@ -4735,11 +4763,11 @@ async function processVideoQueue() {
 
             await db.query("UPDATE videos SET processing_status = 'done' WHERE id = $1", [currentVideo.id]);
         } catch (processErr) {
-            console.error(`Hiba a(z) ${currentVideo?.id} videó feldolgozása során:`, processErr);
+            console.error(`Hiba a(z) ${currentVideo?.id} videĂł feldolgozĂˇsa sorĂˇn:`, processErr);
             await db.query("UPDATE videos SET processing_status = 'error' WHERE id = $1", [currentVideo.id]);
         }
     } catch (err) {
-        console.error('Hiba a feldolgozási sor kezelése során:', err);
+        console.error('Hiba a feldolgozĂˇsi sor kezelĂ©se sorĂˇn:', err);
     } finally {
         isProcessing = false;
     }
@@ -4794,7 +4822,7 @@ async function processArchiveVideoQueue() {
             try {
                 await optimizeVideoForFaststart(videoPath);
             } catch (optErr) {
-                console.error(`Hiba a(z) ${currentVideo.id} archív videó faststart optimalizálása során:`, optErr);
+                console.error(`Hiba a(z) ${currentVideo.id} archĂ­v videĂł faststart optimalizĂˇlĂˇsa sorĂˇn:`, optErr);
             }
 
             const videoHeight = await getVideoHeight(videoPath);
@@ -4810,7 +4838,7 @@ async function processArchiveVideoQueue() {
                 }
             } catch (statErr) {
                 if (statErr.code !== 'ENOENT') {
-                    console.error(`Nem sikerült ellenőrizni a 720p archív videót (${currentVideo.id}):`, statErr);
+                    console.error(`Nem sikerĂĽlt ellenĹ‘rizni a 720p archĂ­v videĂłt (${currentVideo.id}):`, statErr);
                 }
             }
 
@@ -4827,7 +4855,7 @@ async function processArchiveVideoQueue() {
                         has720p = 1;
                     }
                 } catch (transcodeErr) {
-                    console.error(`Hiba a 720p archív verzió készítésekor (${currentVideo.id}):`, transcodeErr);
+                    console.error(`Hiba a 720p archĂ­v verziĂł kĂ©szĂ­tĂ©sekor (${currentVideo.id}):`, transcodeErr);
                     processingError = normalizeProcessingErrorMessage(
                         transcodeErr,
                         'Nem sikerult letrehozni a 720p verziot.'
@@ -4841,7 +4869,7 @@ async function processArchiveVideoQueue() {
                 [has720p, originalQuality, nextStatus, processingError, currentVideo.id]
             );
         } catch (processErr) {
-            console.error(`Hiba a(z) ${currentVideo?.id} archív videó feldolgozása során:`, processErr);
+            console.error(`Hiba a(z) ${currentVideo?.id} archĂ­v videĂł feldolgozĂˇsa sorĂˇn:`, processErr);
             const processingError = normalizeProcessingErrorMessage(
                 processErr,
                 'Nem sikerult feldolgozni az archiv videot.'
@@ -4852,7 +4880,7 @@ async function processArchiveVideoQueue() {
             );
         }
     } catch (err) {
-        console.error('Hiba az archív videó feldolgozási sor kezelése során:', err);
+        console.error('Hiba az archĂ­v videĂł feldolgozĂˇsi sor kezelĂ©se sorĂˇn:', err);
     } finally {
         isArchiveProcessing = false;
     }
@@ -4874,7 +4902,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
     });
 }, async (req, res) => {
     if (!req.files || !req.files.length) {
-        return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
+        return res.status(400).json({ message: 'Nincs fĂˇjl feltĂ¶ltve.' });
     }
 
     const uploaderId = req.user.id;
@@ -4942,9 +4970,9 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
             };
         }));
     } catch (err) {
-        console.error('Hiba a feltöltött fájlok feldolgozásakor:', err);
+        console.error('Hiba a feltĂ¶ltĂ¶tt fĂˇjlok feldolgozĂˇsakor:', err);
         const statusCode = err && err.statusCode === 400 ? 400 : 500;
-        const message = err && err.message ? err.message : 'Nem sikerült feldolgozni a feltöltött fájlokat.';
+        const message = err && err.message ? err.message : 'Nem sikerĂĽlt feldolgozni a feltĂ¶ltĂ¶tt fĂˇjlokat.';
         return res.status(statusCode).json({ message });
     }
 
@@ -4955,7 +4983,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         : null;
 
     if (req.uploadSettings && req.uploadSettings.maxVideos > 0 && projectedUploadCount > req.uploadSettings.maxVideos) {
-        return res.status(403).json({ message: 'Elérted a maximális feltöltési limitet.' });
+        return res.status(403).json({ message: 'ElĂ©rted a maximĂˇlis feltĂ¶ltĂ©si limitet.' });
     }
 
     const tagIdSet = new Set();
@@ -4971,7 +4999,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
                 tagNamesById.set(id, name);
             });
         } catch (err) {
-            console.error('Hiba a címkék beolvasása során:', err);
+            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
         }
     }
 
@@ -5003,7 +5031,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
                 if (err.code === '23505') {
                     await safeUnlink(targetFilePath);
                     await client.query('ROLLBACK');
-                    return res.status(409).json({ message: 'Ezt a videót már feltöltötték.' });
+                    return res.status(409).json({ message: 'Ezt a videĂłt mĂˇr feltĂ¶ltĂ¶ttĂ©k.' });
                 }
                 throw err;
             }
@@ -5040,7 +5068,7 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         await client.query('COMMIT');
 
         res.status(201).json({
-            message: 'Videók sikeresen feltöltve.',
+            message: 'VideĂłk sikeresen feltĂ¶ltve.',
             videoIds: createdVideos.map((video) => video.id),
         });
         setImmediate(() => {
@@ -5048,8 +5076,8 @@ app.post('/upload', authenticateToken, ensureClipViewPermission, loadUserUploadS
         });
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Hiba a videó feltöltésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült menteni a videó adatait.' });
+        console.error('Hiba a videĂł feltĂ¶ltĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt menteni a videĂł adatait.' });
     } finally {
         client.release();
     }
@@ -5060,7 +5088,7 @@ app.post('/api/videos/cancel', authenticateToken, async (req, res) => {
     const videoIds = Array.from(new Set(rawIds.map((id) => Number.parseInt(id, 10)).filter(Number.isFinite)));
 
     if (!videoIds.length) {
-        return res.status(400).json({ message: 'Nincs törlendő videó.' });
+        return res.status(400).json({ message: 'Nincs tĂ¶rlendĹ‘ videĂł.' });
     }
 
     try {
@@ -5070,12 +5098,12 @@ app.post('/api/videos/cancel', authenticateToken, async (req, res) => {
         );
 
         if (!rows.length) {
-            return res.status(404).json({ message: 'A megadott videók nem találhatók.' });
+            return res.status(404).json({ message: 'A megadott videĂłk nem talĂˇlhatĂłk.' });
         }
 
         const deletable = rows.filter((video) => video.uploader_id === req.user.id || req.user.isAdmin);
         if (!deletable.length) {
-            return res.status(403).json({ message: 'Nincs jogosultság a videók törléséhez.' });
+            return res.status(403).json({ message: 'Nincs jogosultsĂˇg a videĂłk tĂ¶rlĂ©sĂ©hez.' });
         }
 
         const deletedVideoIds = [];
@@ -5085,19 +5113,19 @@ app.post('/api/videos/cancel', authenticateToken, async (req, res) => {
         }
 
         return res.status(200).json({
-            message: 'Feltöltés megszakítva, videók törölve.',
+            message: 'FeltĂ¶ltĂ©s megszakĂ­tva, videĂłk tĂ¶rĂ¶lve.',
             deletedVideoIds,
         });
     } catch (err) {
-        console.error('Hiba a feltöltés megszakítása során:', err);
-        return res.status(500).json({ message: 'Nem sikerült törölni a videókat.' });
+        console.error('Hiba a feltĂ¶ltĂ©s megszakĂ­tĂˇsa sorĂˇn:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a videĂłkat.' });
     }
 });
 
 app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
     const videoId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(videoId)) {
-        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen videĂł azonosĂ­tĂł.' });
     }
 
     try {
@@ -5108,28 +5136,28 @@ app.delete('/api/videos/:id', authenticateToken, isAdmin, async (req, res) => {
         const video = rows[0];
 
         if (!video) {
-            return res.status(404).json({ message: 'A videó nem található.' });
+            return res.status(404).json({ message: 'A videĂł nem talĂˇlhatĂł.' });
         }
 
         await deleteVideoRecord(video);
-        res.status(200).json({ message: 'Videó sikeresen törölve.' });
+        res.status(200).json({ message: 'VideĂł sikeresen tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba a videó törlésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült törölni a videót.' });
+        console.error('Hiba a videĂł tĂ¶rlĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a videĂłt.' });
     }
 });
 
 app.patch('/api/videos/:id/title', authenticateToken, isAdmin, async (req, res) => {
     const videoId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(videoId)) {
-        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen videĂł azonosĂ­tĂł.' });
     }
 
     const rawTitle = (req.body?.title || req.body?.original_name || '').toString();
     const normalizedTitle = normalizeFilename(rawTitle).trim();
 
     if (!normalizedTitle) {
-        return res.status(400).json({ message: 'Az új cím megadása kötelező.' });
+        return res.status(400).json({ message: 'Az Ăşj cĂ­m megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     const truncatedTitle = normalizedTitle.slice(0, 255);
@@ -5141,17 +5169,17 @@ app.patch('/api/videos/:id/title', authenticateToken, isAdmin, async (req, res) 
         );
 
         if (!rows.length) {
-            return res.status(404).json({ message: 'A videó nem található.' });
+            return res.status(404).json({ message: 'A videĂł nem talĂˇlhatĂł.' });
         }
 
         return res.status(200).json({
-            message: 'A klip címe frissült.',
+            message: 'A klip cĂ­me frissĂĽlt.',
             id: rows[0].id,
             original_name: rows[0].original_name,
         });
     } catch (err) {
-        console.error('Hiba a klip címének frissítésekor:', err);
-        return res.status(500).json({ message: 'Nem sikerült frissíteni a klip címét.' });
+        console.error('Hiba a klip cĂ­mĂ©nek frissĂ­tĂ©sekor:', err);
+        return res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a klip cĂ­mĂ©t.' });
     }
 });
 
@@ -5160,8 +5188,8 @@ app.get('/api/programs', async (_req, res) => {
         const { rows } = await db.query('SELECT id, name, description, image_filename, file_filename, original_filename, download_count, created_at FROM programs ORDER BY created_at DESC');
         res.status(200).json(rows || []);
     } catch (err) {
-        console.error('Hiba a programok lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a programokat.' });
+        console.error('Hiba a programok lekĂ©rdezĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt lekĂ©rdezni a programokat.' });
     }
 });
 
@@ -5187,7 +5215,7 @@ app.post('/api/programs', authenticateToken, isAdmin, (req, res, next) => {
         if (programFile) {
             await safeUnlink(path.join(programFilesDirectory, programFile.filename));
         }
-        return res.status(400).json({ message: 'A név, leírás, kép és fájl megadása kötelező.' });
+        return res.status(400).json({ message: 'A nĂ©v, leĂ­rĂˇs, kĂ©p Ă©s fĂˇjl megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     try {
@@ -5196,12 +5224,12 @@ app.post('/api/programs', authenticateToken, isAdmin, (req, res, next) => {
             [name, description, imageFile.filename, programFile.filename, normalizeFilename(programFile.originalname)]
         );
 
-        res.status(201).json({ message: 'Program sikeresen feltöltve.' });
+        res.status(201).json({ message: 'Program sikeresen feltĂ¶ltve.' });
     } catch (err) {
-        console.error('Hiba a program mentésekor:', err);
+        console.error('Hiba a program mentĂ©sekor:', err);
         await safeUnlink(path.join(programImagesDirectory, imageFile.filename));
         await safeUnlink(path.join(programFilesDirectory, programFile.filename));
-        res.status(500).json({ message: 'Nem sikerült menteni a programot.' });
+        res.status(500).json({ message: 'Nem sikerĂĽlt menteni a programot.' });
     }
 });
 
@@ -5231,14 +5259,14 @@ app.put('/api/programs/:id', authenticateToken, isAdmin, (req, res, next) => {
     const programId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(programId)) {
         await cleanupUploads();
-        return res.status(400).json({ message: 'Érvénytelen program azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen program azonosĂ­tĂł.' });
     }
 
     const { name, description } = req.body || {};
 
     if (!name || !description) {
         await cleanupUploads();
-        return res.status(400).json({ message: 'A név és a leírás megadása kötelező.' });
+        return res.status(400).json({ message: 'A nĂ©v Ă©s a leĂ­rĂˇs megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     try {
@@ -5247,7 +5275,7 @@ app.put('/api/programs/:id', authenticateToken, isAdmin, (req, res, next) => {
 
         if (!existingProgram) {
             await cleanupUploads();
-            return res.status(404).json({ message: 'A program nem található.' });
+            return res.status(404).json({ message: 'A program nem talĂˇlhatĂł.' });
         }
 
         const newImageFilename = imageFile ? imageFile.filename : existingProgram.image_filename;
@@ -5267,18 +5295,18 @@ app.put('/api/programs/:id', authenticateToken, isAdmin, (req, res, next) => {
             await safeUnlink(path.join(programFilesDirectory, existingProgram.file_filename));
         }
 
-        res.status(200).json({ message: 'Program sikeresen frissítve.' });
+        res.status(200).json({ message: 'Program sikeresen frissĂ­tve.' });
     } catch (err) {
-        console.error('Hiba a program frissítésekor:', err);
+        console.error('Hiba a program frissĂ­tĂ©sekor:', err);
         await cleanupUploads();
-        res.status(500).json({ message: 'Nem sikerült frissíteni a programot.' });
+        res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a programot.' });
     }
 });
 
 app.delete('/api/programs/:id', authenticateToken, isAdmin, async (req, res) => {
     const programId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(programId)) {
-        return res.status(400).json({ message: 'Érvénytelen program azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen program azonosĂ­tĂł.' });
     }
 
     try {
@@ -5286,7 +5314,7 @@ app.delete('/api/programs/:id', authenticateToken, isAdmin, async (req, res) => 
         const program = rows[0];
 
         if (!program) {
-            return res.status(404).json({ message: 'A program nem található.' });
+            return res.status(404).json({ message: 'A program nem talĂˇlhatĂł.' });
         }
 
         if (program.image_filename) {
@@ -5298,17 +5326,17 @@ app.delete('/api/programs/:id', authenticateToken, isAdmin, async (req, res) => 
         }
 
         await db.query('DELETE FROM programs WHERE id = $1', [programId]);
-        res.status(200).json({ message: 'Program sikeresen törölve.' });
+        res.status(200).json({ message: 'Program sikeresen tĂ¶rĂ¶lve.' });
     } catch (err) {
-        console.error('Hiba a program törlésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült törölni a programot.' });
+        console.error('Hiba a program tĂ¶rlĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt tĂ¶rĂ¶lni a programot.' });
     }
 });
 
 app.get('/api/programs/:id/download', async (req, res) => {
     const programId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(programId)) {
-        return res.status(400).json({ message: 'Érvénytelen program azonosító.' });
+        return res.status(400).json({ message: 'Ă‰rvĂ©nytelen program azonosĂ­tĂł.' });
     }
 
     try {
@@ -5316,18 +5344,18 @@ app.get('/api/programs/:id/download', async (req, res) => {
         const program = rows[0];
 
         if (!program) {
-            return res.status(404).json({ message: 'A program nem található.' });
+            return res.status(404).json({ message: 'A program nem talĂˇlhatĂł.' });
         }
 
         const normalizedPath = path.normalize(path.join(programFilesDirectory, program.file_filename));
         if (!normalizedPath.startsWith(programFilesDirectory)) {
-            return res.status(400).json({ message: 'Érvénytelen fájl elérési út.' });
+            return res.status(400).json({ message: 'Ă‰rvĂ©nytelen fĂˇjl elĂ©rĂ©si Ăşt.' });
         }
 
         try {
             await fs.promises.stat(normalizedPath);
         } catch (statErr) {
-            return res.status(404).json({ message: 'A program fájlja nem található.' });
+            return res.status(404).json({ message: 'A program fĂˇjlja nem talĂˇlhatĂł.' });
         }
 
         const ipAddress = req.ip;
@@ -5339,7 +5367,7 @@ app.get('/api/programs/:id/download', async (req, res) => {
         const hourDownloads = Number(hourRows[0]?.count || 0);
 
         if (hourDownloads >= 3) {
-            return res.status(429).json({ message: 'Túllépted a letöltési keretet (Max 3/óra, 10/nap).' });
+            return res.status(429).json({ message: 'TĂşllĂ©pted a letĂ¶ltĂ©si keretet (Max 3/Ăłra, 10/nap).' });
         }
 
         const { rows: dayRows } = await db.query(
@@ -5349,7 +5377,7 @@ app.get('/api/programs/:id/download', async (req, res) => {
         const dayDownloads = Number(dayRows[0]?.count || 0);
 
         if (dayDownloads >= 10) {
-            return res.status(429).json({ message: 'Túllépted a letöltési keretet (Max 3/óra, 10/nap).' });
+            return res.status(429).json({ message: 'TĂşllĂ©pted a letĂ¶ltĂ©si keretet (Max 3/Ăłra, 10/nap).' });
         }
 
         const client = await db.pool.connect();
@@ -5360,25 +5388,25 @@ app.get('/api/programs/:id/download', async (req, res) => {
             await client.query('COMMIT');
         } catch (err) {
             await client.query('ROLLBACK');
-            console.error('Hiba a letöltés naplózása közben:', err);
-            // A letöltés attól még történjen meg, ha a naplózás meghiúsul.
+            console.error('Hiba a letĂ¶ltĂ©s naplĂłzĂˇsa kĂ¶zben:', err);
+            // A letĂ¶ltĂ©s attĂłl mĂ©g tĂ¶rtĂ©njen meg, ha a naplĂłzĂˇs meghiĂşsul.
         } finally {
             client.release();
         }
 
         res.download(normalizedPath, program.original_filename, (err) => {
             if (err && !res.headersSent) {
-                console.error('Hiba a fájl letöltésekor:', err);
-                res.status(500).json({ message: 'Nem sikerült elküldeni a fájlt.' });
+                console.error('Hiba a fĂˇjl letĂ¶ltĂ©sekor:', err);
+                res.status(500).json({ message: 'Nem sikerĂĽlt elkĂĽldeni a fĂˇjlt.' });
             }
         });
     } catch (err) {
-        console.error('Hiba a letöltési kérés feldolgozásakor:', err);
-        res.status(500).json({ message: 'Nem sikerült feldolgozni a letöltési kérést.' });
+        console.error('Hiba a letĂ¶ltĂ©si kĂ©rĂ©s feldolgozĂˇsakor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt feldolgozni a letĂ¶ltĂ©si kĂ©rĂ©st.' });
     }
 });
 
-// Avatar feltöltés beállítása
+// Avatar feltĂ¶ltĂ©s beĂˇllĂ­tĂˇsa
 const avatarDirectory = path.join(uploadsRootDirectory, 'avatars');
 ensureDirectoryExists(avatarDirectory);
 
@@ -5402,7 +5430,7 @@ const uploadAvatar = multer({
         if (mimetype && extname) {
             return cb(null, true);
         }
-        cb(new Error('Csak képfájlok tölthetők fel (jpeg, jpg, png, gif).'));
+        cb(new Error('Csak kĂ©pfĂˇjlok tĂ¶lthetĹ‘k fel (jpeg, jpg, png, gif).'));
     }
 }).single('avatar');
 
@@ -5411,15 +5439,15 @@ app.post('/api/profile/upload-avatar', authenticateToken, (req, res) => {
         if (uploadErr) {
             if (uploadErr instanceof multer.MulterError) {
                 const message = uploadErr.code === 'LIMIT_FILE_SIZE'
-                    ? 'A képfájl mérete nem haladhatja meg az 5MB-ot.'
-                    : 'Feltöltési hiba.';
+                    ? 'A kĂ©pfĂˇjl mĂ©rete nem haladhatja meg az 5MB-ot.'
+                    : 'FeltĂ¶ltĂ©si hiba.';
                 return res.status(400).json({ message });
             }
             return res.status(400).json({ message: uploadErr.message });
         }
 
         if (!req.file) {
-            return res.status(400).json({ message: 'Nincs fájl feltöltve.' });
+            return res.status(400).json({ message: 'Nincs fĂˇjl feltĂ¶ltve.' });
         }
 
         const { filename } = req.file;
@@ -5435,15 +5463,15 @@ app.post('/api/profile/upload-avatar', authenticateToken, (req, res) => {
                 const oldPath = path.join(avatarDirectory, oldFilename);
                 fs.unlink(oldPath, (unlinkErr) => {
                     if (unlinkErr && unlinkErr.code !== 'ENOENT') {
-                        console.error('Hiba a régi avatár törlésekor:', unlinkErr);
+                        console.error('Hiba a rĂ©gi avatĂˇr tĂ¶rlĂ©sekor:', unlinkErr);
                     }
                 });
             }
 
-            res.status(200).json({ message: 'Profilkép sikeresen frissítve.', filename });
+            res.status(200).json({ message: 'ProfilkĂ©p sikeresen frissĂ­tve.', filename });
         } catch (dbErr) {
-            console.error('Hiba a profilkép frissítésekor:', dbErr);
-            res.status(500).json({ message: 'Nem sikerült frissíteni a profilképet.' });
+            console.error('Hiba a profilkĂ©p frissĂ­tĂ©sekor:', dbErr);
+            res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a profilkĂ©pet.' });
         }
     });
 });
@@ -5451,12 +5479,12 @@ app.post('/api/profile/upload-avatar', authenticateToken, (req, res) => {
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
         const message = err.code === 'LIMIT_FILE_SIZE'
-            ? 'A feltöltött fájl meghaladja a megengedett méretet.'
+            ? 'A feltĂ¶ltĂ¶tt fĂˇjl meghaladja a megengedett mĂ©retet.'
             : err.message;
         return res.status(400).json({ message });
     }
-    console.error('Váratlan hiba a kérés feldolgozása közben:', err);
-    res.status(500).json({ message: 'Váratlan hiba történt.' });
+    console.error('VĂˇratlan hiba a kĂ©rĂ©s feldolgozĂˇsa kĂ¶zben:', err);
+    res.status(500).json({ message: 'VĂˇratlan hiba tĂ¶rtĂ©nt.' });
 });
 
 app.post('/api/profile/update-name', authenticateToken, async (req, res) => {
@@ -5464,7 +5492,7 @@ app.post('/api/profile/update-name', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     if (!newUsername || newUsername.trim().length === 0) {
-        return res.status(400).json({ message: 'Az új felhasználónév nem lehet üres.' });
+        return res.status(400).json({ message: 'Az Ăşj felhasznĂˇlĂłnĂ©v nem lehet ĂĽres.' });
     }
 
     try {
@@ -5474,14 +5502,14 @@ app.post('/api/profile/update-name', authenticateToken, async (req, res) => {
         const existingUser = rows[0];
 
         if (existingUser && existingUser.id !== userId) {
-            return res.status(409).json({ message: 'Ez a felhasználónév már foglalt.' });
+            return res.status(409).json({ message: 'Ez a felhasznĂˇlĂłnĂ©v mĂˇr foglalt.' });
         }
 
         await db.query('UPDATE users SET username = $1 WHERE id = $2', [trimmedUsername, userId]);
-        res.status(200).json({ message: 'Felhasználónév sikeresen frissítve.', newUsername: trimmedUsername });
+        res.status(200).json({ message: 'FelhasznĂˇlĂłnĂ©v sikeresen frissĂ­tve.', newUsername: trimmedUsername });
     } catch (err) {
-        console.error('Hiba a felhasználónév frissítésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült frissíteni a felhasználónevet.' });
+        console.error('Hiba a felhasznĂˇlĂłnĂ©v frissĂ­tĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a felhasznĂˇlĂłnevet.' });
     }
 });
 
@@ -5490,7 +5518,7 @@ app.post('/api/profile/update-password', authenticateToken, async (req, res) => 
     const userId = req.user.id;
 
     if (!currentPassword || !newPassword) {
-        return res.status(400).json({ message: 'Jelenlegi és új jelszó megadása kötelező.' });
+        return res.status(400).json({ message: 'Jelenlegi Ă©s Ăşj jelszĂł megadĂˇsa kĂ¶telezĹ‘.' });
     }
 
     try {
@@ -5498,25 +5526,25 @@ app.post('/api/profile/update-password', authenticateToken, async (req, res) => 
         const user = rows[0];
 
         if (!user) {
-            return res.status(404).json({ message: 'A felhasználó nem található.' });
+            return res.status(404).json({ message: 'A felhasznĂˇlĂł nem talĂˇlhatĂł.' });
         }
 
         const isMatch = await bcrypt.compare(currentPassword, user.password);
         if (!isMatch) {
-            return res.status(401).json({ message: 'A jelenlegi jelszó helytelen.' });
+            return res.status(401).json({ message: 'A jelenlegi jelszĂł helytelen.' });
         }
 
         const hashedNewPassword = await bcrypt.hash(newPassword, 10);
         await db.query('UPDATE users SET password = $1 WHERE id = $2', [hashedNewPassword, userId]);
 
-        res.status(200).json({ message: 'Jelszó sikeresen frissítve.' });
+        res.status(200).json({ message: 'JelszĂł sikeresen frissĂ­tve.' });
     } catch (err) {
-        console.error('Hiba a jelszó frissítésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült frissíteni a jelszót.' });
+        console.error('Hiba a jelszĂł frissĂ­tĂ©sekor:', err);
+        res.status(500).json({ message: 'Nem sikerĂĽlt frissĂ­teni a jelszĂłt.' });
     }
 });
 
-// 6. A szerver elindítása
+// 6. A szerver elindĂ­tĂˇsa
 function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
@@ -6062,13 +6090,47 @@ function startRadnaiMonitor() {
 }
 
 async function startServer() {
+    const dbStartupMaxRetries = Math.max(
+        1,
+        Number.parseInt(process.env.DB_STARTUP_MAX_RETRIES || '30', 10) || 30
+    );
+    const dbStartupRetryDelayMs = Math.max(
+        1000,
+        Number.parseInt(process.env.DB_STARTUP_RETRY_DELAY_MS || '5000', 10) || 5000
+    );
+
+    let startupAttempt = 0;
+
     try {
-        await db.initializeDatabase();
-        await ensureTagColorColumn();
-        await ensureArchiveTagColorColumn();
-        await loadAppSettings();
+        while (startupAttempt < dbStartupMaxRetries) {
+            startupAttempt += 1;
+            try {
+                await db.initializeDatabase();
+                await ensureTagColorColumn();
+                await ensureArchiveTagColorColumn();
+                await loadAppSettings();
+                if (startupAttempt > 1) {
+                    console.log(
+                        `Adatbazis kapcsolat sikeres (proba ${startupAttempt}/${dbStartupMaxRetries}), szerver inditas...`
+                    );
+                }
+                break;
+            } catch (dbErr) {
+                const isLastAttempt = startupAttempt >= dbStartupMaxRetries;
+                console.error(
+                    `Adatbazis nem elerheto inditas kozben (proba ${startupAttempt}/${dbStartupMaxRetries}):`,
+                    dbErr
+                );
+                if (isLastAttempt) {
+                    throw dbErr;
+                }
+                console.log(`Ujraprobalas ${dbStartupRetryDelayMs} ms mulva...`);
+                await delay(dbStartupRetryDelayMs);
+            }
+        }
+
         server.listen(PORT, () => {
-            console.log(`A szerver sikeresen elindult és fut a http://localhost:${PORT} címen`);
+            console.log(`A szerver sikeresen elindult Ă©s fut a http://localhost:${PORT} cĂ­men`);
             setImmediate(() => {
                 processVideoQueue();
                 processArchiveVideoQueue();
@@ -6076,7 +6138,7 @@ async function startServer() {
             });
         });
     } catch (err) {
-        console.error('Nem sikerült elindítani a szervert:', err);
+        console.error('Nem sikerĂĽlt elindĂ­tani a szervert:', err);
         process.exit(1);
     }
 }

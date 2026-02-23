@@ -1,0 +1,1421 @@
+﻿ 13320:       function normalizeColor(color) {
+ 13321:         if (!color || typeof color !== "string") return DEFAULT_TAG_COLOR;
+ 13322:         const trimmed = color.trim();
+ 13323:         return /^#([0-9a-fA-F]{6})$/.test(trimmed) ? trimmed.toUpperCase() : DEFAULT_TAG_COLOR;
+ 13324:       }
+ 13325: 
+ 13326:       function styleTagOption(option, color) {
+ 13327:         const safeColor = normalizeColor(color);
+ 13328:         option.style.background = `linear-gradient(90deg, ${safeColor} 0 10px, rgba(255, 255, 255, 0.04) 10px 100%)`;
+ 13329:         option.style.borderLeft = `6px solid ${safeColor}`;
+ 13330:       }
+ 13331: 
+ 13332:       function renderSelectedTagChips() {
+ 13333:         if (!tagSelectBox) return;
+ 13334:         tagSelectBox.innerHTML = "";
+ 13335: 
+ 13336:         if (!videoFilters.tag.length) {
+ 13337:           const placeholder = document.createElement("span");
+ 13338:           placeholder.className = "custom-select-placeholder";
+ 13339:           placeholder.textContent = "VA?lassz cAmkAket...";
+ 13340:           tagSelectBox.appendChild(placeholder);
+ 13341:           return;
+ 13342:         }
+ 13343: 
+ 13344:         videoFilters.tag.forEach((tagId) => {
+ 13345:           const tagData = availableTags.find((tag) => String(tag.id) === String(tagId));
+ 13346:           const chip = document.createElement("span");
+ 13347:           chip.className = "custom-select-chip";
+ 13348:           chip.dataset.value = String(tagId);
+ 13349: 
+ 13350:           const colorBar = document.createElement("span");
+ 13351:           colorBar.className = "custom-select-chip__color";
+ 13352:           colorBar.style.background = normalizeColor(tagData?.color || DEFAULT_TAG_COLOR);
+ 13353: 
+ 13354:           const label = document.createElement("span");
+ 13355:           label.textContent = tagData?.name || `CAmke #${tagId}`;
+ 13356: 
+ 13357:           const removeBtn = document.createElement("button");
+ 13358:           removeBtn.type = "button";
+ 13359:           removeBtn.className = "custom-select-chip__remove";
+ 13360:           removeBtn.setAttribute("aria-label", `${label.textContent} tArlAse`);
+ 13361:           removeBtn.textContent = "\u00d7";
+ 13362: 
+ 13363:           chip.append(colorBar, label, removeBtn);
+ 13364:           tagSelectBox.appendChild(chip);
+ 13365:         });
+ 13366:       }
+ 13367: 
+ 13368:       function renderTagDropdownOptions() {
+ 13369:         if (!tagSelectDropdown) return;
+ 13370:         tagSelectDropdown.innerHTML = "";
+ 13371: 
+ 13372:         const selectedValues = new Set(videoFilters.tag.map((value) => String(value)));
+ 13373: 
+ 13374:         if (!availableTags.length) {
+ 13375:           const emptyState = document.createElement("div");
+ 13376:           emptyState.className = "custom-select-placeholder";
+ 13377:           emptyState.style.padding = "0.35rem 0.65rem";
+ 13378:           emptyState.textContent = "Nincs elArhetL cAmke";
+ 13379:           tagSelectDropdown.appendChild(emptyState);
+ 13380:           return;
+ 13381:         }
+ 13382: 
+ 13383:         availableTags.forEach((tag) => {
+ 13384:           const option = document.createElement("button");
+ 13385:           option.type = "button";
+ 13386:           option.className = "custom-select-option";
+ 13387:           option.dataset.value = String(tag.id);
+ 13388:           option.disabled = selectedValues.has(option.dataset.value);
+ 13389: 
+ 13390:           const colorBar = document.createElement("span");
+ 13391:           colorBar.className = "custom-select-option__color";
+ 13392:           colorBar.style.background = normalizeColor(tag.color);
+ 13393: 
+ 13394:           const label = document.createElement("span");
+ 13395:           label.textContent = tag.name;
+ 13396: 
+ 13397:           option.append(colorBar, label);
+ 13398: 
+ 13399:           tagSelectDropdown.appendChild(option);
+ 13400:         });
+ 13401:       }
+ 13402: 
+ 13403:       function renderTagSelector() {
+ 13404:         renderSelectedTagChips();
+ 13405:         renderTagDropdownOptions();
+ 13406:       }
+ 13407: 
+ 13408:       function selectClipTag(tagId) {
+ 13409:         if (!tagId) return;
+ 13410:         const tagValue = String(tagId);
+ 13411:         const alreadySelected = videoFilters.tag.some((value) => String(value) === tagValue);
+ 13412:         if (alreadySelected) return;
+ 13413:         videoFilters.tag = [...videoFilters.tag, tagValue];
+ 13414:         videoFilters.page = 1;
+ 13415:         renderTagSelector();
+ 13416:         loadVideos();
+ 13417:       }
+ 13418: 
+ 13419:       function getTagIdFromChip(chip) {
+ 13420:         if (!chip) return null;
+ 13421:         const directId = chip.dataset.tagId;
+ 13422:         if (directId) return directId;
+ 13423:         const tagName = chip.dataset.tagName;
+ 13424:         if (!tagName) return null;
+ 13425:         const match = availableTags.find((tag) => tag.name === tagName);
+ 13426:         return match ? String(match.id) : null;
+ 13427:       }
+ 13428: 
+ 13429:       function handleClipTagClick(event) {
+ 13430:         const chip = event.target.closest(".tag-chip");
+ 13431:         if (!chip || !videoGridContainer?.contains(chip)) return;
+ 13432:         event.stopPropagation();
+ 13433:         const tagId = getTagIdFromChip(chip);
+ 13434:         if (!tagId) return;
+ 13435:         selectClipTag(tagId);
+ 13436:       }
+ 13437: 
+ 13438:       function handleClipTagKeydown(event) {
+ 13439:         if (event.key !== "Enter" && event.key !== " ") return;
+ 13440:         const chip = event.target.closest(".tag-chip");
+ 13441:         if (!chip || !videoGridContainer?.contains(chip)) return;
+ 13442:         event.preventDefault();
+ 13443:         const tagId = getTagIdFromChip(chip);
+ 13444:         if (!tagId) return;
+ 13445:         selectClipTag(tagId);
+ 13446:       }
+ 13447: 
+ 13448:       function attachClipTagHandlers() {
+ 13449:         if (!videoGridContainer || clipTagHandlersAttached) return;
+ 13450:         videoGridContainer.addEventListener("click", handleClipTagClick);
+ 13451:         videoGridContainer.addEventListener("keydown", handleClipTagKeydown);
+ 13452:         clipTagHandlersAttached = true;
+ 13453:       }
+ 13454: 
+ 13455:       function renderGlobalTagSelect() {
+ 13456:         if (!globalTagSelect) return;
+ 13457:         const currentSelection = getSelectValues(globalTagSelect);
+ 13458:         globalTagSelect.innerHTML = "";
+ 13459:         availableTags.forEach((tag) => {
+ 13460:           const option = document.createElement("option");
+ 13461:           option.value = String(tag.id);
+ 13462:           option.textContent = tag.name;
+ 13463:           option.selected = currentSelection.includes(tag.id);
+ 13464:           styleTagOption(option, tag.color);
+ 13465:           globalTagSelect.appendChild(option);
+ 13466:         });
+ 13467:       }
+ 13468: 
+ 13469:       function createQueueTagSelect(selectedValues = [], onChange) {
+ 13470:         const normalized = Array.isArray(selectedValues) ? [...selectedValues] : [];
+ 13471:         const container = document.createElement("div");
+ 13472:         container.className = "tag-pill-list";
+ 13473: 
+ 13474:         const syncSelection = () => {
+ 13475:           container.querySelectorAll(".tag-pill").forEach((pill) => {
+ 13476:             const tagId = Number(pill.dataset.tagId);
+ 13477:             pill.classList.toggle("tag-pill--selected", normalized.includes(tagId));
+ 13478:           });
+ 13479:         };
+ 13480: 
+ 13481:         const toggleTag = (tagId) => {
+ 13482:           const idx = normalized.indexOf(tagId);
+ 13483:           if (idx >= 0) {
+ 13484:             normalized.splice(idx, 1);
+ 13485:           } else {
+ 13486:             normalized.push(tagId);
+ 13487:           }
+ 13488:           syncSelection();
+ 13489:           if (typeof onChange === "function") {
+ 13490:             onChange([...normalized]);
+ 13491:           }
+ 13492:         };
+ 13493: 
+ 13494:         availableTags.forEach((tag) => {
+ 13495:           const pill = document.createElement("button");
+ 13496:           pill.type = "button";
+ 13497:           pill.className = "tag-pill";
+ 13498:           pill.dataset.tagId = String(tag.id);
+ 13499:           pill.style.setProperty("--tag-color", normalizeColor(tag.color));
+ 13500:           pill.innerHTML = `<span class="tag-pill__dot"></span><span class="tag-pill__label">${tag.name}</span>`;
+ 13501:           pill.addEventListener("click", () => {
+ 13502:             toggleTag(tag.id);
+ 13503:             pill.blur();
+ 13504:             pill.dispatchEvent(new CustomEvent("tagchange", { bubbles: true }));
+ 13505:           });
+ 13506:           container.appendChild(pill);
+ 13507:         });
+ 13508: 
+ 13509:         container.getSelectedValues = () => [...normalized];
+ 13510:         container.setSelectedValues = (values) => {
+ 13511:           if (Array.isArray(values)) {
+ 13512:             normalized.splice(0, normalized.length, ...values);
+ 13513:             syncSelection();
+ 13514:           }
+ 13515:         };
+ 13516: 
+ 13517:         syncSelection();
+ 13518:         return container;
+ 13519:       }
+ 13520: 
+ 13521:       function populateTagSelect() {
+ 13522:         const validTagIds = Array.isArray(videoFilters.tag)
+ 13523:           ? videoFilters.tag.filter((id) => availableTags.some((tag) => String(tag.id) === String(id)))
+ 13524:           : [];
+ 13525:         if (Array.isArray(videoFilters.tag) && validTagIds.length !== videoFilters.tag.length) {
+ 13526:           videoFilters.tag = validTagIds;
+ 13527:         }
+ 13528: 
+ 13529:         renderTagSelector();
+ 13530:       }
+ 13531: 
+ 13532:       async function fetchTags() {
+ 13533:         if (!hasClipAccess()) {
+ 13534:           availableTags = [];
+ 13535:           populateTagSelect();
+ 13536:           renderGlobalTagSelect();
+ 13537:           return;
+ 13538:         }
+ 13539:         try {
+ 13540:           const response = await fetch("/api/tags");
+ 13541:           if (!response.ok) throw new Error("Nem sikerALlt lekArni a cAmkAket.");
+ 13542:           const payload = await response.json();
+ 13543:           availableTags = Array.isArray(payload)
+ 13544:             ? payload.map((tag) => ({ ...tag, color: normalizeColor(tag.color) }))
+ 13545:             : [];
+ 13546:           populateTagSelect();
+ 13547:           renderGlobalTagSelect();
+ 13548:           renderUploadQueue();
+ 13549:           if (createTagWrapper) {
+ 13550:             createTagWrapper.style.display = isAdminUser() ? "block" : "none";
+ 13551:           }
+ 13552:         } catch (error) {
+ 13553:           console.error(error);
+ 13554:         }
+ 13555:       }
+ 13556: 
+ 13557:       function updateUploadSummary() {
+ 13558:         if (!uploadSummary || !selectedFileName) return;
+ 13559:         const count = uploadQueue.length;
+ 13560:         if (!count) {
+ 13561:           uploadSummary.textContent = "Nincs kivA?lasztott fA?jl.";
+ 13562:           selectedFileName.textContent = "Nincs kivA?lasztott fA?jl.";
+ 13563:           return;
+ 13564:         }
+ 13565:         uploadSummary.textContent = `${count} fA?jl kivA?lasztva.`;
+ 13566:         selectedFileName.textContent = uploadSummary.textContent;
+ 13567:       }
+ 13568: 
+ 13569:       function formatBytes(bytes) {
+ 13570:         if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+ 13571:         const units = ["B", "KB", "MB", "GB", "TB"];
+ 13572:         let value = bytes;
+ 13573:         let unitIndex = 0;
+ 13574:         while (value >= 1024 && unitIndex < units.length - 1) {
+ 13575:           value /= 1024;
+ 13576:           unitIndex += 1;
+ 13577:         }
+ 13578:         const precision = value >= 10 || unitIndex === 0 ? 0 : 1;
+ 13579:         return `${value.toFixed(precision)} ${units[unitIndex]}`;
+ 13580:       }
+ 13581: 
+ 13582:       function formatDuration(seconds) {
+ 13583:         if (!Number.isFinite(seconds) || seconds < 0) return "--";
+ 13584:         const totalSeconds = Math.ceil(seconds);
+ 13585:         const minutes = Math.floor(totalSeconds / 60);
+ 13586:         const remainingSeconds = totalSeconds % 60;
+ 13587:         return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+ 13588:       }
+ 13589: 
+ 13590:       function resetUploadProgress() {
+ 13591:         if (uploadProgress) {
+ 13592:           uploadProgress.style.display = "none";
+ 13593:         }
+ 13594:         if (uploadProgressFill) {
+ 13595:           uploadProgressFill.style.width = "0%";
+ 13596:         }
+ 13597:         if (uploadProgressCount) {
+ 13598:           uploadProgressCount.textContent = "0 / 0 klip";
+ 13599:         }
+ 13600:         if (uploadProgressEta) {
+ 13601:           uploadProgressEta.textContent = "HA?tralAvL idL: --";
+ 13602:         }
+ 13603:         if (uploadProgressDetails) {
+ 13604:           uploadProgressDetails.textContent = "";
+ 13605:         }
+ 13606:       }
+ 13607: 
+ 13608:       async function rollbackUploadedVideos(videoIds) {
+ 13609:         const normalizedIds = Array.isArray(videoIds)
+ 13610:           ? Array.from(new Set(videoIds.map((id) => Number(id)).filter(Number.isFinite)))
+ 13611:           : [];
+ 13612: 
+ 13613:         if (!normalizedIds.length) {
+ 13614:           return { deletedVideoIds: [] };
+ 13615:         }
+ 13616: 
+ 13617:         const response = await fetch("/api/videos/cancel", {
+ 13618:           method: "POST",
+ 13619:           headers: { "Content-Type": "application/json", ...buildAuthHeaders() },
+ 13620:           body: JSON.stringify({ videoIds: normalizedIds }),
+ 13621:         });
+ 13622: 
+ 13623:         const result = await response.json().catch(() => ({}));
+ 13624:         if (!response.ok) {
+ 13625:           throw new Error(result?.message || "Nem sikerALlt visszavonni a feltAltAtt videAlkat.");
+ 13626:         }
+ 13627: 
+ 13628:         return result;
+ 13629:       }
+ 13630: 
+ 13631:       function updateUploadProgressUI({
+ 13632:         uploadedBytes,
+ 13633:         totalBytes,
+ 13634:         completedFiles,
+ 13635:         totalFiles,
+ 13636:         etaSeconds,
+ 13637:       }) {
+ 13638:         if (!uploadProgress || !uploadProgressFill || !uploadProgressCount || !uploadProgressEta) {
+ 13639:           return;
+ 13640:         }
+ 13641: 
+ 13642:         const safeTotalBytes = totalBytes || 0;
+ 13643:         const percent = safeTotalBytes > 0 ? Math.min(100, (uploadedBytes / safeTotalBytes) * 100) : 0;
+ 13644: 
+ 13645:         uploadProgress.style.display = "flex";
+ 13646:         uploadProgressFill.style.width = `${percent}%`;
+ 13647:         uploadProgressCount.textContent = `${completedFiles} / ${totalFiles} klip`;
+ 13648:         uploadProgressEta.textContent = `HA?tralAvL idL: ${formatDuration(etaSeconds)}`;
+ 13649: 
+ 13650:         if (uploadProgressDetails) {
+ 13651:           const remainingBytes = Math.max(safeTotalBytes - uploadedBytes, 0);
+ 13652:           uploadProgressDetails.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(
+ 13653:             safeTotalBytes
+ 13654:           )} ? HA?tra: ${formatBytes(remainingBytes)}`;
+ 13655:         }
+ 13656:       }
+ 13657: 
+ 13658:       function removeFromQueue(signature) {
+ 13659:         uploadQueue = uploadQueue.filter((item) => item.signature !== signature);
+ 13660:         fileSignatures.delete(signature);
+ 13661:         renderUploadQueue();
+ 13662:         updateUploadSummary();
+ 13663:         if (uploadBtn) {
+ 13664:           uploadBtn.disabled = uploadQueue.length === 0;
+ 13665:         }
+ 13666:       }
+ 13667: 
+ 13668:       function showUploadToast(message) {
+ 13669:         if (!uploadToast) return;
+ 13670:         uploadToast.textContent = message;
+ 13671:         uploadToast.classList.add("upload-toast--visible");
+ 13672:         const modalContent = uploadModal?.querySelector(".upload-modal-content");
+ 13673:         if (modalContent) {
+ 13674:           modalContent.classList.remove("shake");
+ 13675:           modalContent.offsetWidth;
+ 13676:           modalContent.classList.add("shake");
+ 13677:         }
+ 13678:         setTimeout(() => uploadToast.classList.remove("upload-toast--visible"), 1800);
+ 13679:       }
+ 13680: 
+ 13681:       function renderUploadQueue() {
+ 13682:         if (!uploadQueueContainer) return;
+ 13683:         uploadQueueContainer.innerHTML = "";
+ 13684:         const hasItems = uploadQueue.length > 0;
+ 13685: 
+ 13686:         if (addMoreVideosBtn) {
+ 13687:           addMoreVideosBtn.style.display = hasItems ? "inline-flex" : "none";
+ 13688:         }
+ 13689: 
+ 13690:         if (!hasItems && dropZone) {
+ 13691:           uploadQueueContainer.appendChild(dropZone);
+ 13692:         }
+ 13693: 
+ 13694:         uploadQueue.forEach((item) => {
+ 13695:           const row = document.createElement("div");
+ 13696:           row.className = "upload-queue-item";
+ 13697: 
+ 13698:           const thumbnail = document.createElement("div");
+ 13699:           thumbnail.className = "queue-thumbnail";
+ 13700:           if (item.thumbnail) {
+ 13701:             const img = document.createElement("img");
+ 13702:             img.src = item.thumbnail;
+ 13703:             img.alt = item.displayName || item.file.name;
+ 13704:             thumbnail.appendChild(img);
+ 13705:           } else {
+ 13706:             thumbnail.textContent = "IMG";
+ 13707:           }
+ 13708: 
+ 13709:           const details = document.createElement("div");
+ 13710:           details.className = "queue-details";
+ 13711: 
+ 13712:           const nameInput = document.createElement("input");
+ 13713:           nameInput.type = "text";
+ 13714:           nameInput.value = item.displayName || item.file.name;
+ 13715:           nameInput.placeholder = "VideAl neve";
+ 13716:           nameInput.addEventListener("input", (event) => {
+ 13717:             item.displayName = event.target.value || item.file.name;
+ 13718:             updateUploadSummary();
+ 13719:           });
+ 13720:           details.appendChild(nameInput);
+ 13721: 
+ 13722:           const tagSelector = createQueueTagSelect(item.tags || [], (values) => {
+ 13723:             item.tags = values;
+ 13724:           });
+ 13725:           tagSelector.setAttribute("aria-label", "CAmke kivA?lasztA?sa");
+ 13726:           details.appendChild(tagSelector);
+ 13727: 
+ 13728:           const actions = document.createElement("div");
+ 13729:           actions.className = "queue-actions";
+ 13730: 
+ 13731:           const removeBtn = document.createElement("button");
+ 13732:           removeBtn.className = "queue-remove";
+ 13733:           removeBtn.type = "button";
+ 13734:           removeBtn.innerHTML = "&times;";
+ 13735:           removeBtn.addEventListener("click", () => removeFromQueue(item.signature));
+ 13736:           actions.appendChild(removeBtn);
+ 13737: 
+ 13738:           row.appendChild(thumbnail);
+ 13739:           row.appendChild(details);
+ 13740:           row.appendChild(actions);
+ 13741: 
+ 13742:           uploadQueueContainer.appendChild(row);
+ 13743:         });
+ 13744:       }
+ 13745: 
+ 13746:       function getFileSignature(file) {
+ 13747:         return `${file.name}-${file.size}-${file.lastModified}`;
+ 13748:       }
+ 13749: 
+ 13750:       function generateVideoThumbnail(file) {
+ 13751:         return new Promise((resolve, reject) => {
+ 13752:           const video = document.createElement("video");
+ 13753:           const canvas = document.createElement("canvas");
+ 13754:           const context = canvas.getContext("2d");
+ 13755:           const url = URL.createObjectURL(file);
+ 13756:           video.src = url;
+ 13757:           video.preload = "metadata";
+ 13758:           video.muted = true;
+ 13759:           video.playsInline = true;
+ 13760: 
+ 13761:           const cleanup = () => URL.revokeObjectURL(url);
+ 13762: 
+ 13763:           video.addEventListener("loadeddata", () => {
+ 13764:             try {
+ 13765:               const captureTime = Math.min(1, Math.max(0, video.duration || 1));
+ 13766:               video.currentTime = captureTime;
+ 13767:             } catch (error) {
+ 13768:               cleanup();
+ 13769:               reject(error);
+ 13770:             }
+ 13771:           });
+ 13772: 
+ 13773:           video.addEventListener("seeked", () => {
+ 13774:             try {
+ 13775:               canvas.width = 160;
+ 13776:               canvas.height = 90;
+ 13777:               context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+ 13778:               const dataUrl = canvas.toDataURL("image/png");
+ 13779:               cleanup();
+ 13780:               resolve(dataUrl);
+ 13781:             } catch (error) {
+ 13782:               cleanup();
+ 13783:               reject(error);
+ 13784:             }
+ 13785:           });
+ 13786: 
+ 13787:           video.addEventListener("error", (error) => {
+ 13788:             cleanup();
+ 13789:             reject(error);
+ 13790:           });
+ 13791:         });
+ 13792:       }
+ 13793: 
+ 13794:       function normalizeQualityPreference(quality) {
+ 13795:         if (quality === "original") return "original";
+ 13796:         if (!quality) return DEFAULT_VIDEO_QUALITY;
+ 13797:         return ALLOWED_VIDEO_QUALITIES.includes(quality) ? quality : DEFAULT_VIDEO_QUALITY;
+ 13798:       }
+ 13799: 
+ 13800:       function applyQualityPreference(quality, { persistLocally = true } = {}) {
+ 13801:         const normalizedQuality = normalizeQualityPreference(quality);
+ 13802:         currentVideoQuality = normalizedQuality;
+ 13803: 
+ 13804:         if (persistLocally) {
+ 13805:           localStorage.setItem(VIDEO_QUALITY_KEY, normalizedQuality);
+ 13806:         }
+ 13807: 
+ 13808:         if (videoQualitySelect) {
+ 13809:           videoQualitySelect.value = normalizedQuality;
+ 13810:         }
+ 13811:         if (archiveVideoQualitySelect) {
+ 13812:           archiveVideoQualitySelect.value = normalizedQuality;
+ 13813:         }
+ 13814: 
+ 13815:         return normalizedQuality;
+ 13816:       }
+ 13817: 
+ 13818:       function buildVideoPath(originalFilename, targetResolution) {
+ 13819:         if (!originalFilename || !targetResolution) return "";
+ 13820:         const normalizedPath = String(originalFilename).replace(/^\/+/, "");
+ 13821:         const segments = normalizedPath.split("/");
+ 13822:         const eredetiIndex = segments.indexOf("eredeti");
+ 13823: 
+ 13824:         if (eredetiIndex === -1 || eredetiIndex + 1 >= segments.length) {
+ 13825:           return "";
+ 13826:         }
+ 13827: 
+ 13828:         const folderName = segments[eredetiIndex + 1];
+ 13829:         const baseFilename = segments[segments.length - 1];
+ 13830:         const dotIndex = baseFilename.lastIndexOf(".");
+ 13831:         const nameWithoutExt = dotIndex !== -1 ? baseFilename.slice(0, dotIndex) : baseFilename;
+ 13832:         const extension = dotIndex !== -1 ? baseFilename.slice(dotIndex) : "";
+ 13833: 
+ 13834:         return `/uploads/klippek/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}`;
+ 13835:       }
+ 13836: 
+ 13837:       function getQualityAvailability(video) {
+ 13838:         return {
+ 13839:           "1440p": Number(video?.has_1440p) === 1 || video?.has_1440p === true || video?.has_1440p === "1",
+ 13840:           "1080p": Number(video?.has_1080p) === 1 || video?.has_1080p === true || video?.has_1080p === "1",
+ 13841:           "720p": Number(video?.has_720p) === 1 || video?.has_720p === true || video?.has_720p === "1",
+ 13842:         };
+ 13843:       }
+ 13844: 
+ 13845:       function getPreferredVideoSource(video, qualityPreference) {
+ 13846:         const requestedQuality = qualityPreference || "original";
+ 13847:         const normalizedQuality = normalizeQualityPreference(requestedQuality);
+ 13848:         const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
+ 13849:         const availability = getQualityAvailability(video);
+ 13850:         const originalQuality = (video?.original_quality || "").toString();
+ 13851: 
+ 13852:         if (normalizedQuality === "original") {
+ 13853:           return {
+ 13854:             src: originalSource,
+ 13855:             originalSource,
+ 13856:             resolvedQuality: "original",
+ 13857:             requestedQuality: normalizedQuality,
+ 13858:             availability,
+ 13859:           };
+ 13860:         }
+ 13861: 
+ 13862:         if (normalizedQuality !== "original" && originalQuality === normalizedQuality) {
+ 13863:           return {
+ 13864:             src: originalSource,
+ 13865:             originalSource,
+ 13866:             resolvedQuality: "original",
+ 13867:             requestedQuality: normalizedQuality,
+ 13868:             availability,
+ 13869:           };
+ 13870:         }
+ 13871: 
+ 13872:         if (normalizedQuality === "1440p" && availability["1440p"]) {
+ 13873:           return {
+ 13874:             src: buildVideoPath(video?.filename, "1440p"),
+ 13875:             originalSource,
+ 13876:             resolvedQuality: "1440p",
+ 13877:             requestedQuality: normalizedQuality,
+ 13878:             availability,
+ 13879:           };
+ 13880:         }
+ 13881: 
+ 13882:         if (normalizedQuality === "1080p" && availability["1080p"]) {
+ 13883:           return {
+ 13884:             src: buildVideoPath(video?.filename, "1080p"),
+ 13885:             originalSource,
+ 13886:             resolvedQuality: "1080p",
+ 13887:             requestedQuality: normalizedQuality,
+ 13888:             availability,
+ 13889:           };
+ 13890:         }
+ 13891: 
+ 13892:         if (normalizedQuality === "720p" && availability["720p"]) {
+ 13893:           return {
+ 13894:             src: buildVideoPath(video?.filename, "720p"),
+ 13895:             originalSource,
+ 13896:             resolvedQuality: "720p",
+ 13897:             requestedQuality: normalizedQuality,
+ 13898:             availability,
+ 13899:           };
+ 13900:         }
+ 13901: 
+ 13902:         return {
+ 13903:           src: originalSource,
+ 13904:           originalSource,
+ 13905:           resolvedQuality: "original",
+ 13906:           requestedQuality: normalizedQuality,
+ 13907:           availability,
+ 13908:         };
+ 13909:       }
+ 13910: 
+ 13911:       function listAvailableQualities(video) {
+ 13912:         const availability = getQualityAvailability(video);
+ 13913:         const available = ["1440p", "1080p", "720p"].filter((quality) => availability[quality]);
+ 13914:         if (!available.length) {
+ 13915:           return ["Eredeti"];
+ 13916:         }
+ 13917:         return [...available, "Eredeti"];
+ 13918:       }
+ 13919: 
+ 13920:       function showClipToast(message) {
+ 13921:         if (!clipToast) return;
+ 13922:         clipToast.textContent = message;
+ 13923:         clipToast.classList.add("upload-toast--visible");
+ 13924:         if (clipToastTimeout) {
+ 13925:           clearTimeout(clipToastTimeout);
+ 13926:         }
+ 13927:         clipToastTimeout = setTimeout(() => clipToast.classList.remove("upload-toast--visible"), 2200);
+ 13928:       }
+ 13929: 
+ 13930:       async function saveQualityPreferenceToServer(quality) {
+ 13931:         const response = await fetch("/api/profile/update-quality", {
+ 13932:           method: "POST",
+ 13933:           headers: {
+ 13934:             "Content-Type": "application/json",
+ 13935:             ...buildAuthHeaders(),
+ 13936:           },
+ 13937:           body: JSON.stringify({ quality: normalizeQualityPreference(quality) }),
+ 13938:         });
+ 13939: 
+ 13940:         const result = await response.json().catch(() => ({}));
+ 13941:         if (!response.ok) {
+ 13942:           throw new Error(result?.message || "Nem sikerALlt menteni a minLsAgi beA?llAtA?st.");
+ 13943:         }
+ 13944: 
+ 13945:         return result;
+ 13946:       }
+ 13947: 
+ 13948:       function buildVideoQueryParams() {
+ 13949:         const params = new URLSearchParams();
+ 13950:         Object.entries(videoFilters).forEach(([key, value]) => {
+ 13951:           if (Array.isArray(value)) {
+ 13952:             if (value.length) {
+ 13953:               value.forEach((entry) => params.append(key, entry));
+ 13954:             }
+ 13955:           } else if (value !== undefined && value !== null && value !== "") {
+ 13956:             params.append(key, value);
+ 13957:           }
+ 13958:         });
+ 13959:         return params;
+ 13960:       }
+ 13961: 
+ 13962:       async function loadVideos() {
+ 13963:         if (!videoGridContainer) {
+ 13964:           return;
+ 13965:         }
+ 13966: 
+ 13967:         if (!hasClipAccess()) {
+ 13968:           updateClipAccessUI();
+ 13969:           return;
+ 13970:         }
+ 13971: 
+ 13972:         videoGridContainer.innerHTML = "";
+ 13973:         if (videoPagination) videoPagination.innerHTML = "";
+ 13974: 
+ 13975:         const params = buildVideoQueryParams();
+ 13976: 
+ 13977:         try {
+ 13978:           const response = await fetch(`/api/videos?${params.toString()}`, {
+ 13979:             headers: buildAuthHeaders(),
+ 13980:           });
+ 13981: 
+ 13982:           if (response.status === 401) {
+ 13983:             updateUIForLoggedOut();
+ 13984:             throw new Error("Be kell jelentkezned a klipek megtekintAsAhez.");
+ 13985:           }
+ 13986: 
+ 13987:           if (response.status === 403) {
+ 13988:             localStorage.setItem(SESSION_KEYS.canViewClips, "false");
+ 13989:             updateClipAccessUI();
+ 13990:             throw new Error("Nincs jogosultsA?god a klipek megtekintAsAhez.");
+ 13991:           }
+ 13992: 
+ 13993:           if (!response.ok) {
+ 13994:             throw new Error("Nem sikerALlt betAlteni a videAlkat.");
+ 13995:           }
+ 13996: 
+ 13997:           const { data, pagination } = await response.json();
+ 13998:           videoFilters.page = pagination?.currentPage || videoFilters.page;
+ 13999: 
+ 14000:           currentVideoList = Array.isArray(data) ? data : [];
+ 14001: 
+ 14002:           if (!Array.isArray(data) || data.length === 0) {
+ 14003:             videoGridContainer.innerHTML = "<p>MAg senki nem tAltAtt fel videAlt.</p>";
+ 14004:             return;
+ 14005:           }
+ 14006: 
+ 14007:           renderVideoGrid(data);
+ 14008:           renderPagination(pagination);
+ 14009:         } catch (error) {
+ 14010:           console.error("VideAlk betAltAsi hibA?ja:", error);
+ 14011:           currentVideoList = [];
+ 14012:           videoGridContainer.innerHTML = "<p>Nem sikerALlt betAlteni a videAlkat.</p>";
+ 14013:         }
+ 14014:       }
+ 14015: 
+ 14016:       function cleanVideoTitle(rawTitle) {
+ 14017:         if (!rawTitle) return "";
+ 14018: 
+ 14019:         const trimmed = rawTitle.trim();
+ 14020:         const looksLikeMojibake = /[\u00C3\u00C2]/.test(trimmed);
+ 14021:         if (looksLikeMojibake) {
+ 14022:           const decoded = new TextDecoder("utf-8").decode(
+ 14023:             Uint8Array.from(trimmed.split("").map((char) => char.charCodeAt(0)))
+ 14024:           );
+ 14025:           if (decoded && !decoded.includes("\uFFFD")) {
+ 14026:             return decoded.replace(/\.[^.]+$/i, "").trim();
+ 14027:           }
+ 14028:         }
+ 14029: 
+ 14030:         return trimmed.replace(/\.[^.]+$/i, "").trim();
+ 14031:       }
+ 14032: 
+ 14033:       const CLIP_NAME_TAGS = ["DA?vid", "BalA?zs"];
+ 14034:       const clipNameTagPriority = new Map(
+ 14035:         CLIP_NAME_TAGS.map((name, index) => [name.toLowerCase(), index])
+ 14036:       );
+ 14037: 
+ 14038:       function orderClipTags(tags) {
+ 14039:         if (!Array.isArray(tags)) return [];
+ 14040:         if (tags.length < 2) return tags;
+ 14041: 
+ 14042:         return [...tags].sort((first, second) => {
+ 14043:           const firstName = (first?.name || "").toLowerCase();
+ 14044:           const secondName = (second?.name || "").toLowerCase();
+ 14045:           const firstIsName = clipNameTagPriority.has(firstName) ? 0 : 1;
+ 14046:           const secondIsName = clipNameTagPriority.has(secondName) ? 0 : 1;
+ 14047: 
+ 14048:           if (firstIsName !== secondIsName) {
+ 14049:             return firstIsName - secondIsName;
+ 14050:           }
+ 14051: 
+ 14052:           if (firstIsName === 0 && secondIsName === 0) {
+ 14053:             return clipNameTagPriority.get(firstName) - clipNameTagPriority.get(secondName);
+ 14054:           }
+ 14055: 
+ 14056:           return 0;
+ 14057:         });
+ 14058:       }
+ 14059: 
+ 14060:       async function handleClipTitleEdit(video, titleElement) {
+ 14061:         if (!video || !Number.isFinite(video.id)) {
+ 14062:           return;
+ 14063:         }
+ 14064: 
+ 14065:         const currentTitle = cleanVideoTitle(video.original_name || video.filename || "") || "NAvtelen videAl";
+ 14066:         const updatedTitle = window.prompt("Add meg az Asj klipcAmet:", currentTitle);
+ 14067: 
+ 14068:         if (updatedTitle === null) {
+ 14069:           return;
+ 14070:         }
+ 14071: 
+ 14072:         const normalizedTitle = updatedTitle.trim();
+ 14073:         if (!normalizedTitle || normalizedTitle === currentTitle) {
+ 14074:           return;
+ 14075:         }
+ 14076: 
+ 14077:         try {
+ 14078:           const response = await fetch(`/api/videos/${video.id}/title`, {
+ 14079:             method: "PATCH",
+ 14080:             headers: {
+ 14081:               "Content-Type": "application/json",
+ 14082:               ...buildAuthHeaders(),
+ 14083:             },
+ 14084:             body: JSON.stringify({ title: normalizedTitle }),
+ 14085:           });
+ 14086: 
+ 14087:           const data = await response.json().catch(() => null);
+ 14088:           if (!response.ok) {
+ 14089:             const message = data?.message || "Nem sikerALlt frissAteni a klip cAmAt.";
+ 14090:             throw new Error(message);
+ 14091:           }
+ 14092: 
+ 14093:           const newTitle = data?.original_name || normalizedTitle;
+ 14094:           video.original_name = newTitle;
+ 14095:           if (titleElement) {
+ 14096:             titleElement.textContent = cleanVideoTitle(newTitle) || "NAvtelen videAl";
+ 14097:           }
+ 14098: 
+ 14099:           if (videoPlayerModal?.classList.contains("open")) {
+ 14100:             const activeVideo = currentVideoList[currentVideoIndex];
+ 14101:             if (activeVideo?.id === video.id && modalVideoTitle) {
+ 14102:               modalVideoTitle.textContent = cleanVideoTitle(newTitle) || "NAvtelen videAl";
+ 14103:             }
+ 14104:           }
+ 14105: 
+ 14106:           showClipToast(data?.message || "A klip cAme frissALlt.");
+ 14107:         } catch (error) {
+ 14108:           console.error("Klip cAm mAldosAtA?si hiba:", error);
+ 14109:           alert(error.message || "Nem sikerALlt frissAteni a klip cAmAt.");
+ 14110:         }
+ 14111:       }
+ 14112: 
+ 14113:       function renderVideoGrid(videos) {
+ 14114:         videoGridContainer.innerHTML = "";
+ 14115:         videos.forEach((video, index) => {
+ 14116:           const card = document.createElement("div");
+ 14117:           card.className = "video-card";
+ 14118: 
+ 14119:           const header = document.createElement("div");
+ 14120:           header.className = "video-card__header";
+ 14121: 
+ 14122:           const title = document.createElement("p");
+ 14123:           title.className = "video-card__title";
+ 14124:           const rawTitle = video.original_name || video.filename;
+ 14125:           title.textContent = cleanVideoTitle(rawTitle) || "NAvtelen videAl";
+ 14126:           header.appendChild(title);
+ 14127: 
+ 14128:           if (isAdminUser()) {
+ 14129:             const editBtn = document.createElement("button");
+ 14130:             editBtn.type = "button";
+ 14131:             editBtn.className = "video-card__edit";
+ 14132:             editBtn.title = "Klip cAmAnek szerkesztAse";
+ 14133:             editBtn.setAttribute("aria-label", "Klip cAmAnek szerkesztAse");
+ 14134:             editBtn.innerHTML = `
+ 14135:               <svg class="video-card__edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+ 14136:                 <path
+ 14137:                   fill="currentColor"
+ 14138:                   d="M3.6 16.8 3 21l4.2-.6L19.1 8.5 15.5 4.9 3.6 16.8Zm16.8-9.2c.2-.2.2-.5 0-.7l-2.3-2.3c-.2-.2-.5-.2-.7 0l-1.9 1.9 3 3 1.9-1.9Z"
+ 14139:                 />
+ 14140:               </svg>
+ 14141:             `;
+ 14142:             editBtn.addEventListener("click", (event) => {
+ 14143:               event.stopPropagation();
+ 14144:               handleClipTitleEdit(video, title);
+ 14145:             });
+ 14146:             header.appendChild(editBtn);
+ 14147:           }
+ 14148: 
+ 14149:           card.appendChild(header);
+ 14150: 
+ 14151:           const videoElement = document.createElement("video");
+ 14152:           videoElement.poster = video.thumbnail_filename
+ 14153:             ? `/uploads/${video.thumbnail_filename}`
+ 14154:             : "";
+ 14155:           videoElement.dataset.src = `/uploads/${video.filename}`;
+ 14156:           videoElement.controls = false;
+ 14157:           videoElement.removeAttribute("controls");
+ 14158:           videoElement.preload = "none";
+ 14159:           videoElement.playsInline = true;
+ 14160:           videoElement.setAttribute("playsinline", "");
+ 14161:           videoElement.setAttribute("webkit-playsinline", "");
+ 14162: 
+ 14163:           let hasPlaybackError = false;
+ 14164: 
+ 14165:           videoElement.addEventListener("click", () => {
+ 14166:             openVideoModal(index);
+ 14167:           });
+ 14168: 
+ 14169:           videoElement.addEventListener("error", () => {
+ 14170:             if (hasPlaybackError) {
+ 14171:               return;
+ 14172:             }
+ 14173: 
+ 14174:             hasPlaybackError = true;
+ 14175:             card.classList.add("video-card--error");
+ 14176: 
+ 14177:             const errorMessage = document.createElement("p");
+ 14178:             errorMessage.className = "video-card__error";
+ 14179:             errorMessage.textContent =
+ 14180:               "Nem sikerALlt betAlteni a videAlt. FrissAtsd az oldalt vagy prAlbA?ld meg kAsLbb.";
+ 14181:             card.appendChild(errorMessage);
+ 14182:           });
+ 14183: 
+ 14184:           videoElement.addEventListener("loadeddata", () => {
+ 14185:             card.classList.remove("video-card--error");
+ 14186:             hasPlaybackError = false;
+ 14187:             const existingError = card.querySelector(".video-card__error");
+ 14188:             if (existingError) {
+ 14189:               existingError.remove();
+ 14190:             }
+ 14191:           });
+ 14192: 
+ 14193:           const meta = document.createElement("div");
+ 14194:           meta.className = "video-card__meta";
+ 14195:           const uploader = document.createElement("span");
+ 14196:           uploader.textContent = `FeltAltAtte: ${video.username || "Ismeretlen"}`;
+ 14197:           const uploadedAt = document.createElement("span");
+ 14198:           const displayedDate = video.content_created_at || video.uploaded_at;
+ 14199:           uploadedAt.textContent = formatDate(displayedDate);
+ 14200:           meta.append(uploader, uploadedAt);
+ 14201: 
+ 14202:           const qualityInfo = document.createElement("div");
+ 14203:           qualityInfo.className = "video-card__qualities";
+ 14204:           qualityInfo.textContent = `ElArhetL minLsAgek: ${listAvailableQualities(video).join(", ")}`;
+ 14205: 
+ 14206:           const tagList = document.createElement("div");
+ 14207:           tagList.className = "tag-list";
+ 14208:           orderClipTags(video.tags || []).forEach((tag) => {
+ 14209:             const chip = document.createElement("span");
+ 14210:             chip.className = "tag-chip";
+ 14211:             chip.style.setProperty("--tag-color", normalizeColor(tag.color));
+ 14212:             chip.textContent = tag.name;
+ 14213:             chip.setAttribute("role", "button");
+ 14214:             chip.tabIndex = 0;
+ 14215:             if (tag && tag.id !== undefined && tag.id !== null) {
+ 14216:               chip.dataset.tagId = String(tag.id);
+ 14217:               chip.addEventListener("click", (event) => {
+ 14218:                 event.stopPropagation();
+ 14219:                 selectClipTag(tag.id);
+ 14220:               });
+ 14221:             } else if (tag?.name) {
+ 14222:               chip.dataset.tagName = String(tag.name);
+ 14223:               chip.addEventListener("click", (event) => {
+ 14224:                 event.stopPropagation();
+ 14225:                 const resolvedTagId = getTagIdFromChip(chip);
+ 14226:                 if (resolvedTagId) {
+ 14227:                   selectClipTag(resolvedTagId);
+ 14228:                 }
+ 14229:               });
+ 14230:             }
+ 14231:             tagList.appendChild(chip);
+ 14232:           });
+ 14233: 
+ 14234:           
+ 14235:           card.appendChild(videoElement);
+ 14236:           card.appendChild(meta);
+ 14237:           card.appendChild(qualityInfo);
+ 14238:           if (tagList.childElementCount) {
+ 14239:             card.appendChild(tagList);
+ 14240:           }
+ 14241: 
+ 14242:           if (isAdminUser()) {
+ 14243:             const actions = document.createElement("div");
+ 14244:             actions.className = "video-card__actions";
+ 14245:             const deleteBtn = document.createElement("button");
+ 14246:             deleteBtn.className = "delete-btn";
+ 14247:             deleteBtn.textContent = "TArlAs";
+ 14248:             deleteBtn.addEventListener("click", async () => {
+ 14249:               if (!confirm("Biztosan tArlAd a videAlt?")) return;
+ 14250:               try {
+ 14251:                 const response = await fetch(`/api/videos/${video.id}`, {
+ 14252:                   method: "DELETE",
+ 14253:                   headers: buildAuthHeaders(),
+ 14254:                 });
+ 14255:                 const result = await response.json().catch(() => null);
+ 14256:                 if (!response.ok) {
+ 14257:                   throw new Error((result && result.message) || "Nem sikerALlt tArAlni a videAlt.");
+ 14258:                 }
+ 14259:                 await loadVideos();
+ 14260:               } catch (error) {
+ 14261:                 alert(error.message);
+ 14262:               }
+ 14263:             });
+ 14264:             actions.appendChild(deleteBtn);
+ 14265:             card.appendChild(actions);
+ 14266:           }
+ 14267: 
+ 14268:           videoGridContainer.appendChild(card);
+ 14269:         });
+ 14270:       }
+ 14271: 
+ 14272:       function openVideoModal(index) {
+ 14273:         if (!videoPlayerModal || !modalVideoPlayer || !Array.isArray(currentVideoList)) {
+ 14274:           return;
+ 14275:         }
+ 14276: 
+ 14277:         if (!currentVideoList.length) {
+ 14278:           return;
+ 14279:         }
+ 14280: 
+ 14281:         activeVideoModalContext = "clips";
+ 14282:         currentVideoIndex = ((index % currentVideoList.length) + currentVideoList.length) % currentVideoList.length;
+ 14283:         const activeVideo = currentVideoList[currentVideoIndex];
+ 14284:         if (!activeVideo) {
+ 14285:           return;
+ 14286:         }
+ 14287: 
+ 14288:         const rawTitle = activeVideo.original_name || activeVideo.filename;
+ 14289:         modalVideoTitle.textContent = cleanVideoTitle(rawTitle) || "NAvtelen videAl";
+ 14290:         const videoElements = videoGridContainer.querySelectorAll(".video-card video");
+ 14291:         const { src, originalSource } = getPreferredVideoSource(activeVideo, currentVideoQuality);
+ 14292:         const originalSrc = originalSource || `/uploads/${activeVideo.filename}`;
+ 14293:         const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src || "";
+ 14294:         const resolvedSource = src || sourceFromGrid || originalSrc;
+ 14295: 
+ 14296:         modalVideoPlayer.addEventListener(
+ 14297:           "error",
+ 14298:           () => {
+ 14299:             if (modalVideoPlayer.src !== originalSrc) {
+ 14300:               modalVideoPlayer.src = originalSrc;
+ 14301:               modalVideoPlayer.load();
+ 14302:               modalVideoPlayer.play().catch(() => {});
+ 14303:             }
+ 14304:           },
+ 14305:           { once: true }
+ 14306:         );
+ 14307: 
+ 14308:         modalVideoPlayer.src = resolvedSource;
+ 14309:         modalVideoPlayer.load();
+ 14310:         modalVideoPlayer.play().catch(() => {});
+ 14311: 
+ 14312:         videoPlayerModal.classList.add("open");
+ 14313:         videoPlayerModal.setAttribute("aria-hidden", "false");
+ 14314:         closeVideoModalBtn?.focus({ preventScroll: true });
+ 14315:       }
+ 14316: 
+ 14317:       function closeVideoModal() {
+ 14318:         if (!videoPlayerModal || !modalVideoPlayer) {
+ 14319:           return;
+ 14320:         }
+ 14321: 
+ 14322:         modalVideoPlayer.pause();
+ 14323:         modalVideoPlayer.removeAttribute("src");
+ 14324:         modalVideoPlayer.load();
+ 14325:         videoPlayerModal.classList.remove("open");
+ 14326:         videoPlayerModal.setAttribute("aria-hidden", "true");
+ 14327:         activeVideoModalContext = "clips";
+ 14328:       }
+ 14329: 
+ 14330:       function showNextVideo() {
+ 14331:         if (activeVideoModalContext === "archive") {
+ 14332:           showNextArchiveVideo();
+ 14333:         } else {
+ 14334:           if (!currentVideoList.length) {
+ 14335:             return;
+ 14336:           }
+ 14337:           const nextIndex = (currentVideoIndex + 1) % currentVideoList.length;
+ 14338:           openVideoModal(nextIndex);
+ 14339:         }
+ 14340:       }
+ 14341: 
+ 14342:       function showPrevVideo() {
+ 14343:         if (activeVideoModalContext === "archive") {
+ 14344:           showPrevArchiveVideo();
+ 14345:         } else {
+ 14346:           if (!currentVideoList.length) {
+ 14347:             return;
+ 14348:           }
+ 14349:           const prevIndex = (currentVideoIndex - 1 + currentVideoList.length) % currentVideoList.length;
+ 14350:           openVideoModal(prevIndex);
+ 14351:         }
+ 14352:       }
+ 14353: 
+ 14354:       function renderPagination(pagination) {
+ 14355:         if (!videoPagination || !pagination || pagination.totalPages <= 1) {
+ 14356:           return;
+ 14357:         }
+ 14358: 
+ 14359:         videoPagination.innerHTML = "";
+ 14360:         const { currentPage, totalPages } = pagination;
+ 14361: 
+ 14362:         const createButton = (pageNumber, text = null) => {
+ 14363:           const btn = document.createElement("button");
+ 14364:           btn.textContent = text || pageNumber;
+ 14365:           btn.classList.toggle("active", pageNumber === currentPage);
+ 14366:           btn.addEventListener("click", () => {
+ 14367:             if (pageNumber === currentPage) return;
+ 14368:             videoFilters.page = pageNumber;
+ 14369:             loadVideos();
+ 14370:           });
+ 14371:           return btn;
+ 14372:         };
+ 14373: 
+ 14374:         const windowSize = 2;
+ 14375:         const start = Math.max(1, currentPage - windowSize);
+ 14376:         const end = Math.min(totalPages, currentPage + windowSize);
+ 14377: 
+ 14378:         if (start > 1) {
+ 14379:           videoPagination.appendChild(createButton(1));
+ 14380:           if (start > 2) {
+ 14381:             const ellipsis = document.createElement("span");
+ 14382:             ellipsis.textContent = "...";
+ 14383:             videoPagination.appendChild(ellipsis);
+ 14384:           }
+ 14385:         }
+ 14386: 
+ 14387:         for (let page = start; page <= end; page += 1) {
+ 14388:           videoPagination.appendChild(createButton(page));
+ 14389:         }
+ 14390: 
+ 14391:         if (end < totalPages) {
+ 14392:           if (end < totalPages - 1) {
+ 14393:             const ellipsis = document.createElement("span");
+ 14394:             ellipsis.textContent = "...";
+ 14395:             videoPagination.appendChild(ellipsis);
+ 14396:           }
+ 14397:           videoPagination.appendChild(createButton(totalPages));
+ 14398:         }
+ 14399:       }
+ 14400: 
+ 14401:       if (closeVideoModalBtn) {
+ 14402:         closeVideoModalBtn.addEventListener("click", closeVideoModal);
+ 14403:       }
+ 14404: 
+ 14405:       if (copyVideoLinkBtn) {
+ 14406:         copyVideoLinkBtn.addEventListener("click", () => {
+ 14407:           const videoLink = modalVideoPlayer.src;
+ 14408:           if (!videoLink) return;
+ 14409:           navigator.clipboard.writeText(videoLink).then(() => {
+ 14410:             const toast = activeVideoModalContext === "archive" ? showArchiveVideoToast : showClipToast;
+ 14411:             toast("Link mA?solva a vA?gAllapra!");
+ 14412:           }).catch(err => {
+ 14413:             console.error("Nem sikerALlt mA?solni: ", err);
+ 14414:           });
+ 14415:         });
+ 14416:       }
+ 14417: 
+ 14418:       if (prevVideoBtn) {
+ 14419:         prevVideoBtn.addEventListener("click", showPrevVideo);
+ 14420:       }
+ 14421: 
+ 14422:       if (nextVideoBtn) {
+ 14423:         nextVideoBtn.addEventListener("click", showNextVideo);
+ 14424:       }
+ 14425: 
+ 14426:       if (videoPlayerModal) {
+ 14427:         videoPlayerModal.addEventListener("click", (event) => {
+ 14428:           if (event.target === videoPlayerModal) {
+ 14429:             closeVideoModal();
+ 14430:           }
+ 14431:         });
+ 14432:       }
+ 14433: 
+ 14434:       document.addEventListener("keydown", (event) => {
+ 14435:         if (!videoPlayerModal?.classList.contains("open")) {
+ 14436:           return;
+ 14437:         }
+ 14438: 
+ 14439:         if (event.key === "Escape") {
+ 14440:           closeVideoModal();
+ 14441:         } else if (event.key === "ArrowRight") {
+ 14442:           event.preventDefault();
+ 14443:           showNextVideo();
+ 14444:         } else if (event.key === "ArrowLeft") {
+ 14445:           event.preventDefault();
+ 14446:           showPrevVideo();
+ 14447:         }
+ 14448:       });
+ 14449: 
+ 14450:       if (videoSearchInput) {
+ 14451:         videoSearchInput.addEventListener("input", () => {
+ 14452:           videoFilters.search = videoSearchInput.value.trim();
+ 14453:           videoFilters.page = 1;
+ 14454:           if (videoSearchTimeout) {
+ 14455:             clearTimeout(videoSearchTimeout);
+ 14456:           }
+ 14457:           videoSearchTimeout = setTimeout(() => {
+ 14458:             loadVideos();
+ 14459:           }, 2000);
+ 14460:         });
+ 14461:       }
+ 14462: 
+ 14463:       function renderCustomTagSelect() {
+ 14464:         if (!tagSelectContainer || !tagSelectDropdown || !tagSelectBox || tagSelectHandlersAttached) {
+ 14465:           return;
+ 14466:         }
+ 14467: 
+ 14468:         const handleTagSelection = (tagId) => {
+ 14469:           selectClipTag(tagId);
+ 14470:         };
+ 14471: 
+ 14472:         const handleChipRemoval = (event) => {
+ 14473:           const removeBtn = event.target.closest(".custom-select-chip__remove");
+ 14474:           if (!removeBtn) return;
+ 14475:           const chip = removeBtn.closest(".custom-select-chip");
+ 14476:           const tagId = chip?.dataset?.value;
+ 14477:           if (!tagId) return;
+ 14478:           event.stopPropagation();
+ 14479:           videoFilters.tag = videoFilters.tag.filter((id) => String(id) !== String(tagId));
+ 14480:           videoFilters.page = 1;
+ 14481:           renderTagSelector();
+ 14482:           loadVideos();
+ 14483:         };
+ 14484: 
+ 14485:         const handleOptionClick = (event) => {
+ 14486:           const option = event.target.closest(".custom-select-option");
+ 14487:           if (!option) return;
+ 14488:           event.stopPropagation();
+ 14489:           if (option.disabled) return;
+ 14490:           handleTagSelection(option.dataset.value);
+ 14491:         };
+ 14492: 
+ 14493:         const handleContainerClick = (event) => {
+ 14494:           event.stopPropagation();
+ 14495:           if (event.target.closest(".custom-select-chip__remove")) {
+ 14496:             return;
+ 14497:           }
+ 14498:           if (event.target.closest(".custom-select-option")) {
+ 14499:             return;
+ 14500:           }
+ 14501:           tagSelectContainer.classList.toggle("active");
+ 14502:         };
+ 14503: 
+ 14504:         const handleOutsideClick = (event) => {
+ 14505:           if (!tagSelectContainer.contains(event.target)) {
+ 14506:             tagSelectContainer.classList.remove("active");
+ 14507:           }
+ 14508:         };
+ 14509: 
+ 14510:         tagSelectContainer.addEventListener("click", handleContainerClick);
+ 14511:         tagSelectDropdown.addEventListener("click", handleOptionClick);
+ 14512:         tagSelectBox.addEventListener("click", handleChipRemoval);
+ 14513:         document.addEventListener("click", handleOutsideClick);
+ 14514: 
+ 14515:         tagSelectHandlersAttached = true;
+ 14516:       }
+ 14517: 
+ 14518:       renderCustomTagSelect();
+ 14519:       attachClipTagHandlers();
+ 14520: 
+ 14521:       if (sortOrderSelect) {
+ 14522:         sortOrderSelect.addEventListener("change", () => {
+ 14523:           videoFilters.sort = sortOrderSelect.value === "oldest" ? "oldest" : "newest";
+ 14524:           localStorage.setItem(VIDEO_SORT_ORDER_KEY, videoFilters.sort);
+ 14525:           videoFilters.page = 1;
+ 14526:           loadVideos();
+ 14527:         });
+ 14528:       }
+ 14529: 
+ 14530:       if (videoQualitySelect) {
+ 14531:         videoQualitySelect.addEventListener("change", async () => {
+ 14532:           const selectedQuality = normalizeQualityPreference(videoQualitySelect.value);
+ 14533:           const previousQuality = currentVideoQuality;
+ 14534: 
+ 14535:           applyQualityPreference(selectedQuality);
+ 14536:           if (archiveVideoQualitySelect) {
+ 14537:             archiveVideoQualitySelect.value = currentVideoQuality;
+ 14538:           }
+ 14539: 
+ 14540:           if (!isUserLoggedIn()) {
+ 14541:             return;
+ 14542:           }
+ 14543: 
+ 14544:           try {
+ 14545:             await saveQualityPreferenceToServer(selectedQuality);
+ 14546:           } catch (error) {
+ 14547:             console.error("MinLsAgi beA?llAtA?s mentAse sikertelen:", error);
+ 14548:             showClipToast(error.message || "Nem sikerALlt menteni a minLsAgi beA?llAtA?st.");
+ 14549:             applyQualityPreference(previousQuality);
+ 14550:             if (archiveVideoQualitySelect) {
+ 14551:               archiveVideoQualitySelect.value = currentVideoQuality;
+ 14552:             }
+ 14553:           }
+ 14554:         });
+ 14555:       }
+ 14556: 
+ 14557:       if (pageSizeSelect) {
+ 14558:         pageSizeSelect.addEventListener("change", () => {
+ 14559:           const selected = Number.parseInt(pageSizeSelect.value, 10);
+ 14560:           const allowed = [12, 24, 40, 80];
+ 14561:           videoFilters.limit = allowed.includes(selected) ? selected : videoFilters.limit;
+ 14562:           localStorage.setItem(VIDEO_PAGE_SIZE_KEY, videoFilters.limit);
+ 14563:           videoFilters.page = 1;
+ 14564:           loadVideos();
+ 14565:         });
+ 14566:       }
+ 14567: 
+ 14568:       if (filterResetBtn) {
+ 14569:         filterResetBtn.addEventListener("click", () => {
+ 14570:           videoFilters.page = 1;
+ 14571:           videoFilters.search = "";
+ 14572:           videoFilters.tag = [];
+ 14573:           videoFilters.sort = "newest";
+ 14574:           if (videoSearchTimeout) {
+ 14575:             clearTimeout(videoSearchTimeout);
+ 14576:             videoSearchTimeout = null;
+ 14577:           }
+ 14578:           if (videoSearchInput) videoSearchInput.value = "";
+ 14579:           renderTagSelector();
+ 14580:           toggleTagDropdown(false);
+ 14581:           if (sortOrderSelect) {
+ 14582:             sortOrderSelect.value = videoFilters.sort;
+ 14583:             localStorage.setItem(VIDEO_SORT_ORDER_KEY, videoFilters.sort);
+ 14584:           }
+ 14585:           loadVideos();
+ 14586:         });
+ 14587:       }
+ 14588: 
+ 14589:       async function handleCreateTag() {
+ 14590:         if (!newTagNameInput || !createTagStatus) return;
+ 14591:         const name = newTagNameInput.value.trim();
+ 14592:         if (!name) {
+ 14593:           createTagStatus.textContent = "Add meg a cAmke nevAt.";
+ 14594:           return;
+ 14595:         }
+ 14596:         const color = normalizeColor(newTagColorInput?.value || DEFAULT_TAG_COLOR);
+ 14597:         if (tagColorButton) {
+ 14598:           tagColorButton.style.setProperty("--tag-color", color);
+ 14599:         }
+ 14600:         createTagStatus.textContent = "MentAs...";
+ 14601:         try {
+ 14602:           const response = await fetch("/api/tags", {
+ 14603:             method: "POST",
+ 14604:             headers: {
+ 14605:               ...buildAuthHeaders(),
+ 14606:               "Content-Type": "application/json",
+ 14607:             },
+ 14608:             body: JSON.stringify({ name, color }),
+ 14609:           });
+ 14610:           const result = await response.json().catch(() => null);
+ 14611:           if (!response.ok) {
+ 14612:             throw new Error((result && result.message) || "Nem sikerALlt lAtrehozni a cAmkAt.");
+ 14613:           }
+ 14614:           newTagNameInput.value = "";
+ 14615:           if (newTagColorInput) {
+ 14616:             newTagColorInput.value = DEFAULT_TAG_COLOR;
+ 14617:           }
+ 14618:           if (tagColorButton) {
+ 14619:             tagColorButton.style.setProperty("--tag-color", DEFAULT_TAG_COLOR);
+ 14620:           }
+ 14621:           createTagStatus.textContent = "CAmke lAtrehozva.";
+ 14622:           await fetchTags();
+ 14623:         } catch (error) {
+ 14624:           createTagStatus.textContent = error.message;
+ 14625:         }
+ 14626:       }
+ 14627: 
+ 14628:       async function handleDeleteTag() {
+ 14629:         if (!createTagStatus) return;
+ 14630:         const selectedOption = globalTagSelect?.selectedOptions?.[0];
+ 14631:         const tagId = Number.parseInt(selectedOption?.value, 10);
+ 14632:         if (!tagId) {
+ 14633:           createTagStatus.textContent = "VA?lassz ki egy cAmkAt a tArlAshez.";
+ 14634:           return;
+ 14635:         }
+ 14636: 
+ 14637:         createTagStatus.textContent = "CAmke tArlAse...";
+ 14638:         try {
+ 14639:           const response = await fetch(`/api/tags/${tagId}`, {
+ 14640:             method: "DELETE",
+ 14641:             headers: buildAuthHeaders(),
+ 14642:           });
+ 14643:           const result = await response.json().catch(() => null);
+ 14644:           if (!response.ok) {
+ 14645:             throw new Error((result && result.message) || "Nem sikerALlt tArAlni a cAmkAt.");
+ 14646:           }
+ 14647:           createTagStatus.textContent = "CAmke tArAlve.";
+ 14648:           if (globalTagSelect) {
+ 14649:             globalTagSelect.value = "";
+ 14650:           }
+ 14651:           await fetchTags();
+ 14652:         } catch (error) {
+ 14653:           createTagStatus.textContent = error.message;
+ 14654:         }
+ 14655:       }
+ 14656: 
+ 14657:       if (newTagColorInput && tagColorButton) {
+ 14658:         const updateTagColorPreview = () => {
+ 14659:           const color = normalizeColor(newTagColorInput.value || DEFAULT_TAG_COLOR);
+ 14660:           tagColorButton.style.setProperty("--tag-color", color);
+ 14661:         };
+ 14662: 
+ 14663:         tagColorButton.addEventListener("click", () => newTagColorInput.click());
+ 14664:         newTagColorInput.addEventListener("input", updateTagColorPreview);
+ 14665:         updateTagColorPreview();
+ 14666:       }
+ 14667: 
+ 14668:       if (createTagButton) {
+ 14669:         createTagButton.addEventListener("click", handleCreateTag);
+ 14670:       }
+ 14671: 
+ 14672:       if (deleteTagButton) {
+ 14673:         deleteTagButton.addEventListener("click", handleDeleteTag);
+ 14674:       }
+ 14675: 
+ 14676:       function resetUploadModal() {
+ 14677:         uploadQueue = [];
+ 14678:         fileSignatures.clear();
+ 14679:         uploadedVideoIds = [];
+ 14680:         isUploadCancelled = false;
+ 14681:         isUploading = false;
+ 14682:         currentUploadXhr = null;
+ 14683:         renderUploadQueue();
+ 14684:         updateUploadSummary();
+ 14685:         if (uploadBtn) {
+ 14686:           uploadBtn.disabled = true;
+ 14687:         }
+ 14688:         if (cancelUploadBtn) {
+ 14689:           cancelUploadBtn.disabled = false;
+ 14690:         }
+ 14691:         if (uploadStatus) {
+ 14692:           uploadStatus.textContent = "";
+ 14693:         }
+ 14694:         resetUploadProgress();
+ 14695:         if (uploadToast) {
+ 14696:           uploadToast.classList.remove("upload-toast--visible");
+ 14697:           uploadToast.textContent = "";
+ 14698:         }
+ 14699:         if (fileInput) {
+ 14700:           fileInput.value = "";
+ 14701:         }
+ 14702:         if (dropZone) {
+ 14703:           dropZone.classList.remove("drag-over");
+ 14704:         }
+ 14705:         if (globalTagSelect) {
+ 14706:           globalTagSelect.selectedIndex = -1;
+ 14707:         }
+ 14708:         if (createTagStatus) {
+ 14709:           createTagStatus.textContent = "";
+ 14710:         }
+ 14711:         if (newTagColorInput) {
+ 14712:           newTagColorInput.value = DEFAULT_TAG_COLOR;
+ 14713:         }
+ 14714:         if (tagColorButton) {
+ 14715:           tagColorButton.style.setProperty("--tag-color", DEFAULT_TAG_COLOR);
+ 14716:         }
+ 14717:       }
+ 14718: 
+ 14719:       function openUploadModal() {
+ 14720:         if (uploadModal) {
+ 14721:           uploadModal.style.display = "flex";
+ 14722:           uploadModal.classList.add("modal-overlay--visible");
+ 14723:         }
+ 14724:         fetchTags();
+ 14725:         resetUploadModal();
+ 14726:       }
+ 14727: 
+ 14728:       function closeUploadModal() {
+ 14729:         if (uploadModal) {
+ 14730:           uploadModal.classList.remove("modal-overlay--visible");
+ 14731:           uploadModal.style.display = "none";
+ 14732:         }
+ 14733:         resetUploadModal();
+ 14734:       }
+ 14735: 
+ 14736:       async function handleFileSelection(files) {
+ 14737:         const normalized = Array.isArray(files)
+ 14738:           ? files.filter(Boolean)
+ 14739:           : Array.from(files || []).filter(Boolean);
+ 14740: 

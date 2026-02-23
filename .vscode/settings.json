@@ -1,4 +1,6 @@
 {
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
   "workbench.colorCustomizations": {
     "activityBar.background": "#18341A",
     "titleBar.activeBackground": "#224825",

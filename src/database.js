@@ -20,6 +20,7 @@ async function initializeDatabase() {
         can_view_clips INTEGER DEFAULT 0,
         can_view_archive INTEGER DEFAULT 0,
         can_edit_archive INTEGER DEFAULT 0,
+        can_use_discord INTEGER DEFAULT 0,
         is_admin INTEGER DEFAULT 0,
         upload_count INTEGER DEFAULT 0,
         max_file_size_mb INTEGER DEFAULT 50,
@@ -43,6 +44,9 @@ async function initializeDatabase() {
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_archive INTEGER DEFAULT 0'
+    );
+    await client.query(
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS can_use_discord INTEGER DEFAULT 0'
     );
     await client.query(
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0'
@@ -106,6 +110,79 @@ async function initializeDatabase() {
     await client.query(
       'ALTER TABLE videos ADD COLUMN IF NOT EXISTS original_quality TEXT'
     );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS discord_categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        position INTEGER DEFAULT 0
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS discord_channels (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('text', 'voice')),
+        parent_id INTEGER REFERENCES discord_categories(id) ON DELETE SET NULL,
+        position INTEGER DEFAULT 0
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS discord2_messages (
+        id SERIAL PRIMARY KEY,
+        channel_id INTEGER NOT NULL REFERENCES discord_channels(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        author_name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_discord2_messages_channel_id ON discord2_messages(channel_id)'
+    );
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_discord2_messages_created_at ON discord2_messages(created_at)'
+    );
+
+    const discordCategorySeedResult = await client.query(
+      'SELECT COUNT(*)::int AS count FROM discord_categories'
+    );
+    const discordCategoryCount = Number(discordCategorySeedResult.rows?.[0]?.count || 0);
+
+    if (discordCategoryCount === 0) {
+      const textCategoryResult = await client.query(
+        'INSERT INTO discord_categories (name, position) VALUES ($1, $2) RETURNING id',
+        ['Szoveges csatornak', 0]
+      );
+      const voiceCategoryResult = await client.query(
+        'INSERT INTO discord_categories (name, position) VALUES ($1, $2) RETURNING id',
+        ['Hang csatornak', 1]
+      );
+
+      const textCategoryId = textCategoryResult.rows?.[0]?.id;
+      const voiceCategoryId = voiceCategoryResult.rows?.[0]?.id;
+
+      if (textCategoryId) {
+        await client.query(
+          'INSERT INTO discord_channels (name, type, parent_id, position) VALUES ($1, $2, $3, $4)',
+          ['altalanos', 'text', textCategoryId, 0]
+        );
+        await client.query(
+          'INSERT INTO discord_channels (name, type, parent_id, position) VALUES ($1, $2, $3, $4)',
+          ['bejelentesek', 'text', textCategoryId, 1]
+        );
+      }
+
+      if (voiceCategoryId) {
+        await client.query(
+          'INSERT INTO discord_channels (name, type, parent_id, position) VALUES ($1, $2, $3, $4)',
+          ['tarsalgo', 'voice', voiceCategoryId, 0]
+        );
+      }
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS tags (
@@ -479,6 +556,14 @@ async function initializeDatabase() {
 
     await client.query(`
       INSERT INTO settings (key, value) VALUES ('max_videos_per_user', '10') ON CONFLICT (key) DO NOTHING
+    `);
+
+    await client.query(`
+      INSERT INTO settings (key, value) VALUES ('discord2_server_name', 'UMKGL Szerver') ON CONFLICT (key) DO NOTHING
+    `);
+
+    await client.query(`
+      INSERT INTO settings (key, value) VALUES ('discord2_server_logo', '') ON CONFLICT (key) DO NOTHING
     `);
 
     console.log('Database tables are successfully created or already exist.');

@@ -1,4 +1,9 @@
 
+    const CLIENT_BUILD_VERSION = "20260218-17";
+    console.info(`[UMKGL] client build ${CLIENT_BUILD_VERSION}`);
+
+
+
     const ADMIN_SESSION_KEY = "isAdmin";
     const ADMIN_PREVIEW_KEY = "adminPreviewRole";
     const ADMIN_ONLY_SECTIONS = new Set(["admin"]);
@@ -16,6 +21,7 @@
     const adminNavBtn = document.getElementById("adminNavBtn");
     const programNavBtn = document.getElementById("programNavBtn");
     const fileTransferNavBtn = document.getElementById("fileTransferNavBtn");
+
     const userListContainer = document.getElementById("userListContainer");
     const savePermissionsBtn = document.getElementById("savePermissionsBtn");
     const videoManagementBtn = document.getElementById("videoManagementBtn");
@@ -193,6 +199,7 @@
       canViewClips: "canViewClips",
       canViewArchive: "canViewArchive",
       canEditArchive: "canEditArchive",
+      canUseDiscord: "canUseDiscord",
       profilePictureFilename: "profilePictureFilename",
     };
     const ARCHIVE_NAV_STATE_KEY = "archiveNavState";
@@ -251,7 +258,6 @@
     let archiveImageDragStartY = 0;
     let currentArchiveImageFiles = [];
     let activeArchiveImageIndex = -1;
-
     function isPollSectionActive() {
       return pollSection?.classList.contains("active");
     }
@@ -302,6 +308,7 @@
       maxScale: 2.5,
       zoomStep: 0.12,
     };
+
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
@@ -453,7 +460,7 @@
 
     function formatEta(remainingBytes, speedBps) {
       if (!Number.isFinite(remainingBytes) || !Number.isFinite(speedBps) || speedBps <= 0) {
-        return "∞";
+        return "?";
       }
       const seconds = remainingBytes / speedBps;
       if (seconds < 1) {
@@ -508,7 +515,7 @@
 
       const fileInfo = document.createElement("div");
       fileInfo.className = "transfer-card__filesize";
-      fileInfo.textContent = `${formatFileSize(size)} • ${mimeType || "Ismeretlen"}`;
+      fileInfo.textContent = `${formatFileSize(size)} \u2022 ${mimeType || "Ismeretlen"}`;
 
       meta.appendChild(filename);
       meta.appendChild(fileInfo);
@@ -530,7 +537,7 @@
       const speedEl = document.createElement("span");
       speedEl.textContent = "0 MB/s";
       const etaEl = document.createElement("span");
-      etaEl.textContent = "ETA: ∞";
+      etaEl.textContent = "ETA: ?";
       stats.appendChild(speedEl);
       stats.appendChild(etaEl);
 
@@ -991,7 +998,7 @@
           URL.revokeObjectURL(urlToRevoke);
         }, 4000);
 
-        finalizeTransfer(transfer, "Fájl mentése elindítva.");
+        finalizeTransfer(transfer, "Fájl sikeresen elküldve.");
       });
 
       if (transfer?.actions) {
@@ -1095,9 +1102,11 @@
 
       socket = io({
         auth: { token: getStoredToken() },
-        transports: ["websocket"],
+        transports: ["polling", "websocket"],
         upgrade: false,
+        rememberUpgrade: false,
         reconnection: true,
+        timeout: 15000,
       });
 
       socket.on("connect", () => {
@@ -1122,7 +1131,7 @@
 
       socket.on("disconnect", () => {
         clearReceiverList();
-        updateReceiverStatus("Kapcsolat bontva a jelző szerverrel.");
+        updateReceiverStatus("Kapcsolat bontva a jelzL szerverrel.");
         stopReceiverHeartbeat();
       });
     }
@@ -1372,7 +1381,7 @@
           });
 
           setTransferActions(transfer, [acceptBtn, rejectBtn]);
-          updateTransferStatus(transfer, "Várakozás elfogadásra...");
+          updateTransferStatus(transfer, "Batch elküldve, ACK kérés...");
 
           return;
         }
@@ -1427,13 +1436,13 @@
         }
 
         if (messageType === "reject") {
-          finalizeTransfer(transfer, "A fogadó elutasította a küldést.");
+          finalizeTransfer(transfer, "A címzett elutasította a küldést.");
           return;
         }
 
         if (messageType === "cancel") {
           transfer.isCancelled = true;
-          finalizeTransfer(transfer, "A feladó megszakította az átvitelt.");
+          finalizeTransfer(transfer, "A címzett megszakította az átvitelt.");
           conn.close();
         }
       });
@@ -1549,11 +1558,11 @@
       try {
         const ack = await sendSignalWithRetry(conn, transfer, { type: "complete" }, "complete_ack");
         if (ack && ack.success === false) {
-          finalizeTransfer(transfer, "A fogadó hibát jelzett a lezárásnál.");
+          finalizeTransfer(transfer, "A fogadó elutasította a küldést.");
           return;
         }
         updateTransferProgress(transfer, file.size, file.size);
-        finalizeTransfer(transfer, "Fájl sikeresen elküldve.");
+        finalizeTransfer(transfer, "Fájl mentése elindítva.");
       } catch (err) {
         finalizeTransfer(transfer, "Nem sikerült lezárni az átvitelt.");
       }
@@ -1744,7 +1753,7 @@
       removeBtn.type = "button";
       removeBtn.className = "poll-option-remove";
       removeBtn.setAttribute("aria-label", "Válaszlehetőség törlése");
-      removeBtn.textContent = "✕";
+      removeBtn.textContent = "\u00d7";
       removeBtn.addEventListener("click", () => {
         if (!optionsContainer) {
           return;
@@ -1863,7 +1872,7 @@
         if (poll?.created_at) {
             const createdAt = new Date(poll.created_at);
             if (!Number.isNaN(createdAt.valueOf())) {
-                metaText += ` • ${createdAt.toLocaleString("hu-HU")}`;
+                metaText += ` \u2022 ${createdAt.toLocaleString("hu-HU")}`;
             }
         }
         meta.textContent = metaText;
@@ -1949,7 +1958,7 @@
 
         const totalVotesInfo = document.createElement("div");
         totalVotesInfo.className = "poll-total-votes";
-        totalVotesInfo.textContent = `Összes szavazat: ${totalVotes}`;
+        totalVotesInfo.textContent = `Asszes szavazat: ${totalVotes}`;
         card.appendChild(totalVotesInfo);
 
         const actions = document.createElement("div");
@@ -2018,7 +2027,7 @@
           pollListContainer.appendChild(renderPoll(poll));
         });
       } catch (error) {
-        console.error("Szavazások betöltési hiba:", error);
+        console.error("Admin panel betöltési hiba:", error);
         pollListContainer.innerHTML = "";
         const errorElement = document.createElement("div");
         errorElement.className = "poll-empty";
@@ -2039,7 +2048,7 @@
       const originalText = button ? button.textContent : "";
       if (button) {
         button.disabled = true;
-        button.textContent = "Küldés...";
+        button.textContent = "Lezárás...";
       }
 
       try {
@@ -2108,14 +2117,14 @@
           const message =
             payload && payload.message
               ? payload.message
-              : "Nem sikerült lezárni a szavazást.";
+              : "Nem sikerült rögzíteni a szavazatot.";
           throw new Error(message);
         }
 
         await loadPolls();
       } catch (error) {
-        console.error("Szavazás lezárási hiba:", error);
-        alert(error.message || "Nem sikerült lezárni a szavazást.");
+        console.error("Szavazások betöltési hiba:", error);
+        alert(error.message || "Nem sikerült rögzíteni a szavazatot.");
       } finally {
         if (button) {
           button.disabled = false;
@@ -2250,7 +2259,7 @@
           await loadPolls();
         } catch (error) {
           console.error("Szavazás létrehozási hiba:", error);
-          alert(error.message || "Nem sikerült létrehozni a szavazást.");
+          alert(error.message || "Nem sikerült feldolgozni a képet.");
         } finally {
           if (submitButton) {
             submitButton.disabled = false;
@@ -2426,8 +2435,8 @@
             imageBlob = programImageInput.files[0];
           }
         } catch (error) {
-          console.error("Kép feldolgozási hiba:", error);
-          alert(error.message || "Nem sikerült feldolgozni a képet.");
+          console.error("Program letöltési hiba:", error);
+          alert(error.message || "Nem sikerült törölni a cikket.");
           return;
         }
 
@@ -2473,7 +2482,7 @@
           await loadPrograms();
         } catch (error) {
           console.error("Program feltöltési hiba:", error);
-          alert(error.message || "Nem sikerült feltölteni a programot.");
+          alert(error.message || "Nem sikerült frissíteni a klip címét.");
         } finally {
           if (submitProgramUploadBtn) {
             submitProgramUploadBtn.disabled = false;
@@ -2590,6 +2599,7 @@
       localStorage.removeItem(SESSION_KEYS.canViewClips);
       localStorage.removeItem(SESSION_KEYS.canViewArchive);
       localStorage.removeItem(SESSION_KEYS.canEditArchive);
+      localStorage.removeItem(SESSION_KEYS.canUseDiscord);
       localStorage.removeItem(SESSION_KEYS.profilePictureFilename);
       localStorage.removeItem(ARCHIVE_NAV_STATE_KEY);
 
@@ -2623,6 +2633,7 @@
       updateProgramAdminControls();
       updateAcademyAdminControls();
       updateFileTransferNavVisibility();
+      updateDiscord2NavVisibility();
       updateClipAccessUI();
       updateArchiveAccessUI();
       updatePollCreatorState(false);
@@ -2663,15 +2674,16 @@
         const thead = document.createElement("thead");
         thead.innerHTML = `
           <tr>
-            <th>Felhasználónév</th>
-            <th>Feltöltési jogosultság</th>
-            <th>P2P Jog</th>
-            <th>Klip nézési jog</th>
-            <th>Archívum megtekintés</th>
-            <th>Archívum szerkesztés</th>
-            <th>Max fájlméret (MB)</th>
-            <th>Videó limit</th>
-            <th>Feltöltött videók</th>
+            <th>Felhaszn\u00E1l\u00F3nAv</th>
+            <th>Felt\u00F6lt\u00E9si jogosults\u00E1g</th>
+            <th>P2P jog</th>
+            <th>Klip nAzAsi jog</th>
+            <th>ArchAvum megtekintAs</th>
+            <th>ArchAvum szerkesztAs</th>
+            <th>Discord 2 jog</th>
+            <th>Max f\u00E1jlm\u00E9ret (MB)</th>
+            <th>Vide? limit</th>
+            <th>FeltAltAtt videAlk</th>
           </tr>
         `;
       table.appendChild(thead);
@@ -2746,6 +2758,18 @@
         editArchiveLabel.append(" Szerkesztés");
         editArchiveCell.appendChild(editArchiveLabel);
         row.appendChild(editArchiveCell);
+
+        const discordAccessCell = document.createElement("td");
+        const discordAccessLabel = document.createElement("label");
+        discordAccessLabel.className = "permission-toggle";
+        const discordAccessCheckbox = document.createElement("input");
+        discordAccessCheckbox.type = "checkbox";
+        discordAccessCheckbox.name = "canUseDiscord";
+        discordAccessCheckbox.checked = Number(user.can_use_discord) === 1;
+        discordAccessLabel.appendChild(discordAccessCheckbox);
+        discordAccessLabel.append(" Discord 2");
+        discordAccessCell.appendChild(discordAccessLabel);
+        row.appendChild(discordAccessCell);
 
         viewArchiveCheckbox.addEventListener("change", () => {
           if (!viewArchiveCheckbox.checked) {
@@ -2849,7 +2873,7 @@
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        const message = data && data.message ? data.message : "Nem sikerült lekérdezni a feldolgozási állapotot.";
+        const message = data && data.message ? data.message : "Nem sikerült lekérdezni a klipeket.";
         throw new Error(message);
       }
 
@@ -2968,18 +2992,18 @@
           }
         </style>
         <div class="clip-window">
-          <h1>Feltöltött klipek</h1>
-          <p class="clip-window__subtitle">Egyszerű, áttekinthető lista a klipjeidről.</p>
+          <h1>FeltAltAtt klipek</h1>
+          <p class="clip-window__subtitle">Egyszer\u0171, \u00E1ttekinthet\u0151 lista a klipjeidr\u0151l.</p>
           <div class="clip-window__controls">
-            <label for="clipWindowVariant">Megjelenített fájlok</label>
+            <label for="clipWindowVariant">Megjelen\u00EDtett f\u00E1jlok</label>
             <select id="clipWindowVariant" class="clip-window__select">
-              <option value="original">Eredeti videók</option>
-              <option value="720p">720p videók</option>
-              <option value="other">Egyéb fájlok</option>
+              <option value="original">Eredeti videAlk</option>
+              <option value="720p">720p videAlk</option>
+              <option value="other">Egy\u00E9b f\u00E1jlok</option>
             </select>
             <span id="clipWindowCount" class="clip-window__count"></span>
           </div>
-          <div id="clipWindowStatus" class="clip-window__status">Klipek betöltése folyamatban...</div>
+          <div id="clipWindowStatus" class="clip-window__status">Klipek betAltAse folyamatban...</div>
           <div id="clipWindowTable"></div>
         </div>
       `;
@@ -3106,9 +3130,9 @@
         } else if (clip.category === "other") {
           extraParts.push("Típus: Egyéb fájl");
         } else {
-          extraParts.push("Verzió: Eredeti");
+          extraParts.push("Verzió: 720p");
         }
-        extraCell.textContent = extraParts.length ? extraParts.join(" • ") : "-";
+        extraCell.textContent = extraParts.length ? extraParts.join(" \u2022 ") : "-";
         row.appendChild(extraCell);
 
         const actionCell = doc.createElement("td");
@@ -3165,7 +3189,7 @@
         } catch (error) {
           console.error("Klip lista betöltési hiba:", error);
           if (statusEl) {
-            statusEl.textContent = error.message || "Nem sikerült betölteni a klipeket.";
+            statusEl.textContent = error.message || "Nem sikerült lekérdezni az állapotot.";
           }
         }
       };
@@ -3296,16 +3320,16 @@
           }
         </style>
         <div class="process-window">
-          <h1>Feldolgozási állapot</h1>
-          <p class="process-window__subtitle">Aktuális feladat és várakozó fájlok áttekintése.</p>
-          <div id="processStatusText" class="process-window__status">Állapot betöltése...</div>
+          <h1>Feldolgoz\u00E1si \u00E1llapot</h1>
+          <p class="process-window__subtitle">Aktu\u00E1lis feladat \u00E9s v\u00E1rakoz\u00F3 f\u00E1jlok \u00E1ttekint\u00E9se.</p>
+          <div id="processStatusText" class="process-window__status">Allapot betAltAse...</div>
           <div id="processCurrentTask"></div>
           <div class="process-window__queue-header">
-            <h2>Várakozó fájlok</h2>
+            <h2>V\u00E1rakoz\u00F3 f\u00E1jlok</h2>
             <span id="processQueueCount" class="process-window__badge"></span>
           </div>
           <ul id="processQueueList" class="process-window__list"></ul>
-          <button id="processRefreshBtn" type="button" class="process-window__refresh">Frissítés</button>
+          <button id="processRefreshBtn" type="button" class="process-window__refresh">FrissAtAs</button>
         </div>
       `;
 
@@ -3464,11 +3488,12 @@
             const viewClipsCheckbox = row.querySelector('input[name="canViewClips"]');
             const viewArchiveCheckbox = row.querySelector('input[name="canViewArchive"]');
             const editArchiveCheckbox = row.querySelector('input[name="canEditArchive"]');
+            const canUseDiscordCheckbox = row.querySelector('input[name="canUseDiscord"]');
             const maxFileSizeInput = row.querySelector('input[name="maxFileSizeMb"]');
             const maxVideosInput = row.querySelector('input[name="maxVideos"]');
             const userIdAttr = row.dataset.userId;
 
-            if (!uploadCheckbox || !transferCheckbox || !viewClipsCheckbox || !viewArchiveCheckbox || !editArchiveCheckbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
+            if (!uploadCheckbox || !transferCheckbox || !viewClipsCheckbox || !viewArchiveCheckbox || !editArchiveCheckbox || !canUseDiscordCheckbox || !maxFileSizeInput || !maxVideosInput || !userIdAttr) {
               return null;
             }
 
@@ -3497,6 +3522,7 @@
               canViewClips: viewClipsCheckbox.checked,
               canViewArchive,
               canEditArchive,
+              canUseDiscord: canUseDiscordCheckbox.checked,
               maxFileSizeMb: maxFileSizeValue,
               maxVideos: maxVideosValue,
             };
@@ -3536,8 +3562,8 @@
           alert((result && result.message) || "Jogosultságok sikeresen frissítve.");
           await loadAdminPanel();
         } catch (error) {
-          console.error("Jogosultság mentési hiba:", error);
-          alert(error.message || "Nem sikerült menteni a jogosultságokat.");
+          console.error("Klip lista betöltési hiba:", error);
+          alert(error.message || "Nem sikerült törölni a programot.");
         } finally {
           savePermissionsBtn.disabled = false;
           savePermissionsBtn.textContent = originalButtonText;
@@ -3639,6 +3665,7 @@
           const canViewClips = data.canViewClips === true || data.canViewClips === 1;
           const canEditArchive = data.canEditArchive === true || data.canEditArchive === 1;
           const canViewArchive = (data.canViewArchive === true || data.canViewArchive === 1) || canEditArchive;
+          const canUseDiscord = (data.canUseDiscord === true || data.canUseDiscord === 1) || data.isAdmin === true || data.isAdmin === 1;
           localStorage.setItem(SESSION_KEYS.token, data.token);
           localStorage.setItem(SESSION_KEYS.username, data.username);
           localStorage.setItem(SESSION_KEYS.isAdmin, data.isAdmin);
@@ -3646,6 +3673,7 @@
           localStorage.setItem(SESSION_KEYS.canViewClips, canViewClips ? "true" : "false");
           localStorage.setItem(SESSION_KEYS.canViewArchive, canViewArchive ? "true" : "false");
           localStorage.setItem(SESSION_KEYS.canEditArchive, canEditArchive ? "true" : "false");
+          localStorage.setItem(SESSION_KEYS.canUseDiscord, canUseDiscord ? "true" : "false");
           if (data.profile_picture_filename) {
             localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
           } else {
@@ -3720,8 +3748,10 @@
             localStorage.setItem(SESSION_KEYS.canViewClips, canViewClips ? "true" : "false");
             const canEditArchive = data.canEditArchive === true || data.canEditArchive === 1;
             const canViewArchive = (data.canViewArchive === true || data.canViewArchive === 1) || canEditArchive;
+            const canUseDiscord = (data.canUseDiscord === true || data.canUseDiscord === 1) || data.isAdmin === true || data.isAdmin === 1;
             localStorage.setItem(SESSION_KEYS.canViewArchive, canViewArchive ? "true" : "false");
             localStorage.setItem(SESSION_KEYS.canEditArchive, canEditArchive ? "true" : "false");
+            localStorage.setItem(SESSION_KEYS.canUseDiscord, canUseDiscord ? "true" : "false");
             if (data.profile_picture_filename) {
                 localStorage.setItem(SESSION_KEYS.profilePictureFilename, data.profile_picture_filename);
             } else {
@@ -4204,6 +4234,7 @@
       function applyAdminPreviewState() {
         updateAdminNavVisibility();
         updateFileTransferNavVisibility();
+        updateDiscord2NavVisibility();
         updateClipAccessUI();
         updateArchiveAccessUI();
         updatePollCreatorState();
@@ -4389,7 +4420,7 @@
           if (isFolderOpen && isVideoMode) {
             archiveCategoryHint.textContent = `${openedArchiveFolder} - videó mappa`;
           } else if (isFolderOpen) {
-            archiveCategoryHint.textContent = `${openedArchiveFolder} mappa tartalma`;
+            archiveCategoryHint.textContent = `${openedArchiveFolder} - videó mappa`;
           } else {
             archiveCategoryHint.textContent = "Dupla kattintással nyithatsz mappát.";
           }
@@ -4799,12 +4830,12 @@
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(data?.message || "Nem sikerült betölteni a fájlokat.");
+            throw new Error(data?.message || "Nem sikerült betölteni a mappákat.");
           }
           const files = Array.isArray(data?.files) ? data.files : [];
           renderArchiveFiles(files);
         } catch (error) {
-          console.error("Archívum fájl hiba:", error);
+          console.error("Archívum mappa hiba:", error);
           if (archiveFileEmpty) {
             archiveFileEmpty.textContent = error.message || "Nem sikerült betölteni a fájlokat.";
             archiveFileEmpty.style.display = "block";
@@ -5508,7 +5539,7 @@
           removeBtn.type = "button";
           removeBtn.className = "custom-select-chip__remove";
           removeBtn.setAttribute("aria-label", `${label.textContent} törlése`);
-          removeBtn.textContent = "×";
+          removeBtn.textContent = "\u00d7";
 
           chip.append(colorBar, label, removeBtn);
           archiveTagSelectBox.appendChild(chip);
@@ -6160,7 +6191,7 @@
             img.alt = item.displayName || item.file.name;
             thumbnail.appendChild(img);
           } else {
-            thumbnail.textContent = "🎞";
+            thumbnail.textContent = "VID";
           }
 
           const details = document.createElement("div");
@@ -6260,7 +6291,7 @@
           const remainingBytes = Math.max(safeTotalBytes - uploadedBytes, 0);
           archiveUploadProgressDetails.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(
             safeTotalBytes
-          )} • Hátra: ${formatBytes(remainingBytes)}`;
+          )} \u2022 H\u00E1tra: ${formatBytes(remainingBytes)}`;
         }
       }
 
@@ -6459,7 +6490,7 @@
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-              throw new Error(data?.message || "Nem sikerült létrehozni a mappát.");
+              throw new Error(data?.message || "Nem sikerült feltölteni a fájlokat.");
             }
             if (archiveFolderNameInput) {
               archiveFolderNameInput.value = "";
@@ -6473,7 +6504,7 @@
           } catch (error) {
             console.error("Archívum mappa létrehozási hiba:", error);
             if (archiveUploadStatus) {
-              archiveUploadStatus.textContent = error.message || "Nem sikerült létrehozni a mappát.";
+              archiveUploadStatus.textContent = error.message || "Nem sikerült feltölteni a fájlokat.";
             }
           }
         });
@@ -6501,7 +6532,7 @@
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-              throw new Error(data?.message || "Nem sikerült törölni a mappát.");
+              throw new Error(data?.message || "Nem sikerült átnevezni a mappát.");
             }
             if (selectedArchiveFolder === openedArchiveFolder) {
               selectedArchiveFolder = null;
@@ -6514,7 +6545,7 @@
           } catch (error) {
             console.error("Archívum mappa törlési hiba:", error);
             if (archiveUploadStatus) {
-              archiveUploadStatus.textContent = error.message || "Nem sikerült törölni a mappát.";
+              archiveUploadStatus.textContent = error.message || "Nem sikerült átnevezni a mappát.";
             }
           }
         });
@@ -6558,19 +6589,19 @@
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-              throw new Error(data?.message || "Nem sikerült átnevezni a mappát.");
+              throw new Error(data?.message || "Nem sikerült feltölteni a fájlokat.");
             }
 
             selectedArchiveFolder = nextName;
             openedArchiveFolder = nextName;
             if (archiveUploadStatus) {
-              archiveUploadStatus.textContent = "Mappa átnevezve.";
+              archiveUploadStatus.textContent = "Mappa létrehozva.";
             }
             await loadArchiveFolders();
           } catch (error) {
-            console.error("Archívum mappa átnevezési hiba:", error);
+            console.error("Archívum mappa létrehozási hiba:", error);
             if (archiveUploadStatus) {
-              archiveUploadStatus.textContent = error.message || "Nem sikerült átnevezni a mappát.";
+              archiveUploadStatus.textContent = error.message || "Nem sikerült feltölteni a fájlokat.";
             }
           }
         });
@@ -6614,7 +6645,7 @@
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-              throw new Error(data?.message || "Nem sikerült feltölteni a fájlokat.");
+              throw new Error(data?.message || "Nem sikerült átnevezni a mappát.");
             }
             if (archiveUploadStatus) {
               archiveUploadStatus.textContent = "Feltöltés kész.";
@@ -6624,7 +6655,7 @@
           } catch (error) {
             console.error("Archívum feltöltési hiba:", error);
             if (archiveUploadStatus) {
-              archiveUploadStatus.textContent = error.message || "Nem sikerült feltölteni a fájlokat.";
+              archiveUploadStatus.textContent = error.message || "Nem sikerült átnevezni a mappát.";
             }
           }
         });
@@ -6948,7 +6979,7 @@
           });
           const result = await response.json().catch(() => null);
           if (!response.ok) {
-            throw new Error((result && result.message) || "Nem sikerült törölni a címkét.");
+            throw new Error((result && result.message) || "Nem sikerült létrehozni a címkét.");
           }
           archiveCreateTagStatus.textContent = "Címke törölve.";
           if (archiveGlobalTagSelect) {
@@ -7074,7 +7105,7 @@
             }
 
             if (archiveUploadStatusText) {
-              archiveUploadStatusText.textContent = `Feltöltés: ${index + 1} / ${totalFiles} - "${
+              archiveUploadStatusText.textContent = `FeltAltAs: ${index + 1} / ${totalFiles} - "${
                 item.displayName || item.file.name
               }"...`;
             }
@@ -7448,12 +7479,17 @@
         return Array.from(document.querySelectorAll("nav a")).filter((link) => {
           const requiresAdmin = link.dataset.requiresAdmin === "true";
           const requiresTransfer = link.dataset.requiresTransfer === "true";
+          const requiresDiscord2 = link.dataset.requiresDiscord2 === "true";
 
           if (requiresAdmin && !isAdminUser()) {
             return false;
           }
 
           if (requiresTransfer && !hasFileTransferPermission()) {
+            return false;
+          }
+
+          if (requiresDiscord2 && !hasDiscord2Access()) {
             return false;
           }
 
@@ -7595,7 +7631,7 @@
           editBtn.type = "button";
           editBtn.className = "program-card__edit";
           editBtn.setAttribute("aria-label", "Program szerkesztése");
-          editBtn.textContent = "✎";
+          editBtn.textContent = "s";
           editBtn.addEventListener("click", () => openProgramEditModal(program));
           card.appendChild(editBtn);
 
@@ -7603,7 +7639,7 @@
           deleteBtn.type = "button";
           deleteBtn.className = "program-card__delete";
           deleteBtn.setAttribute("aria-label", "Program törlése");
-          deleteBtn.textContent = "✕";
+          deleteBtn.textContent = "\u00d7";
           deleteBtn.addEventListener("click", () => handleProgramDelete(program.id, card, deleteBtn));
           card.appendChild(deleteBtn);
         }
@@ -7662,7 +7698,7 @@
           }
 
           if (!response.ok) {
-            throw new Error("Nem sikerült letölteni a programot.");
+            throw new Error("Nem sikerült lekérni a programokat.");
           }
 
           const blob = await response.blob();
@@ -7676,7 +7712,7 @@
           URL.revokeObjectURL(objectUrl);
         } catch (error) {
           console.error("Program letöltési hiba:", error);
-          alert(error.message || "Nem sikerült letölteni a programot.");
+          alert(error.message || "Nem sikerült feltölteni a programot.");
         }
       }
 
@@ -7718,11 +7754,11 @@
           }
         } catch (error) {
           console.error("Program törlési hiba:", error);
-          alert(error.message || "Nem sikerült törölni a programot.");
+          alert(error.message || "Nem sikerült feldolgozni a képet.");
         } finally {
           if (button) {
             button.disabled = false;
-            button.textContent = originalText || "✕";
+            button.textContent = originalText || "\u00d7";
           }
         }
       }
@@ -7913,7 +7949,7 @@
         if (academyActiveTag === "all") {
           allBtn.classList.add("active");
         }
-        allBtn.textContent = "Összes";
+        allBtn.textContent = "Asszes";
         allBtn.addEventListener("click", () => {
           academyActiveTag = "all";
           renderAcademyFilters();
@@ -8164,7 +8200,7 @@
           academyEditorForm.reset();
         }
         if (academyPdfName) {
-          academyPdfName.textContent = "Nincs kiv?lasztva PDF.";
+          academyPdfName.textContent = "Nincs kiv\u00E1lasztva PDF.";
         }
         if (academyCoverPreview) {
           academyCoverPreview.removeAttribute("src");
@@ -8182,7 +8218,7 @@
           academyInlineImageStatus.textContent = "";
         }
 
-        // JAV?T?S: Csak ?resre ?ll?tjuk, nem pr?b?lunk bet?lteni semmit
+        // Reset the preview state without triggering a file reload.
         academyInlineImages = [];
         renderAcademyInlineImages();
 
@@ -8210,7 +8246,7 @@
         try {
           const response = await fetch("/api/academy/tags");
           if (!response.ok) {
-            throw new Error("Nem sikerült lekérni a tag-eket.");
+            throw new Error("Nem sikerült betölteni a videókat.");
           }
           const payload = await response.json();
           academyTags = Array.isArray(payload) ? payload.map((tag) => ({ ...tag, color: normalizeColor(tag.color) })) : [];
@@ -8232,7 +8268,7 @@
         try {
           const response = await fetch("/api/academy/articles");
           if (!response.ok) {
-            throw new Error("Nem sikerült betölteni a cikkeket.");
+            throw new Error("Nem sikerült lekérni a programokat.");
           }
           const payload = await response.json();
           academyArticles = Array.isArray(payload) ? payload : [];
@@ -8289,7 +8325,7 @@
 
         editingAcademyArticle = article;
         if (academyEditorTitle) {
-          academyEditorTitle.textContent = article ? "Cikk szerkeszt?se" : "?j cikk";
+          academyEditorTitle.textContent = article ? "Cikk szerkeszt\u00E9se" : "\u00DAj cikk";
         }
         if (academyEditorSaveBtn) {
           academyEditorSaveBtn.textContent = article ? "Frissítés" : "Mentés";
@@ -8311,7 +8347,7 @@
           academyContentInput.value = article?.content || "";
         }
 
-        // K?pek kezel?se
+        // KApek kezelAse
         if (academyCoverObjectUrl) {
           URL.revokeObjectURL(academyCoverObjectUrl);
           academyCoverObjectUrl = null;
@@ -8327,20 +8363,20 @@
           }
         }
         if (academyPdfName) {
-          academyPdfName.textContent = article?.pdf_original_filename || "Nincs kiv?lasztva PDF.";
+          academyPdfName.textContent = article?.pdf_original_filename || "Nincs kiv\u00E1lasztva PDF.";
         }
 
-        // Inputok null?z?sa
+        // Reset input fields.
         if (academyCoverInput) academyCoverInput.value = "";
         if (academyPdfInput) academyPdfInput.value = "";
         if (academyInlineImageInput) academyInlineImageInput.value = "";
         if (academyInlineImageStatus) academyInlineImageStatus.textContent = "";
 
-        // JAV?T?S: Itt t?ltj?k be a mentett k?peket a szerkeszt?be
+        // JAVATTAS: Itt tAltjALk be a mentett kApeket a szerkesztLbe
         if (article && article.inline_images) {
           academyInlineImages = normalizeAcademyInlineImages(article.inline_images).map((item) => {
             const url = item?.url || "";
-            // Ha van c?me, haszn?ljuk, ha nincs, gener?lunk a f?jln?vb?l
+            // Use the provided title when available, otherwise derive it from filename.
             const title = item?.title || formatInlineImageTitle(url.split("/").pop());
             return { url, title };
           }).filter((item) => item.url);
@@ -8416,7 +8452,7 @@
         try {
           const response = await fetch(`/api/academy/articles/${article.id}/download`);
           if (!response.ok) {
-            throw new Error("Nem sikerült letölteni a PDF-et.");
+            throw new Error("Nem sikerült lekérni a tag-eket.");
           }
           const blob = await response.blob();
           const objectUrl = URL.createObjectURL(blob);
@@ -8429,7 +8465,7 @@
           URL.revokeObjectURL(objectUrl);
         } catch (error) {
           console.error("PDF letöltési hiba:", error);
-          alert(error.message || "Nem sikerült letölteni a PDF-et.");
+          alert(error.message || "Nem sikerült feltölteni a programot.");
         }
       }
 
@@ -8486,13 +8522,13 @@
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(payload?.message || "Nem sikerült menteni a cikket.");
+            throw new Error(payload?.message || "Nem sikerült törölni a cikket.");
           }
           closeAcademyEditor();
           await loadAcademyData(true);
         } catch (error) {
           console.error("Cikk mentési hiba:", error);
-          alert(error.message || "Nem sikerült menteni a cikket.");
+          alert(error.message || "Nem sikerült törölni a cikket.");
         } finally {
           if (academyEditorSaveBtn) {
             academyEditorSaveBtn.disabled = false;
@@ -8508,7 +8544,7 @@
         const name = academyTagNameInput?.value?.trim();
         if (!name) {
           if (academyTagCreateStatus) {
-            academyTagCreateStatus.textContent = "Add meg a tag nev?t.";
+            academyTagCreateStatus.textContent = "Add meg a tag nev\u00E9t.";
           }
           return;
         }
@@ -8517,7 +8553,7 @@
           academyTagCreateBtn.disabled = true;
         }
         if (academyTagCreateStatus) {
-          academyTagCreateStatus.textContent = "Ment?s...";
+          academyTagCreateStatus.textContent = "MentAs...";
         }
 
         try {
@@ -8528,14 +8564,14 @@
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(payload?.message || "Nem siker?lt l?trehozni a taget.");
+            throw new Error(payload?.message || "Nem sikerült menteni a cikket.");
           }
           const createdId = payload?.id;
           if (academyTagNameInput) {
             academyTagNameInput.value = "";
           }
           if (academyTagCreateStatus) {
-            academyTagCreateStatus.textContent = "Tag l?trehozva.";
+            academyTagCreateStatus.textContent = "Tag l\u00E9trehozva.";
           }
           await loadAcademyTags(true);
           if (createdId && academyTagSelect) {
@@ -8546,9 +8582,9 @@
             });
           }
         } catch (error) {
-          console.error("Tag l?trehoz?si hiba:", error);
+          console.error("Kép feldolgozási hiba:", error);
           if (academyTagCreateStatus) {
-            academyTagCreateStatus.textContent = error.message || "Nem siker?lt l?trehozni a taget.";
+            academyTagCreateStatus.textContent = error.message || "Nem siker\u00FClt l\u00E9trehozni a taget.";
           }
         } finally {
           if (academyTagCreateBtn) {
@@ -8615,7 +8651,7 @@
           removeBtn.type = "button";
           removeBtn.className = "custom-select-chip__remove";
           removeBtn.setAttribute("aria-label", `${label.textContent} törlése`);
-          removeBtn.textContent = "×";
+          removeBtn.textContent = "\u00d7";
 
           chip.append(colorBar, label, removeBtn);
           tagSelectBox.appendChild(chip);
@@ -8908,7 +8944,7 @@
           const remainingBytes = Math.max(safeTotalBytes - uploadedBytes, 0);
           uploadProgressDetails.textContent = `${formatBytes(uploadedBytes)} / ${formatBytes(
             safeTotalBytes
-          )} • Hátra: ${formatBytes(remainingBytes)}`;
+          )} \u2022 H\u00E1tra: ${formatBytes(remainingBytes)}`;
         }
       }
 
@@ -8960,7 +8996,7 @@
             img.alt = item.displayName || item.file.name;
             thumbnail.appendChild(img);
           } else {
-            thumbnail.textContent = "📹";
+            thumbnail.textContent = "IMG";
           }
 
           const details = document.createElement("div");
@@ -9244,11 +9280,11 @@
           if (response.status === 403) {
             localStorage.setItem(SESSION_KEYS.canViewClips, "false");
             updateClipAccessUI();
-            throw new Error("Nincs jogosultságod a klipek megtekintéséhez.");
+            throw new Error("Be kell jelentkezned a klipek megtekintéséhez.");
           }
 
           if (!response.ok) {
-            throw new Error("Nem sikerült betölteni a videókat.");
+            throw new Error("Nem sikerült lekérni a tag-eket.");
           }
 
           const { data, pagination } = await response.json();
@@ -9264,7 +9300,7 @@
           renderVideoGrid(data);
           renderPagination(pagination);
         } catch (error) {
-          console.error("Videók betöltési hibája:", error);
+          console.error("Klip lista betöltési hiba:", error);
           currentVideoList = [];
           videoGridContainer.innerHTML = "<p>Nem sikerült betölteni a videókat.</p>";
         }
@@ -9274,12 +9310,12 @@
         if (!rawTitle) return "";
 
         const trimmed = rawTitle.trim();
-        const looksLikeMojibake = /[Ã�Â]/.test(trimmed);
+        const looksLikeMojibake = /[\u00C3\u00C2]/.test(trimmed);
         if (looksLikeMojibake) {
           const decoded = new TextDecoder("utf-8").decode(
             Uint8Array.from(trimmed.split("").map((char) => char.charCodeAt(0)))
           );
-          if (decoded && !decoded.includes("�")) {
+          if (decoded && !decoded.includes("\uFFFD")) {
             return decoded.replace(/\.[^.]+$/i, "").trim();
           }
         }
@@ -9363,7 +9399,7 @@
           showClipToast(data?.message || "A klip címe frissült.");
         } catch (error) {
           console.error("Klip cím módosítási hiba:", error);
-          alert(error.message || "Nem sikerült frissíteni a klip címét.");
+          alert(error.message || "Nem sikerült feldolgozni a képet.");
         }
       }
 
@@ -9899,7 +9935,7 @@
           });
           const result = await response.json().catch(() => null);
           if (!response.ok) {
-            throw new Error((result && result.message) || "Nem sikerült törölni a címkét.");
+            throw new Error((result && result.message) || "Nem sikerült létrehozni a címkét.");
           }
           createTagStatus.textContent = "Címke törölve.";
           if (globalTagSelect) {
@@ -10246,7 +10282,7 @@
                 }
 
                 if (uploadStatus) {
-                  uploadStatus.textContent = `Feltöltés: ${index + 1} / ${totalFiles} - "${
+                  uploadStatus.textContent = `FeltAltAs: ${index + 1} / ${totalFiles} - "${
                     item.displayName || item.file.name
                   }"...`;
                 }
@@ -10553,11 +10589,13 @@
         document.querySelectorAll("nav a").forEach((link) => {
           const requiresAdmin = link.dataset.requiresAdmin === "true";
           const requiresTransfer = link.dataset.requiresTransfer === "true";
+          const requiresDiscord2 = link.dataset.requiresDiscord2 === "true";
           const isActive = link.dataset.section === target;
 
           if (
             (requiresAdmin && !isAdminUser()) ||
-            (requiresTransfer && !hasFileTransferPermission())
+            (requiresTransfer && !hasFileTransferPermission()) ||
+            (requiresDiscord2 && !hasDiscord2Access())
           ) {
             link.classList.remove("active");
             return;
@@ -10600,6 +10638,12 @@
           loadPrograms();
         }
 
+        if (target === "discord2") {
+          ensureDiscord2Initialized();
+          renderDiscord2();
+          scrollDiscord2MessagesToBottom();
+        }
+
         if (target === "akademia") {
           closeAcademyReader();
           loadAcademyData();
@@ -10614,6 +10658,7 @@
         link.addEventListener("click", (e) => {
           const requiresAdmin = link.dataset.requiresAdmin === "true";
           const requiresTransfer = link.dataset.requiresTransfer === "true";
+          const requiresDiscord2 = link.dataset.requiresDiscord2 === "true";
 
           if (requiresAdmin && !isAdminUser()) {
             e.preventDefault();
@@ -10625,12 +10670,17 @@
             return;
           }
 
+          if (requiresDiscord2 && !hasDiscord2Access()) {
+            e.preventDefault();
+            return;
+          }
+
           e.preventDefault();
           showSection(link.dataset.section);
         });
       });
 
-      // Oldal betöltésekor a hash alapján nyitjuk meg a megfelelő szekciót
+      // On page load, open the correct section from the URL hash.
       window.addEventListener("load", () => {
         const hash = location.hash.replace("#", "") || "home";
         showSection(hash, false);
@@ -10652,3 +10702,4 @@
             // Legacy no-op (dynamic filters handled by renderAcademyFilters)
         }
   
+
