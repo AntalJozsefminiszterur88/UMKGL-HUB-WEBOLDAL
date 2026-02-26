@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    restart: unless-stopped
+    restart: always
     ports:
       - "3000:3000"
     environment:
@@ -9,6 +9,8 @@ services:
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
       - DB_NAME=mydb
+      - DB_STARTUP_MAX_RETRIES=120
+      - DB_STARTUP_RETRY_DELAY_MS=5000
       - BOT_API_URL=http://music_bot:5050/share-video
       - BASE_URL=https://umkgl.online 
       - UPLOADS_DIR=/usr/src/app/public/uploads
@@ -24,7 +26,7 @@ services:
       
   db:
     image: postgres:15-alpine
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
       interval: 10s

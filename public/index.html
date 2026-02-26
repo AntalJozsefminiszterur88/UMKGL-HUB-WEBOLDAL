@@ -29,7 +29,7 @@
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
       referrerpolicy="no-referrer"
     ></script>
-    <link rel="stylesheet" href="css/index.css?v=20260217-8">
+    <link rel="stylesheet" href="css/index.css?v=20260224-2">
   </head>
   <body>
     <header>
@@ -97,15 +97,15 @@
         </div>
       </div>
     </header>
-
-    <div id="loginModal">
+    <div id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
       <div class="modal-content">
-        <span id="closeLogin" style="float: right; cursor: pointer">&times;</span>
-        <h2>Bejelentkezés</h2>
-        <form id="loginForm">
-          <input type="text" id="loginUser" placeholder="Felhasználónév" required />
-          <input type="password" id="loginPass" placeholder="Jelszó" required />
-          <button type="submit">Belépés</button>
+        <button id="closeLogin" class="auth-modal__close" type="button" aria-label="Bez&#225;r&#225;s">&times;</button>
+        <h2 id="loginModalTitle">Bejelentkez&#233;s</h2>
+        <p class="auth-modal__subtitle">L&#233;pj be az UMKGL fi&#243;koddal.</p>
+        <form id="loginForm" class="auth-modal__form">
+          <input type="text" id="loginUser" placeholder="Felhaszn&#225;l&#243;n&#233;v" required />
+          <input type="password" id="loginPass" placeholder="Jelsz&#243;" required />
+          <button type="submit">Bel&#233;p&#233;s</button>
         </form>
       </div>
     </div>
@@ -1411,7 +1411,7 @@
     window.vad = window.vad || window.import_vad;
   </script>
   <script src="js/discord2.js?v=20260223-1"></script>
-  <script src="js/index.js?v=20260218-17"></script>
+  <script src="js/index.js?v=20260224-3"></script>
 
 
 

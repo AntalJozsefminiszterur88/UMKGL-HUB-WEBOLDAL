@@ -1,5 +1,5 @@
 
-    const CLIENT_BUILD_VERSION = "20260218-17";
+    const CLIENT_BUILD_VERSION = "20260224-3";
     console.info(`[UMKGL] client build ${CLIENT_BUILD_VERSION}`);
 
 
@@ -1732,10 +1732,24 @@
     }
 
     function openLoginModal() {
+      if (!loginModal) {
+        return;
+      }
       if (loginForm) {
         loginForm.reset();
       }
       loginModal.style.display = "flex";
+      const loginUserInput = document.getElementById("loginUser");
+      if (loginUserInput) {
+        requestAnimationFrame(() => loginUserInput.focus());
+      }
+    }
+
+    function closeLoginModal() {
+      if (!loginModal) {
+        return;
+      }
+      loginModal.style.display = "none";
     }
 
     function createOptionRow(value = "") {
@@ -3573,7 +3587,15 @@
 
     if (closeLogin) {
       closeLogin.addEventListener("click", () => {
-        loginModal.style.display = "none";
+        closeLoginModal();
+      });
+    }
+
+    if (loginModal) {
+      loginModal.addEventListener("click", (event) => {
+        if (event.target === loginModal) {
+          closeLoginModal();
+        }
       });
     }
 
@@ -3631,8 +3653,15 @@
     });
 
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && feedbackModal.style.display === "flex") {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (feedbackModal.style.display === "flex") {
         hideFeedbackModal();
+        return;
+      }
+      if (loginModal && loginModal.style.display === "flex") {
+        closeLoginModal();
       }
     });
 
@@ -3683,17 +3712,26 @@
           applyQualityPreference(data.preferred_quality || DEFAULT_VIDEO_QUALITY);
 
           updateUIForLoggedIn(data.username, data.profile_picture_filename);
-          loginModal.style.display = "none";
+          closeLoginModal();
           showFeedbackModal({
-            title: "Sikeres bejelentkezés",
-            message: data.message || "Sikeres bejelentkezés.",
+            title: "Sikeres bejelentkez\u00e9s",
+            message: "Sikeres bejelentkez\u00e9s.",
           });
         } else {
-          alert(data.message || "Hibás felhasználónév vagy jelszó.");
+          const loginErrorMessage = res.status === 401
+            ? "Hib\u00e1s felhaszn\u00e1l\u00f3n\u00e9v vagy jelsz\u00f3."
+            : "Nem siker\u00fclt bejelentkezni. Pr\u00f3b\u00e1ld \u00fajra k\u00e9s\u0151bb.";
+          showFeedbackModal({
+            title: "Sikertelen bejelentkez\u00e9s",
+            message: loginErrorMessage,
+          });
         }
       } catch (error) {
         console.error("Bejelentkezési hiba:", error);
-        alert("Hiba történt a bejelentkezés során. Próbáld meg később.");
+        showFeedbackModal({
+          title: "Sikertelen bejelentkez\u00e9s",
+          message: "Hiba t\u00f6rt\u00e9nt a bejelentkez\u00e9s sor\u00e1n. Pr\u00f3b\u00e1ld meg k\u00e9s\u0151bb.",
+        });
       }
     });
 
@@ -4086,6 +4124,8 @@
       let currentVideoList = [];
       let currentVideoIndex = 0;
       let activeVideoModalContext = "clips";
+      let modalVideoPlaybackToken = 0;
+      let modalVideoErrorHandlerAttached = false;
       const ARCHIVE_VIDEO_PAGE_SIZE_KEY = "archiveVideoPageSize";
       const ARCHIVE_VIDEO_SORT_ORDER_KEY = "archiveVideoSortOrder";
       const savedArchivePageSize = Number.parseInt(localStorage.getItem(ARCHIVE_VIDEO_PAGE_SIZE_KEY), 10);
@@ -6054,6 +6094,104 @@
         }
       }
 
+      function toAbsoluteModalVideoUrl(value) {
+        if (!value) return "";
+        try {
+          return new URL(String(value), window.location.origin).href;
+        } catch (_error) {
+          return String(value);
+        }
+      }
+
+      function clearModalVideoSource() {
+        if (!modalVideoPlayer) {
+          return;
+        }
+
+        modalVideoPlaybackToken += 1;
+        modalVideoPlayer.pause();
+        try {
+          modalVideoPlayer.srcObject = null;
+        } catch (_error) {}
+        modalVideoPlayer.removeAttribute("src");
+        modalVideoPlayer.load();
+        modalVideoPlayer.dataset.fallbackSrc = "";
+        modalVideoPlayer.dataset.fallbackAttempted = "0";
+      }
+
+      function playModalVideoSafely(expectedToken) {
+        if (!modalVideoPlayer) {
+          return;
+        }
+
+        const playPromise = modalVideoPlayer.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {
+            if (expectedToken !== modalVideoPlaybackToken) {
+              return;
+            }
+          });
+        }
+      }
+
+      function handleModalVideoPlaybackError() {
+        if (!modalVideoPlayer) {
+          return;
+        }
+
+        const fallbackSrc = modalVideoPlayer.dataset.fallbackSrc || "";
+        if (!fallbackSrc) {
+          return;
+        }
+
+        if (modalVideoPlayer.dataset.fallbackAttempted === "1") {
+          return;
+        }
+        modalVideoPlayer.dataset.fallbackAttempted = "1";
+
+        const activeSrc = toAbsoluteModalVideoUrl(modalVideoPlayer.currentSrc || modalVideoPlayer.src || "");
+        const normalizedFallbackSrc = toAbsoluteModalVideoUrl(fallbackSrc);
+        if (!normalizedFallbackSrc || activeSrc === normalizedFallbackSrc) {
+          return;
+        }
+
+        modalVideoPlayer.pause();
+        modalVideoPlayer.src = fallbackSrc;
+        modalVideoPlayer.load();
+        const playToken = ++modalVideoPlaybackToken;
+        playModalVideoSafely(playToken);
+      }
+
+      function ensureModalVideoErrorHandler() {
+        if (!modalVideoPlayer || modalVideoErrorHandlerAttached) {
+          return;
+        }
+
+        modalVideoPlayer.addEventListener("error", handleModalVideoPlaybackError);
+        modalVideoErrorHandlerAttached = true;
+      }
+
+      function setModalVideoSource(primarySrc, fallbackSrc) {
+        if (!modalVideoPlayer) {
+          return;
+        }
+
+        ensureModalVideoErrorHandler();
+        clearModalVideoSource();
+
+        const resolvedPrimary = primarySrc || fallbackSrc || "";
+        if (!resolvedPrimary) {
+          return;
+        }
+
+        modalVideoPlayer.dataset.fallbackSrc = fallbackSrc || "";
+        modalVideoPlayer.dataset.fallbackAttempted = "0";
+        modalVideoPlayer.src = resolvedPrimary;
+        modalVideoPlayer.load();
+        const playToken = ++modalVideoPlaybackToken;
+        playModalVideoSafely(playToken);
+      }
+
       function openArchiveVideoModal(index) {
         if (!videoPlayerModal || !modalVideoPlayer || !Array.isArray(archiveVideoList)) {
           return;
@@ -6078,21 +6216,7 @@
         const sourceFromGrid = videoElements[archiveVideoIndex]?.dataset?.src || "";
         const resolvedSource = src || sourceFromGrid || originalSrc;
 
-        modalVideoPlayer.addEventListener(
-          "error",
-          () => {
-            if (modalVideoPlayer.src !== originalSrc) {
-              modalVideoPlayer.src = originalSrc;
-              modalVideoPlayer.load();
-              modalVideoPlayer.play().catch(() => {});
-            }
-          },
-          { once: true }
-        );
-
-        modalVideoPlayer.src = resolvedSource;
-        modalVideoPlayer.load();
-        modalVideoPlayer.play().catch(() => {});
+        setModalVideoSource(resolvedSource, originalSrc);
 
         videoPlayerModal.classList.add("open");
         videoPlayerModal.setAttribute("aria-hidden", "false");
@@ -9586,21 +9710,7 @@
         const sourceFromGrid = videoElements[currentVideoIndex]?.dataset?.src || "";
         const resolvedSource = src || sourceFromGrid || originalSrc;
 
-        modalVideoPlayer.addEventListener(
-          "error",
-          () => {
-            if (modalVideoPlayer.src !== originalSrc) {
-              modalVideoPlayer.src = originalSrc;
-              modalVideoPlayer.load();
-              modalVideoPlayer.play().catch(() => {});
-            }
-          },
-          { once: true }
-        );
-
-        modalVideoPlayer.src = resolvedSource;
-        modalVideoPlayer.load();
-        modalVideoPlayer.play().catch(() => {});
+        setModalVideoSource(resolvedSource, originalSrc);
 
         videoPlayerModal.classList.add("open");
         videoPlayerModal.setAttribute("aria-hidden", "false");
@@ -9612,9 +9722,7 @@
           return;
         }
 
-        modalVideoPlayer.pause();
-        modalVideoPlayer.removeAttribute("src");
-        modalVideoPlayer.load();
+        clearModalVideoSource();
         videoPlayerModal.classList.remove("open");
         videoPlayerModal.setAttribute("aria-hidden", "true");
         activeVideoModalContext = "clips";
@@ -10702,4 +10810,5 @@
             // Legacy no-op (dynamic filters handled by renderAcademyFilters)
         }
   
+
 
