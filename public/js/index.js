@@ -5772,6 +5772,62 @@
         return params;
       }
 
+      function scrollArchiveVideoListToTop() {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement && archiveVideoPagination?.contains(activeElement)) {
+          activeElement.blur();
+        }
+
+        const scrollTargets = [];
+        const appendTarget = (node) => {
+          if (!node || scrollTargets.includes(node)) {
+            return;
+          }
+          scrollTargets.push(node);
+        };
+
+        appendTarget(document.scrollingElement);
+        appendTarget(document.documentElement);
+        appendTarget(document.body);
+        appendTarget(document.querySelector("main"));
+        appendTarget(document.querySelector("main section.active"));
+        appendTarget(document.getElementById("archivum"));
+        appendTarget(archiveBrowser);
+        appendTarget(archiveVideoPanel);
+        appendTarget(archiveVideoGridContainer);
+
+        let ancestor = archiveVideoPagination || archiveVideoGridContainer || archiveVideoPanel;
+        while (ancestor && ancestor instanceof HTMLElement) {
+          const styles = window.getComputedStyle(ancestor);
+          const overflowY = (styles.overflowY || "").toLowerCase();
+          const isScrollable = (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay")
+            && ancestor.scrollHeight > ancestor.clientHeight;
+          if (isScrollable) {
+            appendTarget(ancestor);
+          }
+          ancestor = ancestor.parentElement;
+        }
+
+        const applyScrollToTop = () => {
+          scrollTargets.forEach((target) => {
+            if (!target) return;
+            if (typeof target.scrollTo === "function") {
+              try {
+                target.scrollTo({ top: 0, left: 0, behavior: "auto" });
+              } catch (_error) {}
+            }
+            if (typeof target.scrollTop === "number") {
+              target.scrollTop = 0;
+            }
+          });
+          window.scrollTo(0, 0);
+        };
+
+        applyScrollToTop();
+        requestAnimationFrame(applyScrollToTop);
+        setTimeout(applyScrollToTop, 90);
+      }
+
       function renderArchiveVideoPagination(pagination) {
         if (!archiveVideoPagination || !pagination || pagination.totalPages <= 1) {
           if (archiveVideoPagination) {
@@ -5785,12 +5841,14 @@
 
         const createButton = (pageNumber, text = null) => {
           const btn = document.createElement("button");
+          btn.type = "button";
           btn.textContent = text || pageNumber;
           btn.classList.toggle("active", pageNumber === currentPage);
           btn.addEventListener("click", () => {
             if (pageNumber === currentPage) return;
             archiveVideoFilters.page = pageNumber;
-            loadArchiveVideos();
+            scrollArchiveVideoListToTop();
+            loadArchiveVideos({ scrollToTop: true });
           });
           return btn;
         };
@@ -6018,7 +6076,8 @@
         });
       }
 
-      async function loadArchiveVideos() {
+      async function loadArchiveVideos(options = {}) {
+        const shouldScrollToTop = options?.scrollToTop === true;
         if (!archiveVideoGridContainer) return;
         if (!isArchiveVideoFolderOpen() || !hasArchiveViewAccess()) {
           archiveVideoGridContainer.innerHTML = "";
@@ -6027,6 +6086,10 @@
           }
           archiveVideoList = [];
           return;
+        }
+
+        if (shouldScrollToTop) {
+          scrollArchiveVideoListToTop();
         }
 
         archiveVideoGridContainer.innerHTML = "";
@@ -6087,6 +6150,9 @@
 
           renderArchiveVideoGrid(archiveVideoList);
           renderArchiveVideoPagination(pagination);
+          if (shouldScrollToTop) {
+            scrollArchiveVideoListToTop();
+          }
         } catch (error) {
           console.error("Archív videók betöltési hibája:", error);
           archiveVideoList = [];
