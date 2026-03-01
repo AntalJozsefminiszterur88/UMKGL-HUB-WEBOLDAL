@@ -91,6 +91,18 @@
     const archiveThumbnailPickerDurationEl = document.getElementById("archiveThumbnailDuration");
     const archiveThumbnailPickerHintEl = document.getElementById("archiveThumbnailPickerHint");
     const archiveThumbnailPickerTitleEl = document.getElementById("archiveThumbnailPickerTitle");
+    const archiveThumbnailCaptureFrameBtn = document.getElementById("archiveThumbnailCaptureFrameBtn");
+    const archiveThumbnailCropStage = document.getElementById("archiveThumbnailCropStage");
+    const archiveThumbnailCropCanvas = document.getElementById("archiveThumbnailCropCanvas");
+    const archiveThumbnailCropWindow = document.getElementById("archiveThumbnailCropWindow");
+    const archiveThumbnailZoomRange = document.getElementById("archiveThumbnailZoomRange");
+    const archiveThumbnailZoomInBtn = document.getElementById("archiveThumbnailZoomInBtn");
+    const archiveThumbnailZoomOutBtn = document.getElementById("archiveThumbnailZoomOutBtn");
+    const archiveThumbnailPanUpBtn = document.getElementById("archiveThumbnailPanUpBtn");
+    const archiveThumbnailPanLeftBtn = document.getElementById("archiveThumbnailPanLeftBtn");
+    const archiveThumbnailPanRightBtn = document.getElementById("archiveThumbnailPanRightBtn");
+    const archiveThumbnailPanDownBtn = document.getElementById("archiveThumbnailPanDownBtn");
+    const archiveThumbnailCropResetBtn = document.getElementById("archiveThumbnailCropResetBtn");
     const archiveCloseUploadModalBtn = document.getElementById("archiveCloseUploadModal");
     const archiveDropZone = document.getElementById("archiveDropZone");
     const archiveUploadQueueContainer = document.getElementById("archiveUploadQueueContainer");
@@ -4152,6 +4164,12 @@
       let archiveVideoToastTimeout = null;
       const archiveNotifiedProcessingErrorIds = new Set();
       const ARCHIVE_THUMBNAIL_STEP_SECONDS = 5;
+      const ARCHIVE_THUMBNAIL_ZOOM_MIN = 1;
+      const ARCHIVE_THUMBNAIL_ZOOM_MAX = 3;
+      const ARCHIVE_THUMBNAIL_ZOOM_STEP = 0.12;
+      const ARCHIVE_THUMBNAIL_PAN_STEP_PX = 24;
+      const ARCHIVE_THUMBNAIL_TARGET_WIDTH = 1280;
+      const ARCHIVE_THUMBNAIL_TARGET_HEIGHT = 720;
       let archiveThumbnailPickerState = null;
       const ARCHIVE_UPLOAD_CHUNK_THRESHOLD_BYTES = 90 * 1024 * 1024;
       const ARCHIVE_UPLOAD_CHUNK_SIZE_BYTES = 20 * 1024 * 1024;
@@ -5309,6 +5327,415 @@
         if (archiveThumbnailPickerStepForwardBtn) {
           archiveThumbnailPickerStepForwardBtn.disabled = !canUse;
         }
+        setArchiveThumbnailCropControlsEnabled(canUse);
+      }
+
+      function setArchiveThumbnailCropControlsEnabled(enabled) {
+        const canCaptureFrame = Boolean(isArchiveThumbnailPickerOpen()) && archiveThumbnailPickerState?.isSaving !== true;
+        const canAdjustCrop = canCaptureFrame && Boolean(archiveThumbnailPickerState?.cropFrameReady);
+
+        if (archiveThumbnailCaptureFrameBtn) {
+          archiveThumbnailCaptureFrameBtn.disabled = !canCaptureFrame;
+        }
+        if (archiveThumbnailZoomRange) {
+          archiveThumbnailZoomRange.disabled = !canAdjustCrop;
+        }
+        if (archiveThumbnailZoomInBtn) {
+          archiveThumbnailZoomInBtn.disabled = !canAdjustCrop;
+        }
+        if (archiveThumbnailZoomOutBtn) {
+          archiveThumbnailZoomOutBtn.disabled = !canAdjustCrop;
+        }
+        if (archiveThumbnailPanUpBtn) {
+          archiveThumbnailPanUpBtn.disabled = !canAdjustCrop;
+        }
+        if (archiveThumbnailPanLeftBtn) {
+          archiveThumbnailPanLeftBtn.disabled = !canAdjustCrop;
+        }
+        if (archiveThumbnailPanRightBtn) {
+          archiveThumbnailPanRightBtn.disabled = !canAdjustCrop;
+        }
+        if (archiveThumbnailPanDownBtn) {
+          archiveThumbnailPanDownBtn.disabled = !canAdjustCrop;
+        }
+        if (archiveThumbnailCropResetBtn) {
+          archiveThumbnailCropResetBtn.disabled = !canAdjustCrop;
+        }
+      }
+
+      function updateArchiveThumbnailZoomUI() {
+        if (!archiveThumbnailZoomRange) {
+          return;
+        }
+        const stateZoom = Number.parseFloat(archiveThumbnailPickerState?.cropZoom);
+        const safeZoom = Number.isFinite(stateZoom)
+          ? clamp(stateZoom, ARCHIVE_THUMBNAIL_ZOOM_MIN, ARCHIVE_THUMBNAIL_ZOOM_MAX)
+          : ARCHIVE_THUMBNAIL_ZOOM_MIN;
+        archiveThumbnailZoomRange.value = String(safeZoom);
+      }
+
+      function destroyArchiveThumbnailCropper() {
+        if (archiveThumbnailCropCanvas) {
+          const ctx = archiveThumbnailCropCanvas.getContext("2d");
+          if (ctx) {
+            ctx.clearRect(0, 0, archiveThumbnailCropCanvas.width, archiveThumbnailCropCanvas.height);
+          }
+          archiveThumbnailCropCanvas.width = 0;
+          archiveThumbnailCropCanvas.height = 0;
+          archiveThumbnailCropCanvas.style.display = "none";
+          archiveThumbnailCropCanvas.style.width = "auto";
+          archiveThumbnailCropCanvas.style.height = "auto";
+          archiveThumbnailCropCanvas.style.left = "0px";
+          archiveThumbnailCropCanvas.style.top = "0px";
+        }
+        if (archiveThumbnailCropWindow) {
+          archiveThumbnailCropWindow.style.display = "none";
+        }
+        if (archiveThumbnailCropStage) {
+          archiveThumbnailCropStage.classList.remove("is-draggable");
+          archiveThumbnailCropStage.classList.remove("is-dragging");
+        }
+        if (archiveThumbnailPickerState) {
+          archiveThumbnailPickerState.cropZoom = ARCHIVE_THUMBNAIL_ZOOM_MIN;
+          archiveThumbnailPickerState.cropPanX = 0;
+          archiveThumbnailPickerState.cropPanY = 0;
+          archiveThumbnailPickerState.cropFrameWidth = 0;
+          archiveThumbnailPickerState.cropFrameHeight = 0;
+          archiveThumbnailPickerState.cropFrameReady = false;
+          archiveThumbnailPickerState.cropDragging = false;
+          archiveThumbnailPickerState.lastCapturedFrameSecond = null;
+        }
+        updateArchiveThumbnailZoomUI();
+      }
+
+      function getArchiveThumbnailCropLayout() {
+        const state = archiveThumbnailPickerState;
+        if (!state || !archiveThumbnailCropStage) {
+          return null;
+        }
+
+        const frameWidth = Number.parseFloat(state.cropFrameWidth);
+        const frameHeight = Number.parseFloat(state.cropFrameHeight);
+        if (!Number.isFinite(frameWidth) || !Number.isFinite(frameHeight) || frameWidth <= 1 || frameHeight <= 1) {
+          return null;
+        }
+
+        const stageRect = archiveThumbnailCropStage.getBoundingClientRect();
+        const stageWidth = Math.max(1, stageRect.width);
+        const stageHeight = Math.max(1, stageRect.height);
+        const padding = Math.min(34, Math.max(12, stageWidth * 0.035));
+        const cropAspect = ARCHIVE_THUMBNAIL_TARGET_WIDTH / ARCHIVE_THUMBNAIL_TARGET_HEIGHT;
+
+        let zoneWidth = Math.max(stageWidth - (padding * 2), 32);
+        let zoneHeight = zoneWidth / cropAspect;
+        const maxZoneHeight = Math.max(stageHeight - (padding * 2), 18);
+        if (zoneHeight > maxZoneHeight) {
+          zoneHeight = maxZoneHeight;
+          zoneWidth = zoneHeight * cropAspect;
+        }
+
+        const zoneX = (stageWidth - zoneWidth) / 2;
+        const zoneY = (stageHeight - zoneHeight) / 2;
+        const baseScale = Math.max(zoneWidth / frameWidth, zoneHeight / frameHeight);
+        const zoom = clamp(
+          Number.parseFloat(state.cropZoom) || ARCHIVE_THUMBNAIL_ZOOM_MIN,
+          ARCHIVE_THUMBNAIL_ZOOM_MIN,
+          ARCHIVE_THUMBNAIL_ZOOM_MAX
+        );
+        const scale = baseScale * zoom;
+        const drawWidth = frameWidth * scale;
+        const drawHeight = frameHeight * scale;
+
+        const stageCenterX = stageWidth / 2;
+        const stageCenterY = stageHeight / 2;
+        const minPanX = zoneX + zoneWidth - stageCenterX - (drawWidth / 2);
+        const maxPanX = zoneX - stageCenterX + (drawWidth / 2);
+        const minPanY = zoneY + zoneHeight - stageCenterY - (drawHeight / 2);
+        const maxPanY = zoneY - stageCenterY + (drawHeight / 2);
+
+        const panX = clamp(Number.parseFloat(state.cropPanX) || 0, minPanX, maxPanX);
+        const panY = clamp(Number.parseFloat(state.cropPanY) || 0, minPanY, maxPanY);
+        state.cropPanX = panX;
+        state.cropPanY = panY;
+
+        const imageLeft = stageCenterX + panX - (drawWidth / 2);
+        const imageTop = stageCenterY + panY - (drawHeight / 2);
+
+        return {
+          frameWidth,
+          frameHeight,
+          stageWidth,
+          stageHeight,
+          zoneX,
+          zoneY,
+          zoneWidth,
+          zoneHeight,
+          scale,
+          drawWidth,
+          drawHeight,
+          imageLeft,
+          imageTop,
+        };
+      }
+
+      function renderArchiveThumbnailCropEditor() {
+        const state = archiveThumbnailPickerState;
+        const layout = getArchiveThumbnailCropLayout();
+        const hasFrame = Boolean(state?.cropFrameReady) && Boolean(layout);
+
+        if (archiveThumbnailCropCanvas) {
+          if (hasFrame) {
+            archiveThumbnailCropCanvas.style.display = "block";
+            archiveThumbnailCropCanvas.style.width = `${layout.drawWidth}px`;
+            archiveThumbnailCropCanvas.style.height = `${layout.drawHeight}px`;
+            archiveThumbnailCropCanvas.style.left = `${layout.imageLeft}px`;
+            archiveThumbnailCropCanvas.style.top = `${layout.imageTop}px`;
+          } else {
+            archiveThumbnailCropCanvas.style.display = "none";
+          }
+        }
+
+        if (archiveThumbnailCropWindow) {
+          if (hasFrame) {
+            archiveThumbnailCropWindow.style.display = "block";
+            archiveThumbnailCropWindow.style.left = `${layout.zoneX}px`;
+            archiveThumbnailCropWindow.style.top = `${layout.zoneY}px`;
+            archiveThumbnailCropWindow.style.width = `${layout.zoneWidth}px`;
+            archiveThumbnailCropWindow.style.height = `${layout.zoneHeight}px`;
+            archiveThumbnailCropWindow.style.transform = "none";
+          } else {
+            archiveThumbnailCropWindow.style.display = "none";
+          }
+        }
+
+        if (archiveThumbnailCropStage) {
+          archiveThumbnailCropStage.classList.toggle("is-draggable", hasFrame);
+          archiveThumbnailCropStage.classList.toggle("is-dragging", Boolean(state?.cropDragging && hasFrame));
+        }
+
+        updateArchiveThumbnailZoomUI();
+      }
+
+      function syncArchiveThumbnailCropEditorEnabledState() {
+        const canUse = getArchiveThumbnailPickerDurationSeconds() > 0 && archiveThumbnailPickerState?.isSaving !== true;
+        setArchiveThumbnailCropControlsEnabled(canUse);
+      }
+
+      function captureArchiveThumbnailFrame(force = false) {
+        const state = archiveThumbnailPickerState;
+        if (!state || !archiveThumbnailPickerVideo || !archiveThumbnailCropCanvas) {
+          return;
+        }
+
+        const videoWidth = Number.parseInt(archiveThumbnailPickerVideo.videoWidth, 10);
+        const videoHeight = Number.parseInt(archiveThumbnailPickerVideo.videoHeight, 10);
+        if (!Number.isFinite(videoWidth) || !Number.isFinite(videoHeight) || videoWidth <= 0 || videoHeight <= 0) {
+          return;
+        }
+
+        const currentSecond = getArchiveThumbnailPickerCurrentSeconds();
+        if (
+          !force &&
+          Number.isFinite(state.lastCapturedFrameSecond) &&
+          Math.abs(state.lastCapturedFrameSecond - currentSecond) < 0.02
+        ) {
+          return;
+        }
+
+        if (archiveThumbnailCropCanvas.width !== videoWidth || archiveThumbnailCropCanvas.height !== videoHeight) {
+          archiveThumbnailCropCanvas.width = videoWidth;
+          archiveThumbnailCropCanvas.height = videoHeight;
+        }
+
+        const context = archiveThumbnailCropCanvas.getContext("2d");
+        if (!context) {
+          return;
+        }
+
+        try {
+          context.drawImage(archiveThumbnailPickerVideo, 0, 0, videoWidth, videoHeight);
+        } catch (_error) {
+          return;
+        }
+
+        state.lastCapturedFrameSecond = currentSecond;
+        state.cropFrameWidth = videoWidth;
+        state.cropFrameHeight = videoHeight;
+        if (!state.cropFrameReady) {
+          state.cropPanX = 0;
+          state.cropPanY = 0;
+          state.cropZoom = ARCHIVE_THUMBNAIL_ZOOM_MIN;
+        }
+        state.cropFrameReady = true;
+
+        renderArchiveThumbnailCropEditor();
+        syncArchiveThumbnailCropEditorEnabledState();
+      }
+
+      function applyArchiveThumbnailCropZoom(zoomValue) {
+        if (!archiveThumbnailPickerState || !archiveThumbnailPickerState.cropFrameReady) {
+          return;
+        }
+        const boundedZoom = clamp(
+          Number.parseFloat(zoomValue) || ARCHIVE_THUMBNAIL_ZOOM_MIN,
+          ARCHIVE_THUMBNAIL_ZOOM_MIN,
+          ARCHIVE_THUMBNAIL_ZOOM_MAX
+        );
+        const currentZoom = Number.parseFloat(archiveThumbnailPickerState.cropZoom) || ARCHIVE_THUMBNAIL_ZOOM_MIN;
+        if (Math.abs(boundedZoom - currentZoom) < 0.0001) {
+          updateArchiveThumbnailZoomUI();
+          return;
+        }
+        archiveThumbnailPickerState.cropZoom = boundedZoom;
+        renderArchiveThumbnailCropEditor();
+      }
+
+      function nudgeArchiveThumbnailCropZoom(step) {
+        if (!archiveThumbnailPickerState || !archiveThumbnailPickerState.cropFrameReady) {
+          return;
+        }
+        const currentZoom = Number.parseFloat(archiveThumbnailPickerState.cropZoom) || ARCHIVE_THUMBNAIL_ZOOM_MIN;
+        applyArchiveThumbnailCropZoom(currentZoom + step);
+      }
+
+      function nudgeArchiveThumbnailCropPosition(deltaX, deltaY) {
+        if (!archiveThumbnailPickerState || !archiveThumbnailPickerState.cropFrameReady) {
+          return;
+        }
+        const safeX = Number.isFinite(deltaX) ? deltaX : 0;
+        const safeY = Number.isFinite(deltaY) ? deltaY : 0;
+        if (!safeX && !safeY) {
+          return;
+        }
+        archiveThumbnailPickerState.cropPanX = (Number.parseFloat(archiveThumbnailPickerState.cropPanX) || 0) + safeX;
+        archiveThumbnailPickerState.cropPanY = (Number.parseFloat(archiveThumbnailPickerState.cropPanY) || 0) + safeY;
+        renderArchiveThumbnailCropEditor();
+      }
+
+      function resetArchiveThumbnailCropAdjustments() {
+        if (!archiveThumbnailPickerState || !archiveThumbnailPickerState.cropFrameReady) {
+          return;
+        }
+        archiveThumbnailPickerState.cropZoom = ARCHIVE_THUMBNAIL_ZOOM_MIN;
+        archiveThumbnailPickerState.cropPanX = 0;
+        archiveThumbnailPickerState.cropPanY = 0;
+        renderArchiveThumbnailCropEditor();
+      }
+
+      function getArchiveThumbnailCropPayload() {
+        if (!archiveThumbnailPickerState?.cropFrameReady) {
+          return null;
+        }
+        const layout = getArchiveThumbnailCropLayout();
+        if (!layout) {
+          return null;
+        }
+
+        const x = (layout.zoneX - layout.imageLeft) / layout.scale;
+        const y = (layout.zoneY - layout.imageTop) / layout.scale;
+        const width = layout.zoneWidth / layout.scale;
+        const height = layout.zoneHeight / layout.scale;
+
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+          return null;
+        }
+        const frameWidth = Number.parseFloat(archiveThumbnailPickerState.cropFrameWidth);
+        const frameHeight = Number.parseFloat(archiveThumbnailPickerState.cropFrameHeight);
+        if (!Number.isFinite(frameWidth) || !Number.isFinite(frameHeight) || frameWidth <= 1 || frameHeight <= 1) {
+          return null;
+        }
+
+        const clampedX = clamp(x, 0, frameWidth - 1);
+        const clampedY = clamp(y, 0, frameHeight - 1);
+        const clampedWidth = clamp(width, 1, frameWidth - clampedX);
+        const clampedHeight = clamp(height, 1, frameHeight - clampedY);
+        if (clampedWidth <= 1 || clampedHeight <= 1) {
+          return null;
+        }
+
+        // Sent to backend for diagnostics/fallback path; primary save now uploads the exact rendered view.
+        return {
+          x: Number(clampedX.toFixed(3)),
+          y: Number(clampedY.toFixed(3)),
+          width: Number(clampedWidth.toFixed(3)),
+          height: Number(clampedHeight.toFixed(3)),
+          sourceWidth: Number(frameWidth.toFixed(3)),
+          sourceHeight: Number(frameHeight.toFixed(3)),
+          targetWidth: ARCHIVE_THUMBNAIL_TARGET_WIDTH,
+          targetHeight: ARCHIVE_THUMBNAIL_TARGET_HEIGHT,
+        };
+      }
+
+      function buildArchiveThumbnailBlobFromCurrentView() {
+        if (!archiveThumbnailCropCanvas || !archiveThumbnailPickerState?.cropFrameReady) {
+          return Promise.resolve(null);
+        }
+
+        const layout = getArchiveThumbnailCropLayout();
+        if (!layout) {
+          return Promise.resolve(null);
+        }
+
+        const sourceWidth = Number.parseFloat(archiveThumbnailCropCanvas.width);
+        const sourceHeight = Number.parseFloat(archiveThumbnailCropCanvas.height);
+        if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) || sourceWidth <= 1 || sourceHeight <= 1) {
+          return Promise.resolve(null);
+        }
+
+        const targetWidth = ARCHIVE_THUMBNAIL_TARGET_WIDTH;
+        const targetHeight = ARCHIVE_THUMBNAIL_TARGET_HEIGHT;
+        const stageWidth = Math.max(1, Math.round(layout.stageWidth));
+        const stageHeight = Math.max(1, Math.round(layout.stageHeight));
+        const zoneX = clamp(layout.zoneX, 0, stageWidth - 1);
+        const zoneY = clamp(layout.zoneY, 0, stageHeight - 1);
+        const zoneWidth = clamp(layout.zoneWidth, 1, stageWidth - zoneX);
+        const zoneHeight = clamp(layout.zoneHeight, 1, stageHeight - zoneY);
+
+        const stageCanvas = document.createElement("canvas");
+        stageCanvas.width = stageWidth;
+        stageCanvas.height = stageHeight;
+        const stageCtx = stageCanvas.getContext("2d");
+        if (!stageCtx) {
+          return Promise.resolve(null);
+        }
+
+        stageCtx.imageSmoothingEnabled = true;
+        stageCtx.imageSmoothingQuality = "high";
+        stageCtx.drawImage(
+          archiveThumbnailCropCanvas,
+          layout.imageLeft,
+          layout.imageTop,
+          layout.drawWidth,
+          layout.drawHeight
+        );
+
+        const outputCanvas = document.createElement("canvas");
+        outputCanvas.width = targetWidth;
+        outputCanvas.height = targetHeight;
+        const outputCtx = outputCanvas.getContext("2d");
+        if (!outputCtx) {
+          return Promise.resolve(null);
+        }
+
+        outputCtx.imageSmoothingEnabled = true;
+        outputCtx.imageSmoothingQuality = "high";
+        outputCtx.drawImage(
+          stageCanvas,
+          zoneX,
+          zoneY,
+          zoneWidth,
+          zoneHeight,
+          0,
+          0,
+          targetWidth,
+          targetHeight
+        );
+
+        return new Promise((resolve) => {
+          outputCanvas.toBlob((blob) => {
+            resolve(blob || null);
+          }, "image/jpeg", 0.92);
+        });
       }
 
       function setArchiveThumbnailPickerBusyState(isBusy) {
@@ -5361,12 +5788,16 @@
           archiveThumbnailPickerVideo.load();
         }
 
+        destroyArchiveThumbnailCropper();
         archiveThumbnailPickerState = null;
         setArchiveThumbnailPickerControlsEnabled(false);
         setArchiveThumbnailPickerBusyState(false);
         if (archiveThumbnailPickerSlider) {
           archiveThumbnailPickerSlider.max = "0";
           archiveThumbnailPickerSlider.value = "0";
+        }
+        if (archiveThumbnailZoomRange) {
+          archiveThumbnailZoomRange.value = String(ARCHIVE_THUMBNAIL_ZOOM_MIN);
         }
         if (archiveThumbnailPickerCurrentEl) {
           archiveThumbnailPickerCurrentEl.textContent = "0:00.00";
@@ -5406,9 +5837,11 @@
           closeArchiveThumbnailPicker({ restoreFocus: false });
         }
 
-        const { src, originalSource } = getPreferredArchiveVideoSource(video, currentVideoQuality);
-        const playbackSource = src || originalSource || `/uploads/${video.filename}`;
-        const fallbackSource = originalSource || `/uploads/${video.filename}`;
+        // Thumbnail selection must be source-accurate regardless of the global quality dropdown.
+        // Always use the original source here to avoid coordinate drift with transcoded variants (e.g. 720p).
+        const { originalSource } = getPreferredArchiveVideoSource(video, currentVideoQuality);
+        const playbackSource = originalSource || `/uploads/${video.filename}`;
+        const fallbackSource = playbackSource;
         const titleText = cleanVideoTitle(video.original_name || video.filename) || "Nevtelen video";
 
         archiveThumbnailPickerState = {
@@ -5416,8 +5849,20 @@
           previewElement: previewElement || null,
           triggerButton: triggerButton || null,
           originalSource: fallbackSource,
-          isUsingOriginalSource: playbackSource === fallbackSource,
+          isUsingOriginalSource: true,
           isSaving: false,
+          cropZoom: ARCHIVE_THUMBNAIL_ZOOM_MIN,
+          cropPanX: 0,
+          cropPanY: 0,
+          cropFrameWidth: 0,
+          cropFrameHeight: 0,
+          cropFrameReady: false,
+          cropDragging: false,
+          cropDragStartX: 0,
+          cropDragStartY: 0,
+          cropStartPanX: 0,
+          cropStartPanY: 0,
+          lastCapturedFrameSecond: null,
         };
 
         if (archiveThumbnailPickerTitleEl) {
@@ -5438,13 +5883,23 @@
         if (archiveThumbnailPickerDurationEl) {
           archiveThumbnailPickerDurationEl.textContent = "0:00";
         }
+        if (archiveThumbnailZoomRange) {
+          archiveThumbnailZoomRange.min = String(ARCHIVE_THUMBNAIL_ZOOM_MIN);
+          archiveThumbnailZoomRange.max = String(ARCHIVE_THUMBNAIL_ZOOM_MAX);
+          archiveThumbnailZoomRange.step = "0.05";
+          archiveThumbnailZoomRange.value = String(ARCHIVE_THUMBNAIL_ZOOM_MIN);
+        }
 
+        destroyArchiveThumbnailCropper();
         setArchiveThumbnailPickerControlsEnabled(false);
         setArchiveThumbnailPickerBusyState(false);
 
         archiveThumbnailPickerModal.style.display = "flex";
         archiveThumbnailPickerModal.classList.add("modal-overlay--visible");
         archiveThumbnailPickerModal.setAttribute("aria-hidden", "false");
+        if (archiveThumbnailCaptureFrameBtn) {
+          archiveThumbnailCaptureFrameBtn.disabled = false;
+        }
 
         archiveThumbnailPickerVideo.pause();
         archiveThumbnailPickerVideo.currentTime = 0;
@@ -5481,7 +5936,11 @@
           return;
         }
 
-        const seekSeconds = getArchiveThumbnailPickerCurrentSeconds();
+        captureArchiveThumbnailFrame(true);
+        const seekSeconds = Number.isFinite(stateAtStart.lastCapturedFrameSecond)
+          ? stateAtStart.lastCapturedFrameSecond
+          : getArchiveThumbnailPickerCurrentSeconds();
+        const crop = getArchiveThumbnailCropPayload();
         stateAtStart.isSaving = true;
         setArchiveThumbnailPickerBusyState(true);
         setArchiveThumbnailPickerControlsEnabled(false);
@@ -5490,17 +5949,45 @@
         }
 
         try {
-          const response = await fetch(`/api/archive/videos/${videoId}/thumbnail/regenerate`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...buildAuthHeaders(),
-            },
-            body: JSON.stringify({ seekSeconds }),
-          });
-          const result = await response.json().catch(() => null);
-          if (!response.ok) {
-            throw new Error((result && result.message) || "Nem sikerult indexkepet menteni.");
+          let result = null;
+          const hasActiveSelectionView = Boolean(stateAtStart.cropFrameReady);
+
+          if (hasActiveSelectionView) {
+            const thumbnailBlob = await buildArchiveThumbnailBlobFromCurrentView();
+            if (!thumbnailBlob) {
+              throw new Error("Nem sikerult kiolvasni a kijelolt indexkep-nezetet.");
+            }
+
+            const formData = new FormData();
+            formData.append("thumbnail", thumbnailBlob, `archive-thumb-${videoId}.jpg`);
+            formData.append("seekSeconds", String(seekSeconds));
+
+            const customResponse = await fetch(`/api/archive/videos/${videoId}/thumbnail/custom`, {
+              method: "POST",
+              headers: {
+                ...buildAuthHeaders(),
+              },
+              body: formData,
+            });
+            const customResult = await customResponse.json().catch(() => null);
+            if (!customResponse.ok) {
+              throw new Error((customResult && customResult.message) || "Nem sikerult indexkepet menteni.");
+            }
+            result = customResult;
+          } else {
+            const response = await fetch(`/api/archive/videos/${videoId}/thumbnail/regenerate`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...buildAuthHeaders(),
+              },
+              body: JSON.stringify(crop ? { seekSeconds, crop } : { seekSeconds }),
+            });
+            const fallbackResult = await response.json().catch(() => null);
+            if (!response.ok) {
+              throw new Error((fallbackResult && fallbackResult.message) || "Nem sikerult indexkepet menteni.");
+            }
+            result = fallbackResult;
           }
 
           const refreshedThumbnail = typeof result?.thumbnail_filename === "string"
@@ -5526,7 +6013,7 @@
             setArchiveThumbnailPickerControlsEnabled(getArchiveThumbnailPickerDurationSeconds() > 0);
             if (archiveThumbnailPickerHintEl) {
               archiveThumbnailPickerHintEl.textContent =
-                "Lejatszas kozben allitsd meg ott, amelyik kepkockat indexkepnek szeretned.";
+                "Allitsd meg a videot a kivant kepkockanal, majd egerrel huzd a kepet es gorgetovel zoomolj.";
             }
           }
         }
@@ -6994,6 +7481,117 @@
         });
       }
 
+      if (archiveThumbnailCaptureFrameBtn) {
+        archiveThumbnailCaptureFrameBtn.addEventListener("click", () => {
+          captureArchiveThumbnailFrame(true);
+        });
+      }
+
+      if (archiveThumbnailZoomRange) {
+        archiveThumbnailZoomRange.addEventListener("input", () => {
+          applyArchiveThumbnailCropZoom(archiveThumbnailZoomRange.value);
+        });
+      }
+
+      if (archiveThumbnailZoomInBtn) {
+        archiveThumbnailZoomInBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailCropZoom(ARCHIVE_THUMBNAIL_ZOOM_STEP);
+        });
+      }
+
+      if (archiveThumbnailZoomOutBtn) {
+        archiveThumbnailZoomOutBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailCropZoom(-ARCHIVE_THUMBNAIL_ZOOM_STEP);
+        });
+      }
+
+      if (archiveThumbnailPanUpBtn) {
+        archiveThumbnailPanUpBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailCropPosition(0, -ARCHIVE_THUMBNAIL_PAN_STEP_PX);
+        });
+      }
+
+      if (archiveThumbnailPanLeftBtn) {
+        archiveThumbnailPanLeftBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailCropPosition(-ARCHIVE_THUMBNAIL_PAN_STEP_PX, 0);
+        });
+      }
+
+      if (archiveThumbnailPanRightBtn) {
+        archiveThumbnailPanRightBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailCropPosition(ARCHIVE_THUMBNAIL_PAN_STEP_PX, 0);
+        });
+      }
+
+      if (archiveThumbnailPanDownBtn) {
+        archiveThumbnailPanDownBtn.addEventListener("click", () => {
+          nudgeArchiveThumbnailCropPosition(0, ARCHIVE_THUMBNAIL_PAN_STEP_PX);
+        });
+      }
+
+      if (archiveThumbnailCropResetBtn) {
+        archiveThumbnailCropResetBtn.addEventListener("click", () => {
+          resetArchiveThumbnailCropAdjustments();
+        });
+      }
+
+      if (archiveThumbnailCropCanvas) {
+        archiveThumbnailCropCanvas.addEventListener("dragstart", (event) => {
+          event.preventDefault();
+        });
+      }
+
+      if (archiveThumbnailCropStage) {
+        archiveThumbnailCropStage.addEventListener("wheel", (event) => {
+          if (!archiveThumbnailPickerState?.cropFrameReady || !isArchiveThumbnailPickerOpen()) {
+            return;
+          }
+          event.preventDefault();
+          const zoomStep = event.deltaY < 0 ? ARCHIVE_THUMBNAIL_ZOOM_STEP : -ARCHIVE_THUMBNAIL_ZOOM_STEP;
+          nudgeArchiveThumbnailCropZoom(zoomStep);
+        }, { passive: false });
+
+        archiveThumbnailCropStage.addEventListener("mousedown", (event) => {
+          if (event.button !== 0 || !archiveThumbnailPickerState?.cropFrameReady || !isArchiveThumbnailPickerOpen()) {
+            return;
+          }
+          event.preventDefault();
+          archiveThumbnailPickerState.cropDragging = true;
+          archiveThumbnailPickerState.cropDragStartX = event.clientX;
+          archiveThumbnailPickerState.cropDragStartY = event.clientY;
+          archiveThumbnailPickerState.cropStartPanX = Number.parseFloat(archiveThumbnailPickerState.cropPanX) || 0;
+          archiveThumbnailPickerState.cropStartPanY = Number.parseFloat(archiveThumbnailPickerState.cropPanY) || 0;
+          renderArchiveThumbnailCropEditor();
+        });
+      }
+
+      window.addEventListener("mousemove", (event) => {
+        if (!archiveThumbnailPickerState?.cropDragging || !isArchiveThumbnailPickerOpen()) {
+          return;
+        }
+
+        const deltaX = event.clientX - archiveThumbnailPickerState.cropDragStartX;
+        const deltaY = event.clientY - archiveThumbnailPickerState.cropDragStartY;
+        archiveThumbnailPickerState.cropPanX = (archiveThumbnailPickerState.cropStartPanX || 0) + deltaX;
+        archiveThumbnailPickerState.cropPanY = (archiveThumbnailPickerState.cropStartPanY || 0) + deltaY;
+        renderArchiveThumbnailCropEditor();
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (!archiveThumbnailPickerState?.cropDragging) {
+          return;
+        }
+        archiveThumbnailPickerState.cropDragging = false;
+        renderArchiveThumbnailCropEditor();
+      });
+
+      window.addEventListener("resize", () => {
+        if (!archiveThumbnailPickerState?.cropFrameReady || !isArchiveThumbnailPickerOpen()) {
+          return;
+        }
+        renderArchiveThumbnailCropEditor();
+      });
+
       if (archiveThumbnailPickerSlider) {
         archiveThumbnailPickerSlider.addEventListener("input", () => {
           if (!archiveThumbnailPickerState || !archiveThumbnailPickerVideo) {
@@ -7024,9 +7622,31 @@
           syncArchiveThumbnailPickerTimeline(0);
           if (archiveThumbnailPickerHintEl) {
             archiveThumbnailPickerHintEl.textContent = duration > 0
-              ? "Allitsd meg a videot a kivant kepkockanal, majd kattints az Indexkep mentese gombra."
+              ? "Allitsd meg a videot a kivant kepkockanal, majd egerrel huzd a kepet es gorgetovel zoomolj."
               : "Nem sikerult beolvasni a video hosszat.";
           }
+          captureArchiveThumbnailFrame(true);
+        });
+
+        archiveThumbnailPickerVideo.addEventListener("loadeddata", () => {
+          if (!archiveThumbnailPickerState) {
+            return;
+          }
+          captureArchiveThumbnailFrame(true);
+        });
+
+        archiveThumbnailPickerVideo.addEventListener("seeked", () => {
+          if (!archiveThumbnailPickerState) {
+            return;
+          }
+          captureArchiveThumbnailFrame(true);
+        });
+
+        archiveThumbnailPickerVideo.addEventListener("pause", () => {
+          if (!archiveThumbnailPickerState) {
+            return;
+          }
+          captureArchiveThumbnailFrame(true);
         });
 
         archiveThumbnailPickerVideo.addEventListener("timeupdate", () => {
@@ -7034,6 +7654,9 @@
             return;
           }
           syncArchiveThumbnailPickerTimeline();
+          if (archiveThumbnailPickerVideo.paused) {
+            captureArchiveThumbnailFrame();
+          }
         });
 
         archiveThumbnailPickerVideo.addEventListener("error", () => {
@@ -7050,6 +7673,7 @@
 
           setArchiveThumbnailPickerControlsEnabled(false);
           setArchiveThumbnailPickerBusyState(false);
+          destroyArchiveThumbnailCropper();
           if (archiveThumbnailPickerSaveBtn) {
             archiveThumbnailPickerSaveBtn.disabled = true;
           }

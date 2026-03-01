@@ -312,6 +312,28 @@ function getVideoHeight(filePath) {
     });
 }
 
+function getVideoDimensions(filePath) {
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
+            if (err) {
+                return resolve(null);
+            }
+
+            const videoStream = (metadata.streams || []).find((stream) => {
+                return Number.isFinite(stream?.width) && Number.isFinite(stream?.height);
+            });
+
+            const width = Number.parseInt(videoStream?.width, 10);
+            const height = Number.parseInt(videoStream?.height, 10);
+            if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+                return resolve(null);
+            }
+
+            return resolve({ width, height });
+        });
+    });
+}
+
 function getVideoDuration(filePath) {
     return new Promise((resolve) => {
         ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
@@ -519,6 +541,9 @@ function buildThumbnailFilename(baseName, videoId, variantTag = '') {
     return `${safeBaseName}${suffix}${variantSuffix}.jpg`;
 }
 
+const DEFAULT_THUMBNAIL_OUTPUT_WIDTH = 1280;
+const DEFAULT_THUMBNAIL_OUTPUT_HEIGHT = 720;
+
 function normalizeThumbnailSeekSeconds(seekSeconds, durationSeconds) {
     const safeSeek = Number.isFinite(seekSeconds) && seekSeconds >= 0 ? seekSeconds : 0;
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
@@ -527,6 +552,79 @@ function normalizeThumbnailSeekSeconds(seekSeconds, durationSeconds) {
 
     const maxSeek = Math.max(durationSeconds - 0.2, 0);
     return Math.max(Math.min(safeSeek, maxSeek), 0);
+}
+
+function normalizeThumbnailOutputSize(widthValue, heightValue) {
+    const rawWidth = Number.parseInt(widthValue, 10);
+    const rawHeight = Number.parseInt(heightValue, 10);
+
+    const width = Number.isFinite(rawWidth) && rawWidth > 0 ? Math.min(rawWidth, 4096) : DEFAULT_THUMBNAIL_OUTPUT_WIDTH;
+    const height = Number.isFinite(rawHeight) && rawHeight > 0 ? Math.min(rawHeight, 4096) : DEFAULT_THUMBNAIL_OUTPUT_HEIGHT;
+
+    return { width, height };
+}
+
+function normalizeThumbnailCropRect(rawCropRect, videoDimensions) {
+    if (!rawCropRect || typeof rawCropRect !== 'object') {
+        return null;
+    }
+
+    const targetVideoWidth = Number.parseInt(videoDimensions?.width, 10);
+    const targetVideoHeight = Number.parseInt(videoDimensions?.height, 10);
+    if (!Number.isFinite(targetVideoWidth) || !Number.isFinite(targetVideoHeight) || targetVideoWidth <= 1 || targetVideoHeight <= 1) {
+        return null;
+    }
+
+    const rawX = Number.parseFloat(rawCropRect.x);
+    const rawY = Number.parseFloat(rawCropRect.y);
+    const rawWidth = Number.parseFloat(rawCropRect.width);
+    const rawHeight = Number.parseFloat(rawCropRect.height);
+    if (
+        !Number.isFinite(rawX) ||
+        !Number.isFinite(rawY) ||
+        !Number.isFinite(rawWidth) ||
+        !Number.isFinite(rawHeight)
+    ) {
+        return null;
+    }
+
+    if (rawWidth <= 1 || rawHeight <= 1) {
+        return null;
+    }
+
+    const sourceCropWidth = Number.parseFloat(rawCropRect.sourceWidth);
+    const sourceCropHeight = Number.parseFloat(rawCropRect.sourceHeight);
+    const hasSourceDimensions =
+        Number.isFinite(sourceCropWidth) &&
+        Number.isFinite(sourceCropHeight) &&
+        sourceCropWidth > 1 &&
+        sourceCropHeight > 1;
+
+    const scaleX = hasSourceDimensions ? (targetVideoWidth / sourceCropWidth) : 1;
+    const scaleY = hasSourceDimensions ? (targetVideoHeight / sourceCropHeight) : 1;
+
+    const mappedX = rawX * scaleX;
+    const mappedY = rawY * scaleY;
+    const mappedWidth = rawWidth * scaleX;
+    const mappedHeight = rawHeight * scaleY;
+
+    const x = Math.max(0, Math.min(mappedX, targetVideoWidth - 1));
+    const y = Math.max(0, Math.min(mappedY, targetVideoHeight - 1));
+    const maxWidth = targetVideoWidth - x;
+    const maxHeight = targetVideoHeight - y;
+
+    const width = Math.max(1, Math.min(mappedWidth, maxWidth));
+    const height = Math.max(1, Math.min(mappedHeight, maxHeight));
+    if (width <= 1 || height <= 1) {
+        return null;
+    }
+
+    return {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height),
+    };
 }
 
 function isFrameLikelyBlackFrame(frameStats) {
@@ -664,16 +762,48 @@ function sampleVideoFrameLuma(videoPath, seekSeconds) {
     });
 }
 
-function renderThumbnailFrame(videoPath, outputPath, seekSeconds) {
+function renderThumbnailFrame(videoPath, outputPath, seekSeconds, options = {}) {
     const safeSeek = Number.isFinite(seekSeconds) && seekSeconds >= 0 ? seekSeconds : 0;
+    const cropRect = options?.cropRect;
+    const outputSize = options?.outputSize;
 
     return new Promise((resolve, reject) => {
         const ffmpegStderr = [];
+        const filters = [];
+
+        if (
+            cropRect &&
+            Number.isFinite(cropRect.x) &&
+            Number.isFinite(cropRect.y) &&
+            Number.isFinite(cropRect.width) &&
+            Number.isFinite(cropRect.height) &&
+            cropRect.width > 1 &&
+            cropRect.height > 1
+        ) {
+            filters.push(
+                `crop=${Math.round(cropRect.width)}:${Math.round(cropRect.height)}:${Math.round(cropRect.x)}:${Math.round(cropRect.y)}`
+            );
+        }
+
+        if (
+            outputSize &&
+            Number.isFinite(outputSize.width) &&
+            Number.isFinite(outputSize.height) &&
+            outputSize.width > 0 &&
+            outputSize.height > 0
+        ) {
+            filters.push(`scale=${Math.round(outputSize.width)}:${Math.round(outputSize.height)}:flags=lanczos`);
+        }
+
+        const outputOptions = ['-q:v 2'];
+        if (filters.length) {
+            outputOptions.unshift(`-vf ${filters.join(',')}`);
+        }
 
         ffmpeg(videoPath)
             .seekInput(safeSeek)
             .frames(1)
-            .outputOptions('-q:v 2')
+            .outputOptions(outputOptions)
             .on('stderr', (line) => {
                 if (typeof line !== 'string') {
                     return;
@@ -694,12 +824,25 @@ async function generateThumbnailForVideo(videoPath, baseName, videoId, options =
     await fs.promises.mkdir(thumbnailsDirectory, { recursive: true });
     const outputPath = path.join(thumbnailsDirectory, outputFilename);
 
+    let renderOptions = {};
+    if (options?.cropRect) {
+        const videoDimensions = await getVideoDimensions(videoPath);
+        const cropRect = normalizeThumbnailCropRect(options.cropRect, videoDimensions);
+        if (!cropRect) {
+            throw new Error('Ervenytelen indexkep kivagas.');
+        }
+        renderOptions = {
+            cropRect,
+            outputSize: normalizeThumbnailOutputSize(options?.targetWidth, options?.targetHeight),
+        };
+    }
+
     const durationSeconds = await getVideoDuration(videoPath);
     const preferredSeekSeconds = options?.preferredSeekSeconds;
     const useStrictPreferredSeek = options?.strictPreferredSeek === true && Number.isFinite(preferredSeekSeconds);
     if (useStrictPreferredSeek) {
         const exactSeek = normalizeThumbnailSeekSeconds(preferredSeekSeconds, durationSeconds);
-        await renderThumbnailFrame(videoPath, outputPath, exactSeek);
+        await renderThumbnailFrame(videoPath, outputPath, exactSeek, renderOptions);
         return path.posix.join('thumbnails', outputFilename);
     }
 
@@ -719,7 +862,7 @@ async function generateThumbnailForVideo(videoPath, baseName, videoId, options =
         }
     }
 
-    await renderThumbnailFrame(videoPath, outputPath, selectedSeek);
+    await renderThumbnailFrame(videoPath, outputPath, selectedSeek, renderOptions);
 
     return path.posix.join('thumbnails', outputFilename);
 }
@@ -968,6 +1111,23 @@ const uploadArchiveVideoChunks = multer({
     limits: {
         files: 1,
         fileSize: 25 * 1024 * 1024,
+    },
+});
+
+const archiveThumbnailMemoryStorage = multer.memoryStorage();
+const uploadArchiveThumbnailImage = multer({
+    storage: archiveThumbnailMemoryStorage,
+    limits: {
+        files: 1,
+        fileSize: 8 * 1024 * 1024,
+    },
+    fileFilter: (_req, file, cb) => {
+        const mime = String(file?.mimetype || '').toLowerCase();
+        const allowedMime = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!allowedMime.includes(mime)) {
+            return cb(new Error('Csak JPG, PNG vagy WEBP indexkep toltheto fel.'));
+        }
+        return cb(null, true);
     },
 });
 
@@ -3409,6 +3569,71 @@ app.patch('/api/archive/videos/:id/title', authenticateToken, isAdmin, async (re
     }
 });
 
+app.post('/api/archive/videos/:id/thumbnail/custom', authenticateToken, isAdmin, (req, res, next) => {
+    const uploader = uploadArchiveThumbnailImage.single('thumbnail');
+    uploader(req, res, (err) => {
+        if (!err) {
+            return next();
+        }
+        if (err instanceof multer.MulterError) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(413).json({ message: 'A feltoltott indexkep tul nagy.' });
+            }
+            return res.status(400).json({ message: err.message || 'Indexkep feltoltesi hiba.' });
+        }
+        return res.status(400).json({ message: err.message || 'Indexkep feltoltesi hiba.' });
+    });
+}, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Ervenytelen video azonosito.' });
+    }
+
+    const imageBuffer = req.file?.buffer;
+    if (!Buffer.isBuffer(imageBuffer) || imageBuffer.length <= 0) {
+        return res.status(400).json({ message: 'Nem erkezett indexkep fajl.' });
+    }
+
+    const mime = String(req.file?.mimetype || '').toLowerCase();
+    if (mime !== 'image/jpeg' && mime !== 'image/jpg') {
+        return res.status(400).json({ message: 'Az indexkepnek JPG formatumnak kell lennie.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT id, filename, thumbnail_filename FROM archive_videos WHERE id = $1',
+            [videoId]
+        );
+        const video = rows[0];
+        if (!video) {
+            return res.status(404).json({ message: 'A video nem talalhato.' });
+        }
+
+        const baseName = path.parse(video.filename || '').name || ('archive-' + video.id);
+        const variantTag = 'custom' + Date.now() + '-' + Math.round(Math.random() * 1e6);
+        const outputFilename = buildThumbnailFilename(baseName, video.id, variantTag);
+        const outputPath = path.join(thumbnailsDirectory, outputFilename);
+
+        await fs.promises.mkdir(thumbnailsDirectory, { recursive: true });
+        await fs.promises.writeFile(outputPath, imageBuffer);
+
+        const relativePath = path.posix.join('thumbnails', outputFilename);
+        await db.query('UPDATE archive_videos SET thumbnail_filename = $1 WHERE id = $2', [relativePath, video.id]);
+
+        if (video.thumbnail_filename && video.thumbnail_filename !== relativePath) {
+            await safeUnlink(path.join(uploadsRootDirectory, video.thumbnail_filename));
+        }
+
+        return res.status(200).json({
+            message: 'Indexkep sikeresen frissitve a kijelolt nezettel.',
+            thumbnail_filename: relativePath,
+        });
+    } catch (err) {
+        console.error('Hiba az archiv egyedi indexkep mentesekor:', err);
+        return res.status(500).json({ message: 'Nem sikerult elmenteni az egyedi indexkepet.' });
+    }
+});
+
 app.post('/api/archive/videos/:id/thumbnail/regenerate', authenticateToken, isAdmin, async (req, res) => {
     const videoId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(videoId)) {
@@ -3427,6 +3652,55 @@ app.post('/api/archive/videos/:id/thumbnail/regenerate', authenticateToken, isAd
             return res.status(400).json({ message: 'Ervenytelen seekSeconds ertek.' });
         }
         requestedSeekSeconds = parsedSeek;
+    }
+
+    const rawCrop = req.body?.crop;
+    let requestedCropRect = null;
+    let requestedTargetWidth = DEFAULT_THUMBNAIL_OUTPUT_WIDTH;
+    let requestedTargetHeight = DEFAULT_THUMBNAIL_OUTPUT_HEIGHT;
+    if (rawCrop !== undefined && rawCrop !== null) {
+        if (typeof rawCrop !== 'object') {
+            return res.status(400).json({ message: 'Ervenytelen crop ertek.' });
+        }
+
+        const cropX = Number.parseFloat(rawCrop.x);
+        const cropY = Number.parseFloat(rawCrop.y);
+        const cropWidth = Number.parseFloat(rawCrop.width);
+        const cropHeight = Number.parseFloat(rawCrop.height);
+
+        if (
+            !Number.isFinite(cropX) ||
+            !Number.isFinite(cropY) ||
+            !Number.isFinite(cropWidth) ||
+            !Number.isFinite(cropHeight) ||
+            cropWidth <= 1 ||
+            cropHeight <= 1
+        ) {
+            return res.status(400).json({ message: 'Ervenytelen crop koordinatak.' });
+        }
+
+        requestedCropRect = {
+            x: cropX,
+            y: cropY,
+            width: cropWidth,
+            height: cropHeight,
+        };
+
+        const cropSourceWidth = Number.parseFloat(rawCrop.sourceWidth);
+        const cropSourceHeight = Number.parseFloat(rawCrop.sourceHeight);
+        if (
+            Number.isFinite(cropSourceWidth) &&
+            Number.isFinite(cropSourceHeight) &&
+            cropSourceWidth > 1 &&
+            cropSourceHeight > 1
+        ) {
+            requestedCropRect.sourceWidth = cropSourceWidth;
+            requestedCropRect.sourceHeight = cropSourceHeight;
+        }
+
+        const outputSize = normalizeThumbnailOutputSize(rawCrop.targetWidth, rawCrop.targetHeight);
+        requestedTargetWidth = outputSize.width;
+        requestedTargetHeight = outputSize.height;
     }
 
     try {
@@ -3461,6 +3735,11 @@ app.post('/api/archive/videos/:id/thumbnail/regenerate', authenticateToken, isAd
         } else {
             thumbnailOptions.randomize = true;
         }
+        if (requestedCropRect) {
+            thumbnailOptions.cropRect = requestedCropRect;
+            thumbnailOptions.targetWidth = requestedTargetWidth;
+            thumbnailOptions.targetHeight = requestedTargetHeight;
+        }
 
         const newThumbnailFilename = await generateThumbnailForVideo(videoPath, baseName, video.id, thumbnailOptions);
 
@@ -3477,6 +3756,9 @@ app.post('/api/archive/videos/:id/thumbnail/regenerate', authenticateToken, isAd
             thumbnail_filename: newThumbnailFilename,
         });
     } catch (err) {
+        if (err?.message === 'Ervenytelen indexkep kivagas.') {
+            return res.status(400).json({ message: err.message });
+        }
         console.error('Hiba az archiv indexkep ujrageneralasakor:', err);
         return res.status(500).json({ message: 'Nem sikerult ujrageneralni az indexkepet.' });
     }

@@ -1986,6 +1986,97 @@
         background: #000;
       }
 
+      .archive-thumbnail-picker__crop-editor {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+      }
+
+      .archive-thumbnail-picker__crop-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+      }
+
+      .archive-thumbnail-picker__crop-label {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .archive-thumbnail-picker__crop-stage {
+        position: relative;
+        min-height: 230px;
+        max-height: min(46vh, 420px);
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #050608;
+        cursor: default;
+      }
+
+      .archive-thumbnail-picker__crop-canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
+        display: none;
+        width: auto;
+        max-width: none;
+        max-height: none;
+        user-select: none;
+        pointer-events: none;
+        -webkit-user-drag: none;
+      }
+
+      .archive-thumbnail-picker__crop-window {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 68%;
+        aspect-ratio: 16 / 9;
+        transform: translate(-50%, -50%);
+        border: 2px solid rgba(155, 182, 255, 0.95);
+        box-shadow:
+          0 0 0 200vmax rgba(4, 8, 14, 0.64),
+          0 0 0 1px rgba(255, 255, 255, 0.12);
+        background: rgba(180, 208, 255, 0.08);
+        pointer-events: none;
+      }
+
+      .archive-thumbnail-picker__crop-stage.is-draggable {
+        cursor: grab;
+      }
+
+      .archive-thumbnail-picker__crop-stage.is-dragging {
+        cursor: grabbing;
+      }
+
+      .archive-thumbnail-picker__crop-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+      }
+
+      .archive-thumbnail-picker__zoom-row,
+      .archive-thumbnail-picker__pan-row {
+        display: none;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+      }
+
+      .archive-thumbnail-picker__zoom-label {
+        color: rgba(255, 255, 255, 0.74);
+        font-size: 0.85rem;
+      }
+
+      #archiveThumbnailZoomRange {
+        flex: 1 1 190px;
+        min-width: 150px;
+      }
+
       .archive-thumbnail-picker__timeline {
         display: flex;
         flex-direction: column;
@@ -2028,6 +2119,15 @@
         .archive-thumbnail-picker__toolbar .secondary-btn {
           flex: 1 1 auto;
           min-width: 130px;
+        }
+
+        .archive-thumbnail-picker__zoom-row .secondary-btn {
+          min-width: 54px;
+        }
+
+        .archive-thumbnail-picker__pan-row .secondary-btn {
+          flex: 1 1 calc(50% - 0.35rem);
+          min-width: 110px;
         }
 
         .archive-thumbnail-picker__hint {
