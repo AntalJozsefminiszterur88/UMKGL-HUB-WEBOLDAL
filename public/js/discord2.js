@@ -37,6 +37,9 @@
     const discord2ChannelTree = document.getElementById("discord2ChannelTree");
     const discord2ChannelTitle = document.getElementById("discord2ChannelTitle");
     const discord2ChannelDescription = document.getElementById("discord2ChannelDescription");
+    const discord2ScreenStage = document.getElementById("discord2ScreenStage");
+    const discord2ScreenStageMeta = document.getElementById("discord2ScreenStageMeta");
+    const discord2ScreenStageGrid = document.getElementById("discord2ScreenStageGrid");
     const discord2MessageList = document.getElementById("discord2MessageList");
     const discord2MessageInput = document.getElementById("discord2MessageInput");
     const discord2UploadInput = document.getElementById("discord2UploadInput");
@@ -44,6 +47,8 @@
     const discord2SendBtn = document.getElementById("discord2SendBtn");
     const discord2UploadLabel = document.getElementById("discord2UploadLabel");
     const discord2Composer = discord2MessageInput ? discord2MessageInput.closest(".discord2-composer") : null;
+    const discord2Chat = discord2Section ? discord2Section.querySelector(".discord2-chat") : null;
+    const discord2DropOverlay = document.getElementById("discord2DropOverlay");
     const discord2MemberList = document.getElementById("discord2MemberList");
     const discord2ServerTitle = document.getElementById("discord2ServerTitle");
     const discord2ServerIconBtn = document.getElementById("discord2ServerIconBtn");
@@ -77,6 +82,12 @@
     const discord2ServerLogoCropperCancel = document.getElementById("discord2ServerLogoCropperCancel");
     const discord2ServerLogoCropperSave = document.getElementById("discord2ServerLogoCropperSave");
     const discord2ContextMenu = document.getElementById("discord2ContextMenu");
+    const discord2MediaViewerModal = document.getElementById("discord2MediaViewerModal");
+    const discord2MediaViewerTitle = document.getElementById("discord2MediaViewerTitle");
+    const discord2MediaViewerImage = document.getElementById("discord2MediaViewerImage");
+    const discord2MediaViewerVideo = document.getElementById("discord2MediaViewerVideo");
+    const discord2MediaViewerLink = document.getElementById("discord2MediaViewerLink");
+    const discord2MediaViewerClose = document.getElementById("discord2MediaViewerClose");
     const discord2UserbarAvatar = document.getElementById("discord2UserbarAvatar");
     const discord2UserbarName = document.getElementById("discord2UserbarName");
     const discord2UserbarState = document.getElementById("discord2UserbarState");
@@ -87,6 +98,7 @@
     const discord2VoiceSessionChannel = document.getElementById("discord2VoiceSessionChannel");
     const discord2VoiceLatencyBtn = document.getElementById("discord2VoiceLatencyBtn");
     const discord2VoiceKrispBtn = document.getElementById("discord2VoiceKrispBtn");
+    const discord2ScreenShareBtn = document.getElementById("discord2ScreenShareBtn");
     const discord2KrispPopover = document.getElementById("discord2KrispPopover");
     const discord2KrispToggle = document.getElementById("discord2KrispToggle");
     const discord2KrispMicTestBtn = document.getElementById("discord2KrispMicTestBtn");
@@ -148,11 +160,19 @@
     let discord2VoicePeerReady = null;
     const discord2VoiceCallsByUser = new Map();
     const discord2VoiceAudioByUser = new Map();
+    const discord2ScreenShareOutgoingCallsByUser = new Map();
+    const discord2ScreenShareIncomingCallsByUser = new Map();
+    const discord2RemoteScreenStreamsByUser = new Map();
     const discord2PendingAudioPlayback = new Set();
     let discord2AudioUnlockListenerAttached = false;
     let discord2VoiceDesiredChannelId = null;
     let discord2VoiceCurrentChannelId = null;
     let discord2PushToTalkPressed = false;
+    let discord2ScreenShareStream = null;
+    let discord2ScreenSharePending = false;
+    let discord2PendingUploadFile = null;
+    let discord2SendingMessage = false;
+    let discord2DragDepth = 0;
     let discord2MicTestAnimationFrame = null;
     let discord2VoiceDevicesListenerAttached = false;
     let discord2LastSpeakingSentState = null;
@@ -176,6 +196,7 @@
       selfUserId: null,
       selfVoiceChannelId: null,
       speakingByUser: {},
+      screenSharingByUser: {},
       inputMeterLevel: 0,
       inputMeterThreshold: 0.5,
       inputMeterRms: 0,
@@ -188,6 +209,38 @@
     const DISCORD2_LATENCY_POLL_MS = 5000;
     const DISCORD2_LATENCY_TIMEOUT_MS = 3000;
     const DISCORD2_VOICE_SETTINGS_REJOIN_DEBOUNCE_MS = 320;
+    const DISCORD2_SCREEN_SHARE_MEDIA_TYPE = "screen";
+    const DISCORD2_SCREEN_SHARE_FPS = 60;
+    const DISCORD2_SCREEN_SHARE_MAX_BITRATE = 8500000;
+    const DISCORD2_MESSAGE_UPLOAD_MAX_BYTES = 12 * 1024 * 1024;
+    const DISCORD2_MESSAGE_GROUP_WINDOW_MS = 8 * 60 * 1000;
+    const DISCORD2_MESSAGE_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+    const DISCORD2_MESSAGE_VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".ogv", ".ogg", ".mov"]);
+    const DISCORD2_MESSAGE_IMAGE_MIME_PREFIX = "image/";
+    const DISCORD2_MESSAGE_VIDEO_MIME_TYPES = new Set(["video/mp4", "video/webm", "video/ogg", "video/quicktime"]);
+    const discord2MessageTimeFormatter = new Intl.DateTimeFormat("hu-HU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const discord2MessageDividerDateFormatter = new Intl.DateTimeFormat("hu-HU", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      weekday: "long",
+    });
+    const discord2MessageTooltipFormatter = new Intl.DateTimeFormat("hu-HU", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      weekday: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const discord2MessageHeaderDateFormatter = new Intl.DateTimeFormat("hu-HU", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
 
     function hasDiscord2Access() {
       if (!isUserLoggedIn()) {
@@ -262,6 +315,216 @@
             ? `/uploads/avatars/${profilePictureFilename}`
             : "program_icons/default-avatar.png",
         };
+      }
+
+      function stopDiscord2StreamTracks(stream) {
+        if (!stream || typeof stream.getTracks !== "function") {
+          return;
+        }
+        stream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch (_error) {}
+        });
+      }
+
+      function canDiscord2UseScreenShare() {
+        return Boolean(
+          navigator.mediaDevices
+          && typeof navigator.mediaDevices.getDisplayMedia === "function",
+        );
+      }
+
+      function isDiscord2SelfScreenSharing() {
+        return Boolean(discord2ScreenShareStream);
+      }
+
+      function getDiscord2ActiveVoiceMembers() {
+        const activeChannelId = getDiscord2SelfVoiceChannelId();
+        if (!activeChannelId) {
+          return [];
+        }
+        return Array.isArray(discord2State.voiceMembersByChannel[String(activeChannelId)])
+          ? discord2State.voiceMembersByChannel[String(activeChannelId)]
+          : [];
+      }
+
+      function formatDiscord2FileSize(bytes) {
+        const numericBytes = Number(bytes);
+        if (!Number.isFinite(numericBytes) || numericBytes <= 0) {
+          return "0 B";
+        }
+        if (numericBytes < 1024) {
+          return `${numericBytes} B`;
+        }
+        if (numericBytes < 1024 * 1024) {
+          return `${(numericBytes / 1024).toFixed(1)} KB`;
+        }
+        return `${(numericBytes / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      function getDiscord2MessageAttachmentKindFromFile(file) {
+        const extension = String(file?.name || "").trim().toLowerCase();
+        const extensionSuffix = extension.includes(".")
+          ? extension.slice(extension.lastIndexOf("."))
+          : "";
+        const mimeType = String(file?.type || "").trim().toLowerCase();
+
+        if (mimeType.startsWith(DISCORD2_MESSAGE_IMAGE_MIME_PREFIX) && DISCORD2_MESSAGE_IMAGE_EXTENSIONS.has(extensionSuffix)) {
+          return "image";
+        }
+        if (DISCORD2_MESSAGE_VIDEO_MIME_TYPES.has(mimeType) && DISCORD2_MESSAGE_VIDEO_EXTENSIONS.has(extensionSuffix)) {
+          return "video";
+        }
+        return null;
+      }
+
+      function isDiscord2ValidUploadFile(file) {
+        if (!file) {
+          return false;
+        }
+        if (!getDiscord2MessageAttachmentKindFromFile(file)) {
+          return false;
+        }
+        return Number(file.size) > 0 && Number(file.size) <= DISCORD2_MESSAGE_UPLOAD_MAX_BYTES;
+      }
+
+      function clearDiscord2PendingUpload({ keepStatus = false } = {}) {
+        discord2PendingUploadFile = null;
+        if (discord2UploadInput) {
+          discord2UploadInput.value = "";
+        }
+        if (!keepStatus && discord2UploadLabel) {
+          discord2UploadLabel.textContent = "";
+        }
+      }
+
+      function updateDiscord2UploadLabel() {
+        if (!discord2UploadLabel) {
+          return;
+        }
+        if (discord2SendingMessage) {
+          discord2UploadLabel.textContent = "Feltoltes folyamatban...";
+          return;
+        }
+        if (discord2PendingUploadFile) {
+          discord2UploadLabel.textContent = `${discord2PendingUploadFile.name} (${formatDiscord2FileSize(discord2PendingUploadFile.size)})`;
+          return;
+        }
+        discord2UploadLabel.textContent = "";
+      }
+
+      function setDiscord2PendingUploadFile(file, validationMessage = "Csak 12MB alatti kep vagy video kuldheto.") {
+        const selectedChannel = getDiscord2SelectedChannel();
+        if (!selectedChannel || selectedChannel.type !== "text") {
+          clearDiscord2PendingUpload({ keepStatus: true });
+          if (discord2UploadLabel) {
+            discord2UploadLabel.textContent = "Csak szoveges csatornaba csatolhatsz fajlt.";
+          }
+          return false;
+        }
+
+        if (!isDiscord2ValidUploadFile(file)) {
+          clearDiscord2PendingUpload({ keepStatus: true });
+          if (discord2UploadLabel) {
+            discord2UploadLabel.textContent = validationMessage;
+          }
+          return false;
+        }
+
+        discord2PendingUploadFile = file;
+        updateDiscord2UploadLabel();
+        return true;
+      }
+
+      function isDiscord2FileDragEvent(event) {
+        const types = Array.isArray(event?.dataTransfer?.types)
+          ? event.dataTransfer.types
+          : Array.from(event?.dataTransfer?.types || []);
+        return types.includes("Files");
+      }
+
+      function hideDiscord2DropOverlay(resetDepth = false) {
+        if (resetDepth) {
+          discord2DragDepth = 0;
+        }
+        if (!discord2DropOverlay) {
+          return;
+        }
+        discord2DropOverlay.classList.remove("is-active");
+        discord2DropOverlay.setAttribute("aria-hidden", "true");
+      }
+
+      function showDiscord2DropOverlay() {
+        if (!discord2DropOverlay) {
+          return;
+        }
+        discord2DropOverlay.classList.add("is-active");
+        discord2DropOverlay.setAttribute("aria-hidden", "false");
+      }
+
+      function openDiscord2MediaViewer({ kind, url, name, mimeType = "" } = {}) {
+        const normalizedKind = kind === "video" ? "video" : (kind === "image" ? "image" : null);
+        const normalizedUrl = String(url || "").trim();
+        if (!discord2MediaViewerModal || !normalizedKind || !normalizedUrl) {
+          return;
+        }
+
+        const normalizedName = String(name || "Csatolmany").trim() || "Csatolmany";
+        const normalizedMimeType = String(mimeType || "").trim();
+        if (discord2MediaViewerTitle) {
+          discord2MediaViewerTitle.textContent = normalizedName;
+        }
+        if (discord2MediaViewerLink) {
+          discord2MediaViewerLink.href = normalizedUrl;
+        }
+
+        if (discord2MediaViewerImage) {
+          discord2MediaViewerImage.style.display = normalizedKind === "image" ? "block" : "none";
+          discord2MediaViewerImage.src = normalizedKind === "image" ? normalizedUrl : "";
+          discord2MediaViewerImage.alt = normalizedName;
+        }
+
+        if (discord2MediaViewerVideo) {
+          discord2MediaViewerVideo.pause();
+          discord2MediaViewerVideo.style.display = normalizedKind === "video" ? "block" : "none";
+          if (normalizedKind === "video") {
+            discord2MediaViewerVideo.src = normalizedUrl;
+            if (normalizedMimeType) {
+              discord2MediaViewerVideo.setAttribute("type", normalizedMimeType);
+            } else {
+              discord2MediaViewerVideo.removeAttribute("type");
+            }
+            discord2MediaViewerVideo.load();
+          } else {
+            discord2MediaViewerVideo.removeAttribute("src");
+            discord2MediaViewerVideo.load();
+          }
+        }
+
+        discord2MediaViewerModal.classList.add("is-visible");
+        discord2MediaViewerModal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeDiscord2MediaViewer() {
+        if (!discord2MediaViewerModal) {
+          return;
+        }
+        discord2MediaViewerModal.classList.remove("is-visible");
+        discord2MediaViewerModal.setAttribute("aria-hidden", "true");
+        if (discord2MediaViewerImage) {
+          discord2MediaViewerImage.src = "";
+          discord2MediaViewerImage.style.display = "none";
+        }
+        if (discord2MediaViewerVideo) {
+          discord2MediaViewerVideo.pause();
+          discord2MediaViewerVideo.removeAttribute("src");
+          discord2MediaViewerVideo.style.display = "none";
+          discord2MediaViewerVideo.load();
+        }
+        if (discord2MediaViewerLink) {
+          discord2MediaViewerLink.href = "#";
+        }
       }
 
       function buildDiscord2ServerFallbackLetter(name) {
@@ -376,12 +639,112 @@
           .replaceAll("'", "&#39;");
       }
 
-      function formatDiscord2MessageTime(isoValue) {
+      function parseDiscord2MessageDate(isoValue) {
         const date = new Date(isoValue);
-        if (Number.isNaN(date.getTime())) {
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+
+      function isDiscord2SameCalendarDay(leftDate, rightDate) {
+        return Boolean(
+          leftDate
+          && rightDate
+          && leftDate.getFullYear() === rightDate.getFullYear()
+          && leftDate.getMonth() === rightDate.getMonth()
+          && leftDate.getDate() === rightDate.getDate()
+        );
+      }
+
+      function getDiscord2YesterdayDate(baseDate = new Date()) {
+        return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() - 1);
+      }
+
+      function formatDiscord2MessageTime(isoValue) {
+        const date = parseDiscord2MessageDate(isoValue);
+        return date ? discord2MessageTimeFormatter.format(date) : "";
+      }
+
+      function formatDiscord2MessageTooltip(isoValue) {
+        const date = parseDiscord2MessageDate(isoValue);
+        return date ? discord2MessageTooltipFormatter.format(date) : "Ismeretlen időpont";
+      }
+
+      function formatDiscord2MessageHeaderTimestamp(isoValue) {
+        const date = parseDiscord2MessageDate(isoValue);
+        if (!date) {
           return "";
         }
-        return date.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
+
+        const timeLabel = discord2MessageTimeFormatter.format(date);
+        const now = new Date();
+        if (isDiscord2SameCalendarDay(date, now)) {
+          return `Ma ${timeLabel}`;
+        }
+        if (isDiscord2SameCalendarDay(date, getDiscord2YesterdayDate(now))) {
+          return `Tegnap ${timeLabel}`;
+        }
+        return `${discord2MessageHeaderDateFormatter.format(date)} ${timeLabel}`;
+      }
+
+      function formatDiscord2MessageDividerLabel(isoValue) {
+        const date = parseDiscord2MessageDate(isoValue);
+        if (!date) {
+          return "Ismeretlen nap";
+        }
+
+        const now = new Date();
+        if (isDiscord2SameCalendarDay(date, now)) {
+          return "Ma";
+        }
+        if (isDiscord2SameCalendarDay(date, getDiscord2YesterdayDate(now))) {
+          return "Tegnap";
+        }
+        return discord2MessageDividerDateFormatter.format(date);
+      }
+
+      function getDiscord2MessageTimestampValue(message) {
+        const date = parseDiscord2MessageDate(message?.createdAt);
+        return date ? date.getTime() : 0;
+      }
+
+      function getDiscord2MessageGroupIdentity(message) {
+        const userId = normalizeDiscord2Id(message?.userId);
+        if (userId) {
+          return `user:${userId}`;
+        }
+        return `author:${String(message?.author || "").trim()}|avatar:${String(message?.avatarUrl || "").trim()}`;
+      }
+
+      function shouldDiscord2StartNewMessageGroup(message, previousMessage) {
+        if (!message || !previousMessage) {
+          return true;
+        }
+
+        const currentDate = parseDiscord2MessageDate(message.createdAt);
+        const previousDate = parseDiscord2MessageDate(previousMessage.createdAt);
+        if (!currentDate || !previousDate) {
+          return true;
+        }
+        if (!isDiscord2SameCalendarDay(currentDate, previousDate)) {
+          return true;
+        }
+        if (getDiscord2MessageGroupIdentity(message) !== getDiscord2MessageGroupIdentity(previousMessage)) {
+          return true;
+        }
+
+        return (currentDate.getTime() - previousDate.getTime()) > DISCORD2_MESSAGE_GROUP_WINDOW_MS;
+      }
+
+      function shouldDiscord2InsertMessageDivider(message, previousMessage) {
+        if (!message) {
+          return false;
+        }
+        if (!previousMessage) {
+          return true;
+        }
+
+        const currentDate = parseDiscord2MessageDate(message.createdAt);
+        const previousDate = parseDiscord2MessageDate(previousMessage.createdAt);
+        return !isDiscord2SameCalendarDay(currentDate, previousDate);
       }
 
       function getDiscord2ChannelDescription(channel) {
@@ -554,8 +917,17 @@
           }
 
           try {
+            const vadAssetVersion = "20260302-1";
+            const vadAssetBaseUrl = new URL("js/libs/vad/", window.location.href);
+            const resolveVadAssetUrl = (assetName) => {
+              const assetUrl = new URL(assetName, vadAssetBaseUrl);
+              assetUrl.searchParams.set("v", vadAssetVersion);
+              return assetUrl.toString();
+            };
+
             if (window.ort?.env?.wasm) {
-              window.ort.env.wasm.wasmPaths = "/js/libs/vad/";
+              window.ort.env.wasm.wasmPaths = vadAssetBaseUrl.toString();
+              window.ort.env.wasm.numThreads = 1;
             }
             if (window.ort?.env) {
               window.ort.env.logLevel = "fatal";
@@ -592,8 +964,8 @@
                 this.vadSpeaking = false;
                 this.updateTransmissionState({ force: true });
               },
-              modelURL: "/js/libs/vad/silero_vad.onnx",
-              workletURL: "/js/libs/vad/vad.worklet.bundle.min.js",
+              modelURL: resolveVadAssetUrl("silero_vad.onnx"),
+              workletURL: resolveVadAssetUrl("vad.worklet.bundle.min.js"),
             };
 
             if (
@@ -672,10 +1044,25 @@
 
         async startLocalStream(deviceId = null) {
           const requestedDeviceId = String(deviceId || this.settings.inputDeviceId || "default");
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: this.buildAudioConstraints(requestedDeviceId),
-            video: false,
-          });
+          let stream;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: this.buildAudioConstraints(requestedDeviceId),
+              video: false,
+            });
+          } catch (error) {
+            if (error.name === "NotFoundError" && requestedDeviceId !== "default") {
+              console.warn(`Discord 2 mikrofon nem található (${requestedDeviceId}), visszatérés az alapértelmezettre.`);
+              this.settings.inputDeviceId = "default";
+              persistDiscord2PersonalSettings();
+              stream = await navigator.mediaDevices.getUserMedia({
+                audio: this.buildAudioConstraints("default"),
+                video: false,
+              });
+            } else {
+              throw error;
+            }
+          }
 
           this.destroyVadEngine();
           this.stopTracks(this.rawStream);
@@ -875,10 +1262,7 @@
           if (!this.audioContext) {
             return null;
           }
-          if (typeof AudioWorkletNode === "undefined") {
-            return null;
-          }
-          if (!this.audioContext.audioWorklet || typeof this.audioContext.audioWorklet.addModule !== "function") {
+          if (typeof AudioWorkletNode === "undefined" || !window.DeepFilter) {
             return null;
           }
           if (this.rnnoiseWorkletNode) {
@@ -886,52 +1270,26 @@
           }
 
           try {
-            if (!this.rnnoiseModuleLoaded) {
-              const buildVersion = String(CLIENT_BUILD_VERSION || "").trim();
-              const moduleUrl = buildVersion
-                ? `/js/libs/rnnoise-processor.js?v=${encodeURIComponent(buildVersion)}`
-                : "/js/libs/rnnoise-processor.js";
-              await this.audioContext.audioWorklet.addModule(moduleUrl);
-              this.rnnoiseModuleLoaded = true;
+            if (!this.deepFilterCore) {
+              this.deepFilterCore = new window.DeepFilter.DeepFilterNet3Core({
+                sampleRate: this.audioContext.sampleRate,
+                noiseReductionLevel: 100, // Erőteljes szűrés a Krisp érzésért
+                assetConfig: {
+                  cdnUrl: "/js/libs/deepfilter"
+                }
+              });
+              await this.deepFilterCore.initialize();
             }
 
-            const node = new AudioWorkletNode(this.audioContext, "rnnoise-worklet", {
-              numberOfInputs: 1,
-              numberOfOutputs: 1,
-              outputChannelCount: [1],
-              processorOptions: {
-                wasmUrl: "/js/libs/rnnoise.wasm",
-              },
-            });
-
-            this.rnnoiseAvailable = false;
-            this.rnnoiseLastError = null;
-            node.port.onmessage = (event) => {
-              const messageType = event?.data?.type;
-              if (messageType === "ready") {
-                this.rnnoiseAvailable = true;
-                return;
-              }
-              if (messageType === "error") {
-                this.rnnoiseAvailable = false;
-                this.rnnoiseLastError = String(event?.data?.message || "RNNoise processor error");
-                console.warn("Discord 2 RNNoise worklet error:", this.rnnoiseLastError);
-              }
-            };
-            node.onprocessorerror = () => {
-              this.rnnoiseAvailable = false;
-              this.rnnoiseLastError = "RNNoise processor crashed.";
-              console.warn("Discord 2 RNNoise processor crashed; falling back to non-RNNoise pipeline.");
-              this.safeDisconnectNode(this.rnnoiseWorkletNode);
-              this.rnnoiseWorkletNode = null;
-              this.applyProcessingProfile();
-            };
+            const node = await this.deepFilterCore.createAudioWorkletNode(this.audioContext);
             this.rnnoiseWorkletNode = node;
+            this.rnnoiseAvailable = true;
+            this.rnnoiseLastError = null;
             return node;
           } catch (error) {
             this.rnnoiseAvailable = false;
-            this.rnnoiseLastError = String(error?.message || error || "RNNoise unavailable");
-            console.warn("Discord 2 RNNoise worklet init error:", error);
+            this.rnnoiseLastError = String(error?.message || error || "DeepFilter unavailable");
+            console.warn("Discord 2 DeepFilter worklet init error:", error);
             return null;
           }
         }
@@ -1042,13 +1400,13 @@
             });
           }
           if (noiseMode === "krisp") {
-            this.transientCompressorNode.threshold.value = -42;
-            this.transientCompressorNode.knee.value = 5;
-            this.transientCompressorNode.ratio.value = 14;
-            this.transientCompressorNode.attack.value = 0.002;
-            this.transientCompressorNode.release.value = 0.085;
-            this.highpassNode.frequency.value = 120;
-            this.lowpassNode.frequency.value = 3600;
+            this.transientCompressorNode.threshold.value = -30;
+            this.transientCompressorNode.knee.value = 8;
+            this.transientCompressorNode.ratio.value = 6;
+            this.transientCompressorNode.attack.value = 0.005;
+            this.transientCompressorNode.release.value = 0.15;
+            this.highpassNode.frequency.value = 80;
+            this.lowpassNode.frequency.value = 14000;
           } else if (noiseMode === "standard") {
             this.transientCompressorNode.threshold.value = -36;
             this.transientCompressorNode.knee.value = 6;
@@ -1759,8 +2117,8 @@
           discord2VoiceKrispBtn.classList.toggle("is-active", krispEnabled);
           discord2VoiceKrispBtn.setAttribute("aria-pressed", krispEnabled ? "true" : "false");
           discord2VoiceKrispBtn.title = krispEnabled
-            ? "Krisp zajszűrés: bekapcsolva"
-            : "Krisp zajszűrés: kikapcsolva";
+            ? "DeepFilter zajszűrés: bekapcsolva"
+            : "DeepFilter zajszűrés: kikapcsolva";
         }
       }
 
@@ -2320,6 +2678,8 @@
         if (discord2SendBtn) {
           discord2SendBtn.disabled = true;
         }
+
+        updateDiscord2UploadLabel();
       }
 
       function setDiscord2ComposerWritable(placeholderText = "\u00CDrj \u00FCzenetet...") {
@@ -2333,16 +2693,17 @@
         }
 
         if (discord2UploadBtn) {
-          // File transfer will be enabled in a later iteration.
-          discord2UploadBtn.disabled = true;
+          discord2UploadBtn.disabled = discord2SendingMessage;
         }
 
         if (discord2SendBtn) {
-          discord2SendBtn.disabled = false;
+          discord2SendBtn.disabled = discord2SendingMessage;
         }
+
+        updateDiscord2UploadLabel();
       }
 
-      function sendDiscord2Message() {
+      async function sendDiscord2Message() {
         if (!discord2MessageInput) {
           return;
         }
@@ -2353,7 +2714,63 @@
         }
 
         const content = String(discord2MessageInput.value || "").trim();
-        if (!content) {
+        const pendingFile = discord2PendingUploadFile;
+        if (!content && !pendingFile) {
+          return;
+        }
+
+        if (pendingFile) {
+          if (!isDiscord2ValidUploadFile(pendingFile)) {
+            clearDiscord2PendingUpload({ keepStatus: true });
+            if (discord2UploadLabel) {
+              discord2UploadLabel.textContent = "Csak 12MB alatti kep vagy video kuldheto.";
+            }
+            return;
+          }
+
+          const token = getStoredToken();
+          if (!token) {
+            if (discord2UploadLabel) {
+              discord2UploadLabel.textContent = "A feltolteshez ujra be kell jelentkezni.";
+            }
+            return;
+          }
+
+          discord2SendingMessage = true;
+          setDiscord2ComposerWritable();
+
+          try {
+            const formData = new FormData();
+            formData.append("channelId", String(normalizeDiscord2Id(selectedChannel.id)));
+            formData.append("content", content);
+            formData.append("file", pendingFile, pendingFile.name);
+
+            const response = await fetch("/api/discord2/messages/upload", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+              body: formData,
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload?.message || "Nem sikerult feltolteni a fajlt.");
+            }
+
+            if (payload?.createdMessage) {
+              upsertDiscord2Message(payload.createdMessage);
+            }
+            discord2MessageInput.value = "";
+            clearDiscord2PendingUpload();
+            discord2MessageInput.focus();
+          } catch (error) {
+            if (discord2UploadLabel) {
+              discord2UploadLabel.textContent = error?.message || "Nem sikerult feltolteni a fajlt.";
+            }
+          } finally {
+            discord2SendingMessage = false;
+            setDiscord2ComposerWritable();
+          }
           return;
         }
 
@@ -2369,9 +2786,7 @@
 
         discord2MessageInput.value = "";
         discord2MessageInput.focus();
-        if (discord2UploadLabel) {
-          discord2UploadLabel.textContent = "";
-        }
+        updateDiscord2UploadLabel();
       }
 
       function clearDiscord2RuntimeState() {
@@ -2389,12 +2804,17 @@
         discord2State.selfUserId = null;
         discord2State.selfVoiceChannelId = null;
         discord2State.speakingByUser = {};
+        discord2State.screenSharingByUser = {};
         discord2State.inputMeterLevel = 0;
         discord2State.inputMeterThreshold = 0.5;
         discord2State.inputMeterRms = 0;
         discord2State.isMuted = false;
         discord2State.isDeafened = false;
         discord2LastSpeakingSentState = null;
+        discord2PendingUploadFile = null;
+        discord2SendingMessage = false;
+        hideDiscord2DropOverlay(true);
+        closeDiscord2MediaViewer();
 
         if (discord2UploadInput) {
           discord2UploadInput.value = "";
@@ -2486,11 +2906,30 @@
         discord2ContextMenu.setAttribute("aria-hidden", "true");
       }
 
+      function syncDiscord2ContextMenuActions(payload) {
+        if (!discord2ContextMenu) {
+          return;
+        }
+
+        const renameButton = discord2ContextMenu.querySelector("button[data-action='rename']");
+        const deleteButton = discord2ContextMenu.querySelector("button[data-action='delete']");
+        const isMessageContext = payload?.entityType === "message";
+
+        if (renameButton) {
+          renameButton.style.display = isMessageContext ? "none" : "block";
+        }
+        if (deleteButton) {
+          deleteButton.style.display = "block";
+          deleteButton.textContent = "Törlés";
+        }
+      }
+
       function openDiscord2ContextMenu(clientX, clientY, payload) {
         if (!discord2ContextMenu) {
           return;
         }
         discord2ContextState = payload;
+        syncDiscord2ContextMenuActions(payload);
         discord2ContextMenu.style.left = `${clientX}px`;
         discord2ContextMenu.style.top = `${clientY}px`;
         discord2ContextMenu.classList.add("is-open");
@@ -2695,6 +3134,57 @@
         discord2ChannelTree.innerHTML = categoryMarkup || `<div class="discord2-empty">Nincs el\u00E9rhet\u0151 kateg\u00F3ria.</div>`;
       }
 
+      function renderDiscord2MessageAttachment(message) {
+        const attachment = message?.attachment;
+        if (!attachment?.url || !attachment?.kind) {
+          return "";
+        }
+
+        const safeUrl = escapeDiscord2Html(attachment.url);
+        const safeOriginalName = escapeDiscord2Html(attachment.originalName || attachment.filename || "media");
+        const safeMimeType = escapeDiscord2Html(attachment.mimeType || "");
+        const safeKind = escapeDiscord2Html(attachment.kind);
+        const mediaOpenAttrs = `
+          data-discord2-open-media="${safeKind}"
+          data-discord2-media-url="${safeUrl}"
+          data-discord2-media-name="${safeOriginalName}"
+          data-discord2-media-type="${safeMimeType}"
+        `;
+        const attachmentMeta = attachment.sizeBytes
+          ? `<span class="discord2-message-attachment-meta">${escapeDiscord2Html(formatDiscord2FileSize(attachment.sizeBytes))}</span>`
+          : "";
+
+        if (attachment.kind === "image") {
+          return `
+            <div class="discord2-message-attachment">
+              <button class="discord2-message-preview-btn" type="button" ${mediaOpenAttrs}>
+                <img class="discord2-message-image" src="${safeUrl}" alt="${safeOriginalName}" loading="lazy">
+                <span class="discord2-message-preview-hint">Nagyitas</span>
+              </button>
+              <div class="discord2-message-attachment-caption">
+                <button class="discord2-message-attachment-name discord2-message-attachment-name--button" type="button" ${mediaOpenAttrs}>${safeOriginalName}</button>
+                ${attachmentMeta}
+              </div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="discord2-message-attachment">
+            <div class="discord2-message-video-shell">
+              <video class="discord2-message-video" controls preload="metadata">
+                <source src="${safeUrl}" ${safeMimeType ? `type="${safeMimeType}"` : ""}>
+              </video>
+              <button class="discord2-message-expand-btn" type="button" aria-label="Megnyitás nagyban" ${mediaOpenAttrs}>⤢</button>
+            </div>
+            <div class="discord2-message-attachment-caption">
+              <button class="discord2-message-attachment-name discord2-message-attachment-name--button" type="button" ${mediaOpenAttrs}>${safeOriginalName}</button>
+              ${attachmentMeta}
+            </div>
+          </div>
+        `;
+      }
+
       function renderDiscord2Messages() {
         if (!discord2MessageList || !discord2MessageInput || !discord2SendBtn || !discord2UploadBtn || !discord2UploadLabel) {
           return;
@@ -2702,6 +3192,7 @@
 
         const selectedChannel = getDiscord2SelectedChannel();
         if (!selectedChannel) {
+          hideDiscord2DropOverlay(true);
           if (discord2ChannelTitle) {
             discord2ChannelTitle.textContent = "# nincs csatorna";
           }
@@ -2726,6 +3217,7 @@
         }
 
         if (!isTextChannel) {
+          hideDiscord2DropOverlay(true);
           discord2MessageList.innerHTML = `
             <div class="discord2-empty">
               <p>A k\u00F6z\u00E9ps\u0151 chat n\u00E9zet csak sz\u00F6veges csatorn\u00E1n akt\u00EDv.</p>
@@ -2745,24 +3237,67 @@
         if (!messages.length) {
           discord2MessageList.innerHTML = `<div class="discord2-empty">M\u00E9g nincs \u00FCzenet ebben a csatorn\u00E1ban.</div>`;
         } else {
-          discord2MessageList.innerHTML = messages
-            .map((message) => `
-              <article class="discord2-message">
-                <img class="discord2-message-avatar" src="${escapeDiscord2Html(message.avatarUrl)}" alt="">
+          const sortedMessages = messages
+            .map((message, index) => ({
+              message,
+              index,
+              timestamp: getDiscord2MessageTimestampValue(message),
+            }))
+            .sort((left, right) => {
+              if (left.timestamp !== right.timestamp) {
+                return left.timestamp - right.timestamp;
+              }
+              return left.index - right.index;
+            })
+            .map((entry) => entry.message);
+
+          const messageMarkup = [];
+          let previousMessage = null;
+
+          sortedMessages.forEach((message) => {
+            if (shouldDiscord2InsertMessageDivider(message, previousMessage)) {
+              messageMarkup.push(`
+                <div class="discord2-message-divider" role="separator" aria-label="${escapeDiscord2Html(formatDiscord2MessageDividerLabel(message.createdAt))}">
+                  <span>${escapeDiscord2Html(formatDiscord2MessageDividerLabel(message.createdAt))}</span>
+                </div>
+              `);
+            }
+
+            const isGroupStart = shouldDiscord2StartNewMessageGroup(message, previousMessage);
+            const shortTimeLabel = formatDiscord2MessageTime(message.createdAt);
+            const headerTimeLabel = formatDiscord2MessageHeaderTimestamp(message.createdAt);
+            const tooltipTimeLabel = formatDiscord2MessageTooltip(message.createdAt);
+
+            messageMarkup.push(`
+              <article class="discord2-message ${isGroupStart ? "is-group-start" : "is-grouped"}" data-discord2-message-id="${escapeDiscord2Html(message.id)}">
+                <div class="discord2-message-gutter">
+                  ${isGroupStart
+                    ? `<img class="discord2-message-avatar" src="${escapeDiscord2Html(message.avatarUrl)}" alt="">`
+                    : `<time class="discord2-message-inline-time" datetime="${escapeDiscord2Html(message.createdAt)}" title="${escapeDiscord2Html(tooltipTimeLabel)}">${escapeDiscord2Html(shortTimeLabel)}</time>`}
+                </div>
                 <div class="discord2-message-main">
-                  <div class="discord2-message-head">
-                    <span class="discord2-message-author">${escapeDiscord2Html(message.author)}</span>
-                    <time class="discord2-message-time">${escapeDiscord2Html(formatDiscord2MessageTime(message.createdAt))}</time>
-                  </div>
-                  <p class="discord2-message-body">${escapeDiscord2Html(message.content)}</p>
+                  ${isGroupStart
+                    ? `
+                      <div class="discord2-message-head">
+                        <span class="discord2-message-author">${escapeDiscord2Html(message.author)}</span>
+                        <time class="discord2-message-time" datetime="${escapeDiscord2Html(message.createdAt)}" title="${escapeDiscord2Html(tooltipTimeLabel)}">${escapeDiscord2Html(headerTimeLabel)}</time>
+                      </div>
+                    `
+                    : ""}
+                  ${message.content ? `<p class="discord2-message-body">${escapeDiscord2Html(message.content)}</p>` : ""}
+                  ${renderDiscord2MessageAttachment(message)}
                 </div>
               </article>
-            `)
-            .join("");
+            `);
+
+            previousMessage = message;
+          });
+
+          discord2MessageList.innerHTML = messageMarkup.join("");
         }
 
         setDiscord2ComposerWritable("\u00CDrj \u00FCzenetet...");
-        discord2UploadLabel.textContent = "F\u00E1jlcsatol\u00E1s k\u00E9s\u0151bb \u00E9rkezik.";
+        updateDiscord2UploadLabel();
         scrollDiscord2MessagesToBottom();
       }
 
@@ -2793,10 +3328,14 @@
               const memberVoiceChannelId = normalizeDiscord2Id(member.voiceChannelId);
               const memberVoiceChannel = memberVoiceChannelId ? getDiscord2ChannelById(memberVoiceChannelId) : null;
               const isSelf = selfUserId && normalizeDiscord2Id(member.userId) === selfUserId;
+              const isScreenSharing = member.screenSharing || (isSelf && Boolean(discord2ScreenShareStream));
 
               let statusText = memberVoiceChannel
                 ? `Hang: ${memberVoiceChannel.name}`
                 : "Online";
+              if (isScreenSharing) {
+                statusText += " | Screen share";
+              }
 
               if (isSelf && discord2State.isDeafened) {
                 statusText += " | S\u00FCket\u00EDtve";
@@ -2804,12 +3343,15 @@
                 statusText += " | NAmAtva";
               }
               const isSpeaking = isDiscord2MemberSpeaking(member.userId);
+              const screenShareBadge = isScreenSharing
+                ? `<span class="discord2-member-badge">Live</span>`
+                : "";
 
               return `
                 <div class="discord2-member">
                   <img class="discord2-speaking-avatar${isSpeaking ? " is-speaking" : ""}" src="${escapeDiscord2Html(member.avatarUrl)}" alt="">
                   <div class="discord2-member-meta">
-                    <span class="discord2-member-name">${escapeDiscord2Html(member.username)}</span>
+                    <span class="discord2-member-name">${escapeDiscord2Html(member.username)}${screenShareBadge}</span>
                     <span class="discord2-member-status">${escapeDiscord2Html(statusText)}</span>
                   </div>
                 </div>
@@ -2837,6 +3379,9 @@
             discord2UserbarState.textContent = "Kapcsol\u00F3d\u00E1s...";
           } else {
             let stateText = voiceChannel ? `Hang: ${voiceChannel.name}` : "Online";
+            if (discord2ScreenShareStream) {
+              stateText += " | Screen share";
+            }
             if (discord2State.isDeafened) {
               stateText += " | S\u00FCket\u00EDtve";
             } else if (discord2State.isMuted) {
@@ -2868,6 +3413,28 @@
           updateDiscord2LatencyIndicator();
         }
 
+        if (discord2ScreenShareBtn) {
+          const isSharingScreen = isDiscord2SelfScreenSharing();
+          const screenShareSupported = canDiscord2UseScreenShare();
+          const disabled = !inVoiceChannel || !screenShareSupported || discord2ScreenSharePending;
+          discord2ScreenShareBtn.disabled = disabled;
+          discord2ScreenShareBtn.classList.toggle("is-active", isSharingScreen);
+          discord2ScreenShareBtn.setAttribute("aria-pressed", isSharingScreen ? "true" : "false");
+
+          if (!screenShareSupported) {
+            discord2ScreenShareBtn.title = "Screen share nem tamogatott ebben a bongeszoben";
+          } else if (!inVoiceChannel) {
+            discord2ScreenShareBtn.title = "Csatlakozz egy hangcsatornahoz a screen share-hez";
+          } else if (discord2ScreenSharePending) {
+            discord2ScreenShareBtn.title = "Screen share inditasa...";
+          } else {
+            discord2ScreenShareBtn.title = isSharingScreen
+              ? "Screen share leallitasa"
+              : "Screen share inditasa";
+          }
+          discord2ScreenShareBtn.setAttribute("aria-label", discord2ScreenShareBtn.title);
+        }
+
         if (discord2MuteBtn) {
           discord2MuteBtn.classList.toggle("is-active", Boolean(discord2State.isMuted));
           discord2MuteBtn.setAttribute("aria-pressed", discord2State.isMuted ? "true" : "false");
@@ -2892,6 +3459,7 @@
         discord2Section.classList.toggle("discord2--admin", isAdminUser());
         renderDiscord2ChannelTree();
         renderDiscord2Messages();
+        renderDiscord2ScreenShareStage();
         renderDiscord2MemberList();
         renderDiscord2Userbar();
       }
@@ -2982,6 +3550,26 @@
           if (confirm(`T\u00F6r\u00F6lj\u00FCk a(z) "${channel.name}" csatorn\u00E1t?`)) {
             discord2Socket.emit("discord2_delete_channel", { channelId: normalizedEntityId });
           }
+          return;
+        }
+
+        if (entityType === "message") {
+          const selectedChannelId = normalizeDiscord2Id(discord2State.selectedChannelId);
+          if (!selectedChannelId) {
+            return;
+          }
+
+          const channelMessages = Array.isArray(discord2State.messagesByChannel[String(selectedChannelId)])
+            ? discord2State.messagesByChannel[String(selectedChannelId)]
+            : [];
+          const message = channelMessages.find((item) => normalizeDiscord2Id(item.id) === normalizedEntityId);
+          if (!message) {
+            return;
+          }
+
+          if (confirm("T\u00F6r\u00F6lj\u00FCk ezt az \u00FCzenetet?")) {
+            discord2Socket.emit("discord2_delete_message", { messageId: normalizedEntityId });
+          }
         }
       }
 
@@ -3047,6 +3635,7 @@
           voiceChannelId: normalizedVoiceChannelId || null,
           peerId: normalizedPeerId || null,
           speaking: rawMember?.speaking === true,
+          screenSharing: rawMember?.screenSharing === true,
         };
       }
 
@@ -3057,15 +3646,31 @@
         }
 
         const authorUserId = normalizeDiscord2Id(rawMessage?.userId ?? rawMessage?.user_id);
-        if (!authorUserId) {
-          return null;
-        }
-
         const messageIdRaw = rawMessage?.id;
         const messageId = messageIdRaw ? String(messageIdRaw) : createDiscord2TempId("msg");
         const author = String(rawMessage?.author ?? rawMessage?.author_name ?? "Ismeretlen").trim() || "Ismeretlen";
         const content = String(rawMessage?.content || "").trim();
-        if (!content) {
+        const rawAttachment = rawMessage?.attachment && typeof rawMessage.attachment === "object"
+          ? rawMessage.attachment
+          : rawMessage;
+        const attachmentKind = rawAttachment?.kind === "video" || rawAttachment?.attachment_kind === "video"
+          ? "video"
+          : ((rawAttachment?.kind === "image" || rawAttachment?.attachment_kind === "image") ? "image" : null);
+        const attachmentFilename = String(rawAttachment?.filename ?? rawAttachment?.attachment_filename ?? "").trim();
+        const attachmentUrlRaw = String(rawAttachment?.url ?? "").trim();
+        const attachment = attachmentKind && attachmentFilename
+          ? {
+              kind: attachmentKind,
+              filename: attachmentFilename,
+              originalName: String(rawAttachment?.originalName ?? rawAttachment?.attachment_original_name ?? attachmentFilename).trim(),
+              mimeType: String(rawAttachment?.mimeType ?? rawAttachment?.attachment_mime_type ?? "").trim() || null,
+              sizeBytes: Number.isFinite(Number(rawAttachment?.sizeBytes ?? rawAttachment?.attachment_size_bytes))
+                ? Number(rawAttachment?.sizeBytes ?? rawAttachment?.attachment_size_bytes)
+                : null,
+              url: attachmentUrlRaw || `/uploads/discord2/${attachmentKind === "video" ? "videos" : "images"}/${encodeURIComponent(attachmentFilename)}`,
+            }
+          : null;
+        if (!content && !attachment) {
           return null;
         }
 
@@ -3080,10 +3685,12 @@
         return {
           id: messageId,
           channelId,
+          userId: authorUserId || null,
           author,
           content,
           avatarUrl,
           createdAt,
+          attachment,
         };
       }
 
@@ -3151,10 +3758,14 @@
         }
 
         const nextSpeakingByUser = {};
+        const nextScreenSharingByUser = {};
         normalizedOnlineMembers.forEach((member) => {
           const memberUserId = normalizeDiscord2Id(member.userId);
           if (memberUserId && member.speaking === true) {
             nextSpeakingByUser[String(memberUserId)] = true;
+          }
+          if (memberUserId && member.screenSharing === true) {
+            nextScreenSharingByUser[String(memberUserId)] = true;
           }
         });
         Object.values(normalizedVoiceMembersByChannel).forEach((members) => {
@@ -3169,6 +3780,7 @@
         discord2State.onlineMembers = normalizedOnlineMembers;
         discord2State.voiceMembersByChannel = normalizedVoiceMembersByChannel;
         discord2State.speakingByUser = nextSpeakingByUser;
+        discord2State.screenSharingByUser = nextScreenSharingByUser;
 
         const selfUserId = normalizeDiscord2Id(discord2State.selfUserId);
         const selfMember = selfUserId
@@ -3186,6 +3798,7 @@
         if (nextSelfVoiceChannelId) {
           discord2VoiceDesiredChannelId = nextSelfVoiceChannelId;
         }
+        syncDiscord2RemoteScreenSharesFromPresence();
         refreshDiscord2VoiceConnections();
       }
 
@@ -3250,6 +3863,48 @@
         }
 
         if (normalizeDiscord2Id(discord2State.selectedChannelId) === normalizeDiscord2Id(normalizedMessage.channelId)) {
+          renderDiscord2Messages();
+        }
+      }
+
+      function removeDiscord2Message(payload) {
+        const messageId = normalizeDiscord2Id(payload?.messageId);
+        if (!messageId) {
+          return;
+        }
+
+        const normalizedChannelId = normalizeDiscord2Id(payload?.channelId);
+        const targetChannelIds = normalizedChannelId
+          ? [normalizedChannelId]
+          : Object.keys(discord2State.messagesByChannel);
+
+        let removedFromSelectedChannel = false;
+        targetChannelIds.forEach((channelIdValue) => {
+          const channelId = normalizeDiscord2Id(channelIdValue);
+          if (!channelId) {
+            return;
+          }
+
+          const channelKey = String(channelId);
+          const messages = Array.isArray(discord2State.messagesByChannel[channelKey])
+            ? discord2State.messagesByChannel[channelKey]
+            : null;
+          if (!messages?.length) {
+            return;
+          }
+
+          const nextMessages = messages.filter((message) => normalizeDiscord2Id(message.id) !== messageId);
+          if (nextMessages.length === messages.length) {
+            return;
+          }
+
+          discord2State.messagesByChannel[channelKey] = nextMessages;
+          if (normalizeDiscord2Id(discord2State.selectedChannelId) === channelId) {
+            removedFromSelectedChannel = true;
+          }
+        });
+
+        if (removedFromSelectedChannel) {
           renderDiscord2Messages();
         }
       }
@@ -3345,6 +4000,645 @@
         } finally {
           discord2VoiceSettingsRejoinInFlight = false;
         }
+      }
+
+      function emitDiscord2ScreenShareState(sharing) {
+        const activeChannelId = getDiscord2SelfVoiceChannelId();
+        if (!activeChannelId || !discord2SocketConnected || !discord2Socket) {
+          return;
+        }
+
+        discord2Socket.emit("discord2_screen_share_state", {
+          sharing: sharing === true,
+        });
+      }
+
+      function closeDiscord2OutgoingScreenShareCall(remoteUserId) {
+        const key = String(remoteUserId);
+        const callEntry = discord2ScreenShareOutgoingCallsByUser.get(key);
+        if (callEntry?.call) {
+          try {
+            callEntry.call.close();
+          } catch (_error) {}
+        }
+        discord2ScreenShareOutgoingCallsByUser.delete(key);
+      }
+
+      function closeAllDiscord2OutgoingScreenShareCalls() {
+        Array.from(discord2ScreenShareOutgoingCallsByUser.keys()).forEach((remoteUserId) => {
+          closeDiscord2OutgoingScreenShareCall(remoteUserId);
+        });
+      }
+
+      function closeDiscord2RemoteScreenStream(remoteUserId) {
+        const key = String(remoteUserId);
+        const stream = discord2RemoteScreenStreamsByUser.get(key);
+        if (!stream) {
+          return;
+        }
+        stopDiscord2StreamTracks(stream);
+        discord2RemoteScreenStreamsByUser.delete(key);
+      }
+
+      function closeDiscord2IncomingScreenShare(remoteUserId) {
+        const key = String(remoteUserId);
+        const callEntry = discord2ScreenShareIncomingCallsByUser.get(key);
+        if (callEntry?.call) {
+          try {
+            callEntry.call.close();
+          } catch (_error) {}
+        }
+        discord2ScreenShareIncomingCallsByUser.delete(key);
+        closeDiscord2RemoteScreenStream(key);
+      }
+
+      function closeAllDiscord2IncomingScreenShares() {
+        Array.from(discord2ScreenShareIncomingCallsByUser.keys()).forEach((remoteUserId) => {
+          closeDiscord2IncomingScreenShare(remoteUserId);
+        });
+      }
+
+      async function optimizeDiscord2ScreenShareSender(call) {
+        const peerConnection = getDiscord2CallPeerConnection(call);
+        if (!peerConnection) {
+          return false;
+        }
+
+        const senders = Array.isArray(peerConnection.getSenders?.()) ? peerConnection.getSenders() : [];
+        const videoSender = senders.find((sender) => sender?.track?.kind === "video");
+        if (!videoSender || typeof videoSender.getParameters !== "function" || typeof videoSender.setParameters !== "function") {
+          return false;
+        }
+
+        const track = videoSender.track || null;
+        if (track) {
+          try {
+            track.contentHint = "detail";
+          } catch (_error) {}
+        }
+
+        try {
+          const parameters = videoSender.getParameters() || {};
+          const existingEncodings = Array.isArray(parameters.encodings) && parameters.encodings.length
+            ? parameters.encodings
+            : [{}];
+
+          parameters.encodings = existingEncodings.map((encoding) => ({
+            ...encoding,
+            maxBitrate: Math.max(Number(encoding?.maxBitrate) || 0, DISCORD2_SCREEN_SHARE_MAX_BITRATE),
+            maxFramerate: Math.max(Number(encoding?.maxFramerate) || 0, DISCORD2_SCREEN_SHARE_FPS),
+            scaleResolutionDownBy: 1,
+          }));
+          parameters.degradationPreference = "maintain-resolution";
+
+          await videoSender.setParameters(parameters);
+          return true;
+        } catch (_error) {
+          return false;
+        }
+      }
+
+      function scheduleDiscord2ScreenShareSenderOptimization(call) {
+        [0, 220, 1000, 2400].forEach((delayMs) => {
+          window.setTimeout(() => {
+            void optimizeDiscord2ScreenShareSender(call);
+          }, delayMs);
+        });
+      }
+
+      function bindDiscord2RemoteScreenShareStream(remoteUserId, stream) {
+        if (!stream) {
+          return;
+        }
+
+        const key = String(remoteUserId);
+        const previousStream = discord2RemoteScreenStreamsByUser.get(key);
+        if (previousStream && previousStream !== stream) {
+          stopDiscord2StreamTracks(previousStream);
+        }
+
+        const videoTrack = stream.getVideoTracks?.()[0] || null;
+        if (videoTrack) {
+          videoTrack.addEventListener("ended", () => {
+            if (discord2RemoteScreenStreamsByUser.get(key) !== stream) {
+              return;
+            }
+            closeDiscord2IncomingScreenShare(key);
+            renderDiscord2ScreenShareStage();
+          }, { once: true });
+        }
+
+        discord2RemoteScreenStreamsByUser.set(key, stream);
+        renderDiscord2ScreenShareStage();
+      }
+
+      function registerDiscord2OutgoingScreenShareCall(remoteUserId, remotePeerId, call) {
+        const normalizedRemoteUserId = normalizeDiscord2Id(remoteUserId);
+        if (!normalizedRemoteUserId || !call) {
+          try {
+            call?.close();
+          } catch (_error) {}
+          return;
+        }
+
+        const key = String(normalizedRemoteUserId);
+        const normalizedRemotePeerId = String(remotePeerId || call.peer || "");
+        const previousCall = discord2ScreenShareOutgoingCallsByUser.get(key);
+        if (previousCall?.call && previousCall.call !== call) {
+          if (previousCall.remotePeerId === normalizedRemotePeerId) {
+            try {
+              call.close();
+            } catch (_error) {}
+            return;
+          }
+          try {
+            previousCall.call.close();
+          } catch (_error) {}
+        }
+
+        discord2ScreenShareOutgoingCallsByUser.set(key, {
+          remoteUserId: normalizedRemoteUserId,
+          remotePeerId: normalizedRemotePeerId,
+          call,
+        });
+
+        scheduleDiscord2ScreenShareSenderOptimization(call);
+
+        const cleanup = () => {
+          const activeCall = discord2ScreenShareOutgoingCallsByUser.get(key);
+          if (activeCall?.call === call) {
+            discord2ScreenShareOutgoingCallsByUser.delete(key);
+          }
+        };
+
+        call.on("close", cleanup);
+        call.on("error", cleanup);
+      }
+
+      function registerDiscord2IncomingScreenShareCall(remoteUserId, remotePeerId, call) {
+        const normalizedRemoteUserId = normalizeDiscord2Id(remoteUserId);
+        if (!normalizedRemoteUserId || !call) {
+          try {
+            call?.close();
+          } catch (_error) {}
+          return;
+        }
+
+        const key = String(normalizedRemoteUserId);
+        const normalizedRemotePeerId = String(remotePeerId || call.peer || "");
+        const previousCall = discord2ScreenShareIncomingCallsByUser.get(key);
+        if (previousCall?.call && previousCall.call !== call) {
+          if (previousCall.remotePeerId === normalizedRemotePeerId) {
+            try {
+              call.close();
+            } catch (_error) {}
+            return;
+          }
+          try {
+            previousCall.call.close();
+          } catch (_error) {}
+        }
+
+        discord2ScreenShareIncomingCallsByUser.set(key, {
+          remoteUserId: normalizedRemoteUserId,
+          remotePeerId: normalizedRemotePeerId,
+          call,
+        });
+
+        call.on("stream", (remoteStream) => {
+          bindDiscord2RemoteScreenShareStream(normalizedRemoteUserId, remoteStream);
+        });
+
+        const cleanup = () => {
+          const activeCall = discord2ScreenShareIncomingCallsByUser.get(key);
+          if (activeCall?.call === call) {
+            discord2ScreenShareIncomingCallsByUser.delete(key);
+            closeDiscord2RemoteScreenStream(key);
+            renderDiscord2ScreenShareStage();
+          }
+        };
+
+        call.on("close", cleanup);
+        call.on("error", cleanup);
+      }
+
+      function startDiscord2ScreenShareCall(remoteUserId, remotePeerId) {
+        const normalizedRemoteUserId = normalizeDiscord2Id(remoteUserId);
+        if (!discord2VoicePeer || !discord2VoicePeerId || !normalizedRemoteUserId || !remotePeerId || !discord2ScreenShareStream) {
+          return;
+        }
+
+        const selfUserId = normalizeDiscord2Id(discord2State.selfUserId);
+        if (!selfUserId || selfUserId === normalizedRemoteUserId) {
+          return;
+        }
+
+        const existingCall = discord2ScreenShareOutgoingCallsByUser.get(String(normalizedRemoteUserId));
+        if (existingCall && existingCall.remotePeerId === String(remotePeerId)) {
+          return;
+        }
+
+        const activeChannelId = getDiscord2SelfVoiceChannelId();
+        if (!activeChannelId) {
+          return;
+        }
+
+        let call = null;
+        try {
+          call = discord2VoicePeer.call(remotePeerId, discord2ScreenShareStream, {
+            metadata: {
+              userId: selfUserId,
+              channelId: activeChannelId,
+              mediaType: DISCORD2_SCREEN_SHARE_MEDIA_TYPE,
+            },
+          });
+        } catch (error) {
+          console.warn("Discord 2 screen share hivas inditasi hiba:", error);
+          return;
+        }
+
+        if (!call) {
+          return;
+        }
+
+        registerDiscord2OutgoingScreenShareCall(normalizedRemoteUserId, remotePeerId, call);
+      }
+
+      function handleIncomingDiscord2ScreenShareCall(call) {
+        const remoteUserId = normalizeDiscord2Id(call?.metadata?.userId);
+        const remoteChannelId = normalizeDiscord2Id(call?.metadata?.channelId);
+        const activeChannelId = getDiscord2SelfVoiceChannelId();
+        if (!remoteUserId || !activeChannelId || (remoteChannelId && remoteChannelId !== activeChannelId)) {
+          try {
+            call?.close();
+          } catch (_error) {}
+          return;
+        }
+
+        try {
+          call.answer();
+          registerDiscord2IncomingScreenShareCall(remoteUserId, call.peer, call);
+        } catch (error) {
+          console.warn("Discord 2 incoming screen share hiba:", error);
+          try {
+            call.close();
+          } catch (_innerError) {}
+        }
+      }
+
+      function refreshDiscord2ScreenShareConnections() {
+        const activeChannelId = getDiscord2SelfVoiceChannelId();
+        const selfUserId = normalizeDiscord2Id(discord2State.selfUserId);
+        if (!activeChannelId || !selfUserId || !discord2ScreenShareStream || !discord2VoicePeer || !discord2VoicePeerId) {
+          closeAllDiscord2OutgoingScreenShareCalls();
+          return;
+        }
+
+        const desiredMembers = new Map();
+        getDiscord2ActiveVoiceMembers().forEach((member) => {
+          const memberUserId = normalizeDiscord2Id(member.userId);
+          if (!memberUserId || memberUserId === selfUserId) {
+            return;
+          }
+          const peerId = String(member.peerId || "").trim();
+          if (!peerId) {
+            return;
+          }
+
+          desiredMembers.set(String(memberUserId), {
+            userId: memberUserId,
+            peerId,
+          });
+        });
+
+        Array.from(discord2ScreenShareOutgoingCallsByUser.entries()).forEach(([userKey, callEntry]) => {
+          const expectedMember = desiredMembers.get(userKey);
+          if (!expectedMember || expectedMember.peerId !== callEntry.remotePeerId) {
+            closeDiscord2OutgoingScreenShareCall(userKey);
+          }
+        });
+
+        desiredMembers.forEach((member) => {
+          startDiscord2ScreenShareCall(member.userId, member.peerId);
+        });
+      }
+
+      function syncDiscord2RemoteScreenSharesFromPresence() {
+        const selfUserId = normalizeDiscord2Id(discord2State.selfUserId);
+        const expectedSharers = new Set();
+
+        getDiscord2ActiveVoiceMembers().forEach((member) => {
+          const memberUserId = normalizeDiscord2Id(member.userId);
+          if (!memberUserId || memberUserId === selfUserId || member.screenSharing !== true) {
+            return;
+          }
+          expectedSharers.add(String(memberUserId));
+        });
+
+        Array.from(discord2ScreenShareIncomingCallsByUser.keys()).forEach((userKey) => {
+          if (!expectedSharers.has(String(userKey))) {
+            closeDiscord2IncomingScreenShare(userKey);
+          }
+        });
+
+        Array.from(discord2RemoteScreenStreamsByUser.keys()).forEach((userKey) => {
+          if (!expectedSharers.has(String(userKey))) {
+            closeDiscord2RemoteScreenStream(userKey);
+          }
+        });
+      }
+
+      function buildDiscord2ScreenShareDescriptors() {
+        const descriptors = [];
+        const currentUser = getDiscord2CurrentUser();
+        const selfUserId = normalizeDiscord2Id(discord2State.selfUserId);
+        const seenKeys = new Set();
+
+        if (discord2ScreenShareStream) {
+          const localKey = selfUserId ? String(selfUserId) : "self";
+          descriptors.push({
+            key: localKey,
+            username: currentUser.username || "Te",
+            stream: discord2ScreenShareStream,
+            isSelf: true,
+          });
+          seenKeys.add(localKey);
+        }
+
+        getDiscord2ActiveVoiceMembers().forEach((member) => {
+          const memberUserId = normalizeDiscord2Id(member.userId);
+          if (!memberUserId || member.screenSharing !== true) {
+            return;
+          }
+          if (selfUserId && memberUserId === selfUserId && discord2ScreenShareStream) {
+            return;
+          }
+
+          const key = String(memberUserId);
+          if (seenKeys.has(key)) {
+            return;
+          }
+
+          descriptors.push({
+            key,
+            username: member.username,
+            stream: discord2RemoteScreenStreamsByUser.get(key) || null,
+            isSelf: false,
+          });
+          seenKeys.add(key);
+        });
+
+        Array.from(discord2RemoteScreenStreamsByUser.entries()).forEach(([userKey, stream]) => {
+          if (seenKeys.has(String(userKey))) {
+            return;
+          }
+
+          const fallbackMember = Array.isArray(discord2State.onlineMembers)
+            ? discord2State.onlineMembers.find((member) => normalizeDiscord2Id(member.userId) === normalizeDiscord2Id(userKey))
+            : null;
+
+          descriptors.push({
+            key: String(userKey),
+            username: fallbackMember?.username || `User ${userKey}`,
+            stream,
+            isSelf: false,
+          });
+        });
+
+        return descriptors;
+      }
+
+      function createDiscord2ScreenShareCard(cardKey) {
+        const card = document.createElement("article");
+        card.className = "discord2-screen-share-card";
+        card.dataset.discord2ScreenShareKey = String(cardKey);
+        card.innerHTML = `
+          <div class="discord2-screen-share-card__frame">
+            <div class="discord2-screen-share-card__placeholder" aria-hidden="true">
+              <i class="fa-solid fa-display"></i>
+            </div>
+            <video class="discord2-screen-share-card__video" playsinline autoplay muted></video>
+            <div class="discord2-screen-share-card__overlay">
+              <span class="discord2-screen-share-card__badge">LIVE</span>
+              <span class="discord2-screen-share-card__name"></span>
+            </div>
+          </div>
+          <div class="discord2-screen-share-card__status"></div>
+        `;
+        return card;
+      }
+
+      function syncDiscord2ScreenShareCard(card, descriptor) {
+        const hasStream = Boolean(descriptor.stream);
+        const videoElement = card.querySelector(".discord2-screen-share-card__video");
+        const placeholderElement = card.querySelector(".discord2-screen-share-card__placeholder");
+        const badgeElement = card.querySelector(".discord2-screen-share-card__badge");
+        const nameElement = card.querySelector(".discord2-screen-share-card__name");
+        const statusElement = card.querySelector(".discord2-screen-share-card__status");
+
+        card.classList.toggle("is-local", descriptor.isSelf === true);
+        card.classList.toggle("is-pending", !hasStream);
+
+        if (badgeElement) {
+          badgeElement.textContent = descriptor.isSelf ? "PREVIEW" : "LIVE";
+        }
+
+        if (nameElement) {
+          nameElement.textContent = descriptor.isSelf
+            ? `${descriptor.username} (te)`
+            : descriptor.username;
+        }
+
+        if (statusElement) {
+          statusElement.textContent = descriptor.isSelf
+            ? (hasStream ? "Sajat elo kep" : "Kepernyomegosztas indul...")
+            : (hasStream ? "Elo kepernyomegosztas" : "Stream csatlakoztatas...");
+        }
+
+        if (placeholderElement) {
+          placeholderElement.hidden = hasStream;
+        }
+
+        if (videoElement) {
+          videoElement.hidden = !hasStream;
+          videoElement.muted = descriptor.isSelf === true;
+          if (videoElement.srcObject !== (descriptor.stream || null)) {
+            videoElement.srcObject = descriptor.stream || null;
+          }
+          if (descriptor.stream) {
+            videoElement.play().catch(() => {});
+          } else {
+            try {
+              videoElement.pause();
+            } catch (_error) {}
+          }
+        }
+      }
+
+      function renderDiscord2ScreenShareStage() {
+        if (!discord2ScreenStage || !discord2ScreenStageGrid) {
+          return;
+        }
+
+        const activeChannelId = getDiscord2SelfVoiceChannelId();
+        const activeChannel = getDiscord2ChannelById(activeChannelId);
+        const descriptors = activeChannelId ? buildDiscord2ScreenShareDescriptors() : [];
+        const hasShares = descriptors.length > 0;
+
+        discord2ScreenStage.classList.toggle("is-visible", hasShares);
+        discord2ScreenStage.style.display = hasShares ? "block" : "none";
+
+        if (!hasShares) {
+          Array.from(discord2ScreenStageGrid.querySelectorAll("video")).forEach((videoElement) => {
+            try {
+              videoElement.pause();
+            } catch (_error) {}
+            videoElement.srcObject = null;
+          });
+          discord2ScreenStageGrid.innerHTML = "";
+          if (discord2ScreenStageMeta) {
+            discord2ScreenStageMeta.textContent = "No active streams";
+          }
+          return;
+        }
+
+        if (discord2ScreenStageMeta) {
+          const shareLabel = descriptors.length === 1 ? "1 aktiv stream" : `${descriptors.length} aktiv stream`;
+          const channelLabel = activeChannel ? `#${activeChannel.name}` : "voice";
+          discord2ScreenStageMeta.textContent = `${shareLabel} a ${channelLabel} csatornaban`;
+        }
+
+        const existingCards = new Map();
+        Array.from(discord2ScreenStageGrid.children).forEach((child) => {
+          if (child instanceof HTMLElement && child.dataset.discord2ScreenShareKey) {
+            existingCards.set(child.dataset.discord2ScreenShareKey, child);
+          }
+        });
+
+        const desiredKeys = new Set(descriptors.map((descriptor) => String(descriptor.key)));
+        existingCards.forEach((card, key) => {
+          if (desiredKeys.has(String(key))) {
+            return;
+          }
+          const videoElement = card.querySelector("video");
+          if (videoElement) {
+            try {
+              videoElement.pause();
+            } catch (_error) {}
+            videoElement.srcObject = null;
+          }
+          card.remove();
+        });
+
+        descriptors.forEach((descriptor) => {
+          const key = String(descriptor.key);
+          const card = existingCards.get(key) || createDiscord2ScreenShareCard(key);
+          syncDiscord2ScreenShareCard(card, descriptor);
+          discord2ScreenStageGrid.appendChild(card);
+        });
+      }
+
+      function stopDiscord2ScreenShare({ notifyServer = true } = {}) {
+        const activeStream = discord2ScreenShareStream;
+        if (!activeStream) {
+          closeAllDiscord2OutgoingScreenShareCalls();
+          renderDiscord2ScreenShareStage();
+          renderDiscord2Userbar();
+          return;
+        }
+
+        discord2ScreenShareStream = null;
+        closeAllDiscord2OutgoingScreenShareCalls();
+        if (notifyServer) {
+          emitDiscord2ScreenShareState(false);
+        }
+
+        stopDiscord2StreamTracks(activeStream);
+        renderDiscord2ScreenShareStage();
+        renderDiscord2Userbar();
+      }
+
+      async function startDiscord2ScreenShare() {
+        if (discord2ScreenSharePending || discord2ScreenShareStream) {
+          return;
+        }
+
+        if (!canDiscord2UseScreenShare()) {
+          if (discord2UploadLabel) {
+            discord2UploadLabel.textContent = "A bongeszo nem tamogatja a kepernyomegosztast.";
+          }
+          return;
+        }
+
+        const activeChannelId = getDiscord2SelfVoiceChannelId();
+        if (!activeChannelId) {
+          if (discord2UploadLabel) {
+            discord2UploadLabel.textContent = "Elobb csatlakozz egy hangcsatornahoz.";
+          }
+          return;
+        }
+
+        discord2ScreenSharePending = true;
+        renderDiscord2Userbar();
+
+        try {
+          await ensureDiscord2VoicePeer();
+
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              frameRate: { ideal: DISCORD2_SCREEN_SHARE_FPS, max: DISCORD2_SCREEN_SHARE_FPS },
+              width: { ideal: 1920, max: 3840 },
+              height: { ideal: 1080, max: 2160 },
+              cursor: "always",
+            },
+            audio: false,
+          });
+
+          const videoTrack = stream?.getVideoTracks?.()[0] || null;
+          if (!videoTrack) {
+            stopDiscord2StreamTracks(stream);
+            throw new Error("Nem erkezett video track a kepernyomegosztashoz.");
+          }
+
+          if (!getDiscord2SelfVoiceChannelId()) {
+            stopDiscord2StreamTracks(stream);
+            return;
+          }
+
+          try {
+            videoTrack.contentHint = "detail";
+          } catch (_error) {}
+
+          videoTrack.addEventListener("ended", () => {
+            if (discord2ScreenShareStream !== stream) {
+              return;
+            }
+            stopDiscord2ScreenShare();
+          }, { once: true });
+
+          discord2ScreenShareStream = stream;
+          emitDiscord2ScreenShareState(true);
+          refreshDiscord2ScreenShareConnections();
+          renderDiscord2ScreenShareStage();
+        } catch (error) {
+          if (error?.name !== "AbortError" && error?.name !== "NotAllowedError") {
+            console.warn("Discord 2 screen share inditasi hiba:", error);
+            if (discord2UploadLabel) {
+              discord2UploadLabel.textContent = "Nem sikerult elinditani a kepernyomegosztast.";
+            }
+          }
+        } finally {
+          discord2ScreenSharePending = false;
+          renderDiscord2Userbar();
+        }
+      }
+
+      function toggleDiscord2ScreenShare() {
+        if (discord2ScreenShareStream) {
+          stopDiscord2ScreenShare();
+          return;
+        }
+        void startDiscord2ScreenShare();
       }
 
       function closeDiscord2VoiceAudio(remoteUserId) {
@@ -3643,9 +4937,17 @@
             if (activeChannelId) {
               emitDiscord2VoiceJoinPresence(activeChannelId);
             }
+            if (discord2ScreenShareStream) {
+              emitDiscord2ScreenShareState(true);
+              refreshDiscord2ScreenShareConnections();
+            }
           });
 
           voicePeer.on("call", (call) => {
+            if (call?.metadata?.mediaType === DISCORD2_SCREEN_SHARE_MEDIA_TYPE) {
+              handleIncomingDiscord2ScreenShareCall(call);
+              return;
+            }
             handleIncomingDiscord2VoiceCall(call);
           });
 
@@ -3711,6 +5013,7 @@
         desiredMembers.forEach((member) => {
           startDiscord2VoiceCall(member.userId, member.peerId);
         });
+        refreshDiscord2ScreenShareConnections();
       }
 
       function setDiscord2MemberSpeaking(userId, speaking) {
@@ -3800,6 +5103,7 @@
           setDiscord2MemberSpeaking(remoteUserId, peerInfo?.speaking === true);
           startDiscord2VoiceCall(remoteUserId, remotePeerId);
         });
+        refreshDiscord2ScreenShareConnections();
         renderDiscord2();
       }
 
@@ -3816,6 +5120,7 @@
         }
         setDiscord2MemberSpeaking(remoteUserId, payload?.speaking === true);
         startDiscord2VoiceCall(remoteUserId, remotePeerId);
+        refreshDiscord2ScreenShareConnections();
         renderDiscord2();
       }
 
@@ -3825,7 +5130,10 @@
           return;
         }
         closeDiscord2VoiceCall(remoteUserId);
+        closeDiscord2OutgoingScreenShareCall(remoteUserId);
+        closeDiscord2IncomingScreenShare(remoteUserId);
         setDiscord2MemberSpeaking(remoteUserId, false);
+        refreshDiscord2ScreenShareConnections();
         renderDiscord2();
       }
 
@@ -3837,6 +5145,8 @@
         }
         discord2VoiceSettingsRejoinInFlight = false;
         closeAllDiscord2VoiceCalls();
+        stopDiscord2ScreenShare({ notifyServer });
+        closeAllDiscord2IncomingScreenShares();
         stopDiscord2LatencyPolling({ clearValue: true });
         closeDiscord2KrispPopover();
 
@@ -3944,6 +5254,7 @@
             discord2State.onlineMembers = [];
             discord2State.voiceMembersByChannel = {};
             discord2State.speakingByUser = {};
+            discord2State.screenSharingByUser = {};
             discord2State.selfVoiceChannelId = null;
             teardownDiscord2VoiceRuntime({ notifyServer: false, clearDesired: false });
             renderDiscord2();
@@ -3970,6 +5281,10 @@
 
           discord2Socket.on("discord2_message_created", (payload) => {
             upsertDiscord2Message(payload || {});
+          });
+
+          discord2Socket.on("discord2_message_deleted", (payload) => {
+            removeDiscord2Message(payload || {});
           });
 
           discord2Socket.on("discord2_voice_room_peers", (payload) => {
@@ -4335,9 +5650,125 @@
           });
         }
 
+        if (discord2MessageList) {
+          discord2MessageList.addEventListener("click", (event) => {
+            const mediaTrigger = event.target.closest("[data-discord2-open-media]");
+            if (!mediaTrigger) {
+              return;
+            }
+
+            event.preventDefault();
+            openDiscord2MediaViewer({
+              kind: mediaTrigger.dataset.discord2OpenMedia,
+              url: mediaTrigger.dataset.discord2MediaUrl,
+              name: mediaTrigger.dataset.discord2MediaName,
+              mimeType: mediaTrigger.dataset.discord2MediaType,
+            });
+          });
+
+          discord2MessageList.addEventListener("contextmenu", (event) => {
+            if (!isAdminUser()) {
+              return;
+            }
+
+            const messageNode = event.target.closest("[data-discord2-message-id]");
+            if (!messageNode) {
+              return;
+            }
+
+            const messageId = normalizeDiscord2Id(messageNode.dataset.discord2MessageId);
+            if (!messageId) {
+              return;
+            }
+
+            event.preventDefault();
+            openDiscord2ContextMenu(event.clientX, event.clientY, {
+              entityType: "message",
+              entityId: messageId,
+            });
+          });
+        }
+
         if (discord2SendBtn) {
           discord2SendBtn.addEventListener("click", () => {
             sendDiscord2Message();
+          });
+        }
+
+        if (discord2UploadBtn) {
+          discord2UploadBtn.addEventListener("click", () => {
+            if (discord2UploadBtn.disabled) {
+              return;
+            }
+            discord2UploadInput?.click();
+          });
+        }
+
+        if (discord2UploadInput) {
+          discord2UploadInput.addEventListener("change", (event) => {
+            const input = event.currentTarget;
+            const file = input?.files?.[0] || null;
+            if (!file) {
+              clearDiscord2PendingUpload();
+              return;
+            }
+
+            setDiscord2PendingUploadFile(file);
+          });
+        }
+
+        if (discord2Chat) {
+          discord2Chat.addEventListener("dragenter", (event) => {
+            if (!isDiscord2FileDragEvent(event)) {
+              return;
+            }
+            if (!getDiscord2SelectedChannel() || getDiscord2SelectedChannel()?.type !== "text") {
+              return;
+            }
+            event.preventDefault();
+            discord2DragDepth += 1;
+            showDiscord2DropOverlay();
+          });
+
+          discord2Chat.addEventListener("dragover", (event) => {
+            if (!isDiscord2FileDragEvent(event)) {
+              return;
+            }
+            if (!getDiscord2SelectedChannel() || getDiscord2SelectedChannel()?.type !== "text") {
+              return;
+            }
+            event.preventDefault();
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = "copy";
+            }
+            showDiscord2DropOverlay();
+          });
+
+          discord2Chat.addEventListener("dragleave", (event) => {
+            if (!isDiscord2FileDragEvent(event)) {
+              return;
+            }
+            if (!discord2Chat.contains(event.relatedTarget)) {
+              discord2DragDepth = 0;
+            } else {
+              discord2DragDepth = Math.max(0, discord2DragDepth - 1);
+            }
+            if (discord2DragDepth === 0) {
+              hideDiscord2DropOverlay();
+            }
+          });
+
+          discord2Chat.addEventListener("drop", (event) => {
+            if (!isDiscord2FileDragEvent(event)) {
+              return;
+            }
+            event.preventDefault();
+            hideDiscord2DropOverlay(true);
+            const file = event.dataTransfer?.files?.[0] || null;
+            if (!file) {
+              return;
+            }
+            setDiscord2PendingUploadFile(file);
           });
         }
 
@@ -4607,6 +6038,12 @@
           });
         }
 
+        if (discord2ScreenShareBtn) {
+          discord2ScreenShareBtn.addEventListener("click", () => {
+            toggleDiscord2ScreenShare();
+          });
+        }
+
         if (discord2LeaveVoiceBtn) {
           discord2LeaveVoiceBtn.addEventListener("click", () => {
             if (!normalizeDiscord2Id(discord2State.selfVoiceChannelId)) {
@@ -4631,6 +6068,20 @@
               discord2ContextState.categoryId,
             );
             hideDiscord2ContextMenu();
+          });
+        }
+
+        if (discord2MediaViewerClose) {
+          discord2MediaViewerClose.addEventListener("click", () => {
+            closeDiscord2MediaViewer();
+          });
+        }
+
+        if (discord2MediaViewerModal) {
+          discord2MediaViewerModal.addEventListener("click", (event) => {
+            if (event.target === discord2MediaViewerModal) {
+              closeDiscord2MediaViewer();
+            }
           });
         }
 
@@ -4663,6 +6114,7 @@
             closeDiscord2ManageModal();
             closeDiscord2ServerSettingsModal();
             closeDiscord2PersonalSettingsModal();
+            closeDiscord2MediaViewer();
             closeDiscord2ServerLogoCropper();
             closeDiscord2KrispPopover();
           }
@@ -4715,4 +6167,3 @@
         ensureDiscord2SocketConnection();
         renderDiscord2();
       }
-

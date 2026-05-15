@@ -19,6 +19,16 @@ const DISCORD2_SERVER_LOGO_KEY = 'discord2_server_logo';
 const DISCORD2_DEFAULT_SERVER_NAME = 'UMKGL Szerver';
 const DISCORD2_VOICE_ROOM_PREFIX = 'discord2_voice_room:';
 const DISCORD2_VOICE_PEER_MAX_LENGTH = 160;
+const DISCORD2_MESSAGE_UPLOAD_MAX_BYTES = 12 * 1024 * 1024;
+const DISCORD2_MESSAGE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+const DISCORD2_MESSAGE_IMAGE_MIME_PREFIX = 'image/';
+const DISCORD2_MESSAGE_VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.ogv', '.ogg', '.mov']);
+const DISCORD2_MESSAGE_VIDEO_MIME_TYPES = new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']);
+const discord2MessageImagesDirectory = path.join(discord2UploadsDirectory, 'images');
+const discord2MessageVideosDirectory = path.join(discord2UploadsDirectory, 'videos');
+
+fs.mkdirSync(discord2MessageImagesDirectory, { recursive: true });
+fs.mkdirSync(discord2MessageVideosDirectory, { recursive: true });
 
 function normalizeDiscord2PeerId(value) {
     const normalized = String(value || '').trim();
@@ -70,6 +80,7 @@ function getDiscord2VoicePeersForChannel(channelId, excludedUserId = null) {
             userId: Number(entry.userId),
             peerId: entry.peerId,
             speaking: entry.speaking === true,
+            screenSharing: entry.screenSharing === true,
         });
     }
 
@@ -120,6 +131,48 @@ function normalizeDiscord2LogoFilename(value) {
     return normalized || '';
 }
 
+function normalizeDiscord2OriginalFilename(value, maxLength = 255) {
+    const normalized = path.posix.basename(String(value || '').trim());
+    return normalized.slice(0, maxLength);
+}
+
+function getDiscord2MessageAttachmentKindFromFile(file) {
+    const extension = path.extname(String(file?.originalname || '')).toLowerCase();
+    const mimeType = String(file?.mimetype || '').toLowerCase();
+
+    if (mimeType.startsWith(DISCORD2_MESSAGE_IMAGE_MIME_PREFIX) && DISCORD2_MESSAGE_IMAGE_EXTENSIONS.has(extension)) {
+        return 'image';
+    }
+    if (DISCORD2_MESSAGE_VIDEO_MIME_TYPES.has(mimeType) && DISCORD2_MESSAGE_VIDEO_EXTENSIONS.has(extension)) {
+        return 'video';
+    }
+
+    return null;
+}
+
+function getDiscord2MessageAttachmentDirectory(kind) {
+    return kind === 'video' ? discord2MessageVideosDirectory : discord2MessageImagesDirectory;
+}
+
+function getDiscord2MessageAttachmentUrl(kind, filename) {
+    const normalizedFilename = normalizeDiscord2LogoFilename(filename);
+    if (!normalizedFilename) {
+        return null;
+    }
+
+    const folder = kind === 'video' ? 'videos' : 'images';
+    return `/uploads/discord2/${folder}/${normalizedFilename}`;
+}
+
+function getDiscord2MessageAttachmentPath(kind, filename) {
+    const normalizedFilename = normalizeDiscord2LogoFilename(filename);
+    if (!normalizedFilename) {
+        return null;
+    }
+
+    return path.join(getDiscord2MessageAttachmentDirectory(kind), normalizedFilename);
+}
+
 function getDiscord2ServerSettingsPayload() {
     const rawName = app.settings?.[DISCORD2_SERVER_NAME_KEY];
     const normalizedName = normalizeDiscord2ServerName(rawName) || DISCORD2_DEFAULT_SERVER_NAME;
@@ -157,6 +210,7 @@ async function updateDiscord2ServerSettings({ name, logoFilename } = {}) {
 }
 
 function mapDiscord2MessageRow(row) {
+    const attachmentKind = row.attachment_kind === 'video' ? 'video' : (row.attachment_kind === 'image' ? 'image' : null);
     return {
         id: Number(row.id),
         channelId: Number(row.channel_id),
@@ -165,6 +219,14 @@ function mapDiscord2MessageRow(row) {
         content: row.content,
         createdAt: row.created_at,
         avatarUrl: buildAvatarUrl(row.profile_picture_filename),
+        attachment: attachmentKind && row.attachment_filename ? {
+            kind: attachmentKind,
+            filename: normalizeDiscord2LogoFilename(row.attachment_filename),
+            originalName: normalizeDiscord2OriginalFilename(row.attachment_original_name),
+            mimeType: String(row.attachment_mime_type || '').trim() || null,
+            sizeBytes: Number.isFinite(Number(row.attachment_size_bytes)) ? Number(row.attachment_size_bytes) : null,
+            url: getDiscord2MessageAttachmentUrl(attachmentKind, row.attachment_filename),
+        } : null,
     };
 }
 
@@ -194,7 +256,19 @@ async function fetchDiscord2Messages(limit = DISCORD2_MAX_MESSAGES) {
     const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(1000, Number(limit))) : DISCORD2_MAX_MESSAGES;
     const { rows } = await db.query(
         `WITH recent AS (
-            SELECT m.id, m.channel_id, m.user_id, m.author_name, m.content, m.created_at, u.profile_picture_filename
+            SELECT
+                m.id,
+                m.channel_id,
+                m.user_id,
+                m.author_name,
+                m.content,
+                m.created_at,
+                m.attachment_kind,
+                m.attachment_filename,
+                m.attachment_original_name,
+                m.attachment_mime_type,
+                m.attachment_size_bytes,
+                u.profile_picture_filename
             FROM discord2_messages m
             LEFT JOIN users u ON u.id = m.user_id
             WHERE m.user_id IS NOT NULL
@@ -221,6 +295,7 @@ function getDiscord2OnlineMembersPayload() {
             voiceChannelId: entry.voiceChannelId ? Number(entry.voiceChannelId) : null,
             peerId: entry.peerId || null,
             speaking: entry.speaking === true,
+            screenSharing: entry.screenSharing === true,
         }))
         .sort((a, b) => a.username.localeCompare(b.username, 'hu'));
 }
@@ -243,6 +318,7 @@ function getDiscord2VoiceMembersByChannelPayload() {
             isAdmin: entry.isAdmin === true,
             peerId: entry.peerId || null,
             speaking: entry.speaking === true,
+            screenSharing: entry.screenSharing === true,
         });
     }
 
@@ -265,21 +341,16 @@ async function broadcastDiscord2Structure() {
     io.emit('discord2_structure', structure);
 }
 
-async function fetchDiscord2AuthorizedUser(token) {
-    if (!token) {
+async function fetchDiscord2AuthorizedUserById(userId) {
+    const numericUserId = Number(userId);
+    if (!Number.isFinite(numericUserId) || numericUserId <= 0) {
         return null;
     }
 
     try {
-        const decoded = jwt.verify(token, jwtSecret);
-        const userId = Number(decoded?.id);
-        if (!Number.isFinite(userId) || userId <= 0) {
-            return null;
-        }
-
         const { rows } = await db.query(
             'SELECT id, username, is_admin, can_use_discord, profile_picture_filename FROM users WHERE id = $1',
-            [userId]
+            [numericUserId]
         );
         const user = rows[0];
         if (!user || !hasDiscord2Permission(user)) {
@@ -292,6 +363,19 @@ async function fetchDiscord2AuthorizedUser(token) {
             isAdmin: Number(user.is_admin) === 1,
             profilePictureFilename: user.profile_picture_filename || null,
         };
+    } catch (_err) {
+        return null;
+    }
+}
+
+async function fetchDiscord2AuthorizedUser(token) {
+    if (!token) {
+        return null;
+    }
+
+    try {
+        const decoded = jwt.verify(token, jwtSecret);
+        return fetchDiscord2AuthorizedUserById(decoded?.id);
     } catch (_err) {
         return null;
     }
@@ -316,6 +400,9 @@ function attachDiscord2Socket(socketId, userInfo) {
         if (existing.speaking !== true) {
             existing.speaking = false;
         }
+        if (existing.screenSharing !== true) {
+            existing.screenSharing = false;
+        }
     } else {
         discord2OnlineUsers.set(userId, {
             userId,
@@ -325,6 +412,7 @@ function attachDiscord2Socket(socketId, userInfo) {
             voiceChannelId: null,
             peerId: null,
             speaking: false,
+            screenSharing: false,
             sockets: new Set([socketId]),
         });
     }
@@ -366,7 +454,13 @@ async function getDiscord2DefaultTextChannelId() {
     return id ? Number(id) : null;
 }
 
-async function insertDiscord2Message({ channelId, userId = null, authorName, content }) {
+async function insertDiscord2Message({
+    channelId,
+    userId = null,
+    authorName,
+    content,
+    attachment = null,
+}) {
     const numericChannelId = Number(channelId);
     if (!Number.isFinite(numericChannelId) || numericChannelId <= 0) {
         return null;
@@ -374,15 +468,54 @@ async function insertDiscord2Message({ channelId, userId = null, authorName, con
 
     const normalizedAuthor = normalizeDiscord2Name(authorName, 64);
     const normalizedContent = String(content || '').trim().slice(0, 4000);
-    if (!normalizedAuthor || !normalizedContent) {
+    const attachmentKind = attachment?.kind === 'video' ? 'video' : (attachment?.kind === 'image' ? 'image' : null);
+    const attachmentFilename = attachmentKind ? normalizeDiscord2LogoFilename(attachment?.filename) : '';
+    const attachmentOriginalName = attachmentKind ? normalizeDiscord2OriginalFilename(attachment?.originalName || attachment?.filename) : '';
+    const attachmentMimeType = attachmentKind ? String(attachment?.mimeType || '').trim().slice(0, 120) : '';
+    const attachmentSizeBytes = attachmentKind && Number.isFinite(Number(attachment?.sizeBytes))
+        ? Number(attachment.sizeBytes)
+        : null;
+
+    if (!normalizedAuthor || (!normalizedContent && !attachmentKind)) {
         return null;
     }
 
     const { rows } = await db.query(
-        `INSERT INTO discord2_messages (channel_id, user_id, author_name, content)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, channel_id, user_id, author_name, content, created_at`,
-        [numericChannelId, userId ? Number(userId) : null, normalizedAuthor, normalizedContent]
+        `INSERT INTO discord2_messages (
+            channel_id,
+            user_id,
+            author_name,
+            content,
+            attachment_kind,
+            attachment_filename,
+            attachment_original_name,
+            attachment_mime_type,
+            attachment_size_bytes
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING
+            id,
+            channel_id,
+            user_id,
+            author_name,
+            content,
+            created_at,
+            attachment_kind,
+            attachment_filename,
+            attachment_original_name,
+            attachment_mime_type,
+            attachment_size_bytes`,
+        [
+            numericChannelId,
+            userId ? Number(userId) : null,
+            normalizedAuthor,
+            normalizedContent,
+            attachmentKind,
+            attachmentFilename || null,
+            attachmentOriginalName || null,
+            attachmentMimeType || null,
+            attachmentSizeBytes,
+        ]
     );
     const inserted = rows[0];
     if (!inserted) {
@@ -399,6 +532,27 @@ async function insertDiscord2Message({ channelId, userId = null, authorName, con
         ...inserted,
         profile_picture_filename: profilePictureFilename,
     });
+}
+
+async function deleteDiscord2MessageAttachment(row) {
+    const attachmentKind = row?.attachment_kind === 'video' ? 'video' : (row?.attachment_kind === 'image' ? 'image' : null);
+    const attachmentFilename = normalizeDiscord2LogoFilename(row?.attachment_filename);
+    if (!attachmentKind || !attachmentFilename) {
+        return;
+    }
+
+    const attachmentPath = getDiscord2MessageAttachmentPath(attachmentKind, attachmentFilename);
+    if (!attachmentPath) {
+        return;
+    }
+
+    try {
+        await fs.promises.unlink(attachmentPath);
+    } catch (error) {
+        if (error?.code !== 'ENOENT') {
+            console.error('Hiba a Discord 2 media torlesekor:', error);
+        }
+    }
 }
 
 async function emitDiscord2SystemMessage(content, channelId = null) {
@@ -429,6 +583,7 @@ function clearVoiceUsersFromChannel(channelId) {
         if (Number(entry.voiceChannelId) === numericChannelId) {
             entry.voiceChannelId = null;
             entry.speaking = false;
+            entry.screenSharing = false;
             changed = true;
         }
     }
@@ -530,6 +685,44 @@ async function emitDiscord2InitialState(socket, userId) {
         } catch (err) {
             console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
             socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+        }
+    });
+
+    socket.on('discord2_delete_message', async ({ messageId } = {}) => {
+        const userId = discord2SocketUsers.get(socket.id);
+        const user = userId ? discord2OnlineUsers.get(userId) : null;
+        if (!user || user.isAdmin !== true) {
+            socket.emit('discord2_error', { message: 'Csak admin torolhet Discord 2 uzenetet.' });
+            return;
+        }
+
+        const numericMessageId = Number(messageId);
+        if (!Number.isFinite(numericMessageId) || numericMessageId <= 0) {
+            socket.emit('discord2_error', { message: 'Ervenytelen uzenet azonosito.' });
+            return;
+        }
+
+        try {
+            const { rows } = await db.query(
+                `DELETE FROM discord2_messages
+                 WHERE id = $1
+                 RETURNING id, channel_id, attachment_kind, attachment_filename`,
+                [numericMessageId]
+            );
+            const deletedMessage = rows[0];
+            if (!deletedMessage) {
+                socket.emit('discord2_error', { message: 'Az uzenet mar nem talalhato.' });
+                return;
+            }
+
+            await deleteDiscord2MessageAttachment(deletedMessage);
+            io.emit('discord2_message_deleted', {
+                messageId: Number(deletedMessage.id),
+                channelId: Number(deletedMessage.channel_id),
+            });
+        } catch (err) {
+            console.error('Hiba a Discord 2 uzenet torlesekor:', err);
+            socket.emit('discord2_error', { message: 'Nem sikerult torolni az uzenetet.' });
         }
     });
 
@@ -641,6 +834,7 @@ async function emitDiscord2InitialState(socket, userId) {
         const previousPeerId = entry.peerId || null;
         entry.voiceChannelId = null;
         entry.speaking = false;
+        entry.screenSharing = false;
         leaveDiscord2VoiceRooms(socket);
 
         const previousRoomName = getDiscord2VoiceRoomName(previousChannelId);
@@ -652,6 +846,29 @@ async function emitDiscord2InitialState(socket, userId) {
             });
         }
 
+        broadcastDiscord2Presence();
+    });
+
+    socket.on('discord2_screen_share_state', ({ sharing } = {}) => {
+        const userId = discord2SocketUsers.get(socket.id);
+        if (!userId) {
+            return;
+        }
+
+        const entry = discord2OnlineUsers.get(userId);
+        if (!entry || !entry.voiceChannelId) {
+            if (entry) {
+                entry.screenSharing = false;
+            }
+            return;
+        }
+
+        const nextSharing = sharing === true;
+        if (entry.screenSharing === nextSharing) {
+            return;
+        }
+
+        entry.screenSharing = nextSharing;
         broadcastDiscord2Presence();
     });
 
@@ -969,6 +1186,127 @@ const uploadDiscord2ServerLogo = multer({
         cb(new Error('Csak kĂ©pfĂˇjlok tĂ¶lthetĹ‘k fel (jpeg, jpg, png, gif, webp).'));
     },
 }).single('logo');
+
+const discord2MessageAttachmentStorage = multer.diskStorage({
+    destination: (_req, file, cb) => {
+        const attachmentKind = getDiscord2MessageAttachmentKindFromFile(file);
+        if (!attachmentKind) {
+            cb(new Error('Csak kep vagy lejatszhato video toltheto fel.'));
+            return;
+        }
+
+        cb(null, getDiscord2MessageAttachmentDirectory(attachmentKind));
+    },
+    filename: (_req, file, cb) => {
+        const attachmentKind = getDiscord2MessageAttachmentKindFromFile(file);
+        if (!attachmentKind) {
+            cb(new Error('Ervenytelen Discord 2 media fajl.'));
+            return;
+        }
+
+        const extension = path.extname(String(file.originalname || '')).toLowerCase();
+        const uniqueName = `${attachmentKind}-${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
+        cb(null, uniqueName);
+    },
+});
+
+const uploadDiscord2MessageAttachment = multer({
+    storage: discord2MessageAttachmentStorage,
+    limits: { fileSize: DISCORD2_MESSAGE_UPLOAD_MAX_BYTES },
+    fileFilter: (_req, file, cb) => {
+        if (getDiscord2MessageAttachmentKindFromFile(file)) {
+            return cb(null, true);
+        }
+        cb(new Error('Csak kep vagy lejatszhato video toltheto fel.'));
+    },
+}).single('file');
+
+app.post('/api/discord2/messages/upload', authenticateToken, (req, res) => {
+    uploadDiscord2MessageAttachment(req, res, async (uploadErr) => {
+        if (uploadErr) {
+            if (uploadErr instanceof multer.MulterError) {
+                const message = uploadErr.code === 'LIMIT_FILE_SIZE'
+                    ? 'A fajl merete nem haladhatja meg a 12MB-ot.'
+                    : 'Feltoltesi hiba.';
+                return res.status(400).json({ message });
+            }
+            return res.status(400).json({ message: uploadErr.message });
+        }
+
+        const cleanupUploadedFile = async () => {
+            if (!req.file?.path) {
+                return;
+            }
+            try {
+                await fs.promises.unlink(req.file.path);
+            } catch (error) {
+                if (error?.code !== 'ENOENT') {
+                    console.error('Hiba a Discord 2 media rollback kozben:', error);
+                }
+            }
+        };
+
+        try {
+            const user = await fetchDiscord2AuthorizedUserById(req.user?.id);
+            if (!user) {
+                await cleanupUploadedFile();
+                return res.status(403).json({ message: 'Nincs jogosultsag a Discord 2 hasznalatahoz.' });
+            }
+
+            const numericChannelId = Number(req.body?.channelId);
+            const normalizedContent = String(req.body?.content || '').trim().slice(0, 4000);
+            if (!Number.isFinite(numericChannelId) || numericChannelId <= 0) {
+                await cleanupUploadedFile();
+                return res.status(400).json({ message: 'Ervenytelen csatorna.' });
+            }
+
+            if (!req.file) {
+                return res.status(400).json({ message: 'Nincs feltoltott fajl.' });
+            }
+
+            const channelResult = await db.query(
+                "SELECT id FROM discord_channels WHERE id = $1 AND type = 'text'",
+                [numericChannelId]
+            );
+            if (!channelResult.rows[0]) {
+                await cleanupUploadedFile();
+                return res.status(400).json({ message: 'Csak szoveges csatornaba kuldhetsz media uzenetet.' });
+            }
+
+            const attachmentKind = getDiscord2MessageAttachmentKindFromFile(req.file);
+            if (!attachmentKind) {
+                await cleanupUploadedFile();
+                return res.status(400).json({ message: 'Csak kep vagy lejatszhato video toltheto fel.' });
+            }
+
+            const message = await insertDiscord2Message({
+                channelId: numericChannelId,
+                userId: user.userId,
+                authorName: user.username,
+                content: normalizedContent,
+                attachment: {
+                    kind: attachmentKind,
+                    filename: req.file.filename,
+                    originalName: req.file.originalname,
+                    mimeType: req.file.mimetype,
+                    sizeBytes: req.file.size,
+                },
+            });
+
+            if (!message) {
+                await cleanupUploadedFile();
+                return res.status(400).json({ message: 'Ures uzenetet nem lehet kuldeni.' });
+            }
+
+            io.emit('discord2_message_created', message);
+            return res.status(201).json({ message: 'Discord 2 media uzenet elmentve.', createdMessage: message });
+        } catch (error) {
+            await cleanupUploadedFile();
+            console.error('Hiba a Discord 2 media feltoltesekor:', error);
+            return res.status(500).json({ message: 'Nem sikerult feltolteni a fajlt.' });
+        }
+    });
+});
 
 app.post('/api/discord2/server-logo', authenticateToken, isAdmin, (req, res) => {
     uploadDiscord2ServerLogo(req, res, async (uploadErr) => {

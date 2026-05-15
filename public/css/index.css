@@ -1889,6 +1889,8 @@
         align-items: flex-start;
         gap: 10px;
         margin-bottom: 0.5rem;
+        position: relative;
+        z-index: 20;
       }
 
       .video-card__title {
@@ -1946,6 +1948,10 @@
         line-height: 1.1;
         cursor: pointer;
         white-space: nowrap;
+        flex-shrink: 0;
+        pointer-events: auto;
+        position: relative;
+        z-index: 30;
         transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
       }
 
@@ -4915,6 +4921,11 @@
         color: #8fa2ff;
       }
 
+      .discord2-voice-session-btn--screen.is-active {
+        background: rgba(87, 242, 135, 0.18);
+        color: #57f287;
+      }
+
       .discord2-voice-krisp-wrap {
         position: relative;
       }
@@ -5281,6 +5292,7 @@
       }
 
       .discord2-chat {
+        position: relative;
         display: flex;
         flex-direction: column;
         min-height: 0;
@@ -5308,6 +5320,144 @@
         color: #b9bbbe;
       }
 
+      .discord2-screen-stage {
+        display: none;
+        padding: 16px 18px 0;
+        background:
+          linear-gradient(180deg, rgba(17, 18, 20, 0.92), rgba(32, 34, 37, 0.72)),
+          radial-gradient(circle at top right, rgba(87, 242, 135, 0.18), transparent 42%);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .discord2-screen-stage.is-visible {
+        display: block !important;
+      }
+
+      .discord2-screen-stage__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .discord2-screen-stage__header h4 {
+        margin: 0;
+        color: #f5f7fa;
+        font-size: 0.95rem;
+      }
+
+      .discord2-screen-stage__header p {
+        margin: 3px 0 0;
+        color: #aeb4bc;
+        font-size: 0.76rem;
+      }
+
+      .discord2-screen-stage__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+        padding-bottom: 16px;
+      }
+
+      .discord2-screen-share-card {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .discord2-screen-share-card__frame {
+        position: relative;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        border-radius: 14px;
+        background:
+          linear-gradient(160deg, rgba(44, 47, 51, 0.98), rgba(24, 25, 28, 0.98)),
+          #18191c;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        box-shadow: 0 18px 32px rgba(0, 0, 0, 0.28);
+      }
+
+      .discord2-screen-share-card__video,
+      .discord2-screen-share-card__placeholder {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .discord2-screen-share-card__video {
+        display: block;
+        object-fit: cover;
+        background: #08090b;
+      }
+
+      .discord2-screen-share-card__placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 2rem;
+        background:
+          radial-gradient(circle at center, rgba(87, 242, 135, 0.12), transparent 42%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+      }
+
+      .discord2-screen-share-card__overlay {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .discord2-screen-share-card__badge,
+      .discord2-screen-share-card__name {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        border-radius: 999px;
+        padding: 0 10px;
+        background: rgba(10, 11, 13, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        backdrop-filter: blur(12px);
+        color: #f5f7fa;
+        font-size: 0.77rem;
+      }
+
+      .discord2-screen-share-card__badge {
+        font-weight: 800;
+        letter-spacing: 0.7px;
+        text-transform: uppercase;
+        color: #57f287;
+      }
+
+      .discord2-screen-share-card__name {
+        font-weight: 600;
+        margin-left: auto;
+        max-width: calc(100% - 78px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .discord2-screen-share-card__status {
+        color: #aeb4bc;
+        font-size: 0.76rem;
+        padding: 0 4px;
+      }
+
+      .discord2-screen-share-card.is-pending .discord2-screen-share-card__frame {
+        border-style: dashed;
+      }
+
+      .discord2-screen-share-card.is-local .discord2-screen-share-card__badge {
+        color: #8fa2ff;
+      }
+
       .discord2-message-list {
         flex: 1 1 auto;
         min-height: 0;
@@ -5315,13 +5465,68 @@
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 0;
+      }
+
+      .discord2-message-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 18px 0 10px;
+        color: #949ba4;
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .discord2-message-divider::before,
+      .discord2-message-divider::after {
+        content: "";
+        flex: 1 1 auto;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .discord2-message-divider span {
+        padding: 0 10px;
+        border-radius: 999px;
+        background: #313338;
+        white-space: nowrap;
       }
 
       .discord2-message {
         display: flex;
         align-items: flex-start;
-        gap: 10px;
+        gap: 12px;
+        margin-top: 2px;
+        margin-inline: -8px;
+        padding: 2px 8px;
+        border-radius: 6px;
+        transition: background 0.12s ease;
+      }
+
+      .discord2-message:hover {
+        background: rgba(4, 4, 5, 0.07);
+      }
+
+      .discord2-message.is-group-start {
+        margin-top: 16px;
+      }
+
+      .discord2-message-divider + .discord2-message {
+        margin-top: 4px;
+      }
+
+      .discord2-message-gutter {
+        width: 40px;
+        flex: 0 0 40px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+      }
+
+      .discord2-message.is-grouped .discord2-message-gutter {
+        align-items: center;
       }
 
       .discord2-message-avatar {
@@ -5335,12 +5540,28 @@
 
       .discord2-message-main {
         min-width: 0;
+        flex: 1 1 auto;
       }
 
       .discord2-message-head {
         display: flex;
         align-items: baseline;
         gap: 8px;
+        min-height: 22px;
+      }
+
+      .discord2-message-inline-time {
+        color: #949ba4;
+        font-size: 0.68rem;
+        line-height: 1;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+        pointer-events: none;
+      }
+
+      .discord2-message.is-grouped:hover .discord2-message-inline-time {
+        opacity: 1;
       }
 
       .discord2-message-author {
@@ -5355,10 +5576,131 @@
       }
 
       .discord2-message-body {
-        margin: 2px 0 0;
+        margin: 0;
         color: #dcddde;
         white-space: pre-wrap;
         word-break: break-word;
+        line-height: 1.375;
+      }
+
+      .discord2-message-head + .discord2-message-body {
+        margin-top: 2px;
+      }
+
+      .discord2-message-attachment {
+        margin-top: 8px;
+        display: inline-flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+        width: fit-content;
+        max-width: min(100%, 600px);
+        padding: 10px;
+        border-radius: 12px;
+        background: rgba(32, 34, 37, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .discord2-message-preview-btn,
+      .discord2-message-video-shell {
+        position: relative;
+        display: inline-flex;
+        max-width: min(100%, 600px);
+        max-height: 500px;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #111317;
+      }
+
+      .discord2-message-preview-btn {
+        padding: 0;
+        border: none;
+        cursor: pointer;
+      }
+
+      .discord2-message-image {
+        display: block;
+        max-width: min(100%, 600px);
+        max-height: 500px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        background: #111317;
+      }
+
+      .discord2-message-video {
+        display: block;
+        max-width: min(100%, 600px);
+        max-height: 500px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        background: #000;
+      }
+
+      .discord2-message-preview-hint,
+      .discord2-message-expand-btn {
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        border: none;
+        border-radius: 999px;
+        min-height: 30px;
+        padding: 0 12px;
+        background: rgba(17, 19, 23, 0.86);
+        color: #f7f9fc;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+      }
+
+      .discord2-message-preview-hint {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .discord2-message-expand-btn {
+        cursor: pointer;
+      }
+
+      .discord2-message-expand-btn:hover,
+      .discord2-message-preview-btn:hover .discord2-message-preview-hint {
+        background: rgba(88, 101, 242, 0.92);
+      }
+
+      .discord2-message-attachment-caption {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .discord2-message-attachment-name {
+        color: #ffffff;
+        font-size: 0.86rem;
+        font-weight: 600;
+        text-decoration: none;
+        word-break: break-word;
+      }
+
+      .discord2-message-attachment-name--button {
+        padding: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .discord2-message-attachment-name:hover {
+        text-decoration: underline;
+      }
+
+      .discord2-message-attachment-meta {
+        color: #9fa6af;
+        font-size: 0.78rem;
+        white-space: nowrap;
       }
 
       .discord2-message-file {
@@ -5378,6 +5720,53 @@
         margin: auto 0;
         color: #989ca2;
         text-align: center;
+      }
+
+      .discord2-drop-overlay {
+        position: absolute;
+        inset: 74px 18px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.16s ease;
+        z-index: 12;
+      }
+
+      .discord2-drop-overlay.is-active {
+        opacity: 1;
+      }
+
+      .discord2-drop-overlay__box {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        border-radius: 18px;
+        border: 2px dashed rgba(88, 101, 242, 0.72);
+        background: rgba(17, 19, 23, 0.82);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.36);
+        padding: 24px;
+      }
+
+      .discord2-media-viewer-content {
+        width: min(1080px, 94vw);
+      }
+
+      .discord2-media-viewer-body {
+        align-items: center;
+      }
+
+      .discord2-media-viewer-image,
+      .discord2-media-viewer-video {
+        width: 100%;
+        max-width: 100%;
+        max-height: 72vh;
+        object-fit: contain;
+        background: #111317;
+        border-radius: 14px;
+        box-shadow: 0 20px 55px rgba(0, 0, 0, 0.4);
       }
 
       .discord2-composer {
@@ -5508,7 +5897,25 @@
       }
 
       .discord2-member-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         font-size: 0.9rem;
+      }
+
+      .discord2-member-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 18px;
+        border-radius: 999px;
+        padding: 0 6px;
+        background: rgba(87, 242, 135, 0.18);
+        color: #57f287;
+        font-size: 0.63rem;
+        font-weight: 800;
+        letter-spacing: 0.55px;
+        text-transform: uppercase;
       }
 
       .discord2-member-status {
@@ -6144,6 +6551,19 @@
 
         .discord2-chat {
           min-height: 520px;
+        }
+
+        .discord2-message-inline-time {
+          opacity: 0.78;
+        }
+
+        .discord2-screen-stage {
+          padding-left: 14px;
+          padding-right: 14px;
+        }
+
+        .discord2-screen-stage__grid {
+          grid-template-columns: 1fr;
         }
 
         .discord2-server-create-row {

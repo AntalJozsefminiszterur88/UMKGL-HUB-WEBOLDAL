@@ -32,7 +32,7 @@
       async function fetchVideos(page = 1) {
         const token = getStoredToken();
         if (!token) {
-          showStatus("Jelentkezz be a videók megosztásához.", "warning");
+          showStatus("Jelentkezz be a vide\u00f3k megoszt\u00e1s\u00e1hoz.", "warning");
           return { data: [], pagination: null };
         }
 
@@ -43,12 +43,12 @@
         });
 
         if (response.status === 401 || response.status === 403) {
-          showStatus("Nincs jogosultság a videók listázásához.", "error");
+          showStatus("Nincs jogosults\u00e1g a vide\u00f3k list\u00e1z\u00e1s\u00e1hoz.", "error");
           return { data: [], pagination: null };
         }
 
         if (!response.ok) {
-          showStatus("Nem sikerült betölteni a videókat.", "error");
+          showStatus("Nem siker\u00fclt bet\u00f6lteni a vide\u00f3kat.", "error");
           return { data: [], pagination: null };
         }
 
@@ -64,12 +64,12 @@
         const placeholderButton = document.createElement("button");
         placeholderButton.type = "button";
         placeholderButton.className = "card__video-placeholder";
-        placeholderButton.setAttribute("aria-label", "Videó lejátszása");
+        placeholderButton.setAttribute("aria-label", "Vide\u00f3 lej\u00e1tsz\u00e1sa");
 
         if (posterUrl) {
           const poster = document.createElement("img");
           poster.src = posterUrl;
-          poster.alt = video.original_name || video.filename || "Videó indexkép";
+          poster.alt = video.original_name || video.filename || "Vide\u00f3 indexk\u00e9p";
           placeholderButton.appendChild(poster);
         }
 
@@ -115,7 +115,7 @@
         header.className = "card__header";
         const title = document.createElement("h2");
         title.className = "card__title";
-        title.textContent = video.original_name || video.filename || "Ismeretlen videó";
+        title.textContent = video.original_name || video.filename || "Ismeretlen vide\u00f3";
 
         const subtitle = document.createElement("small");
         subtitle.textContent = video.filename;
@@ -126,10 +126,10 @@
         meta.className = "card__meta";
         const uploader = document.createElement("span");
         uploader.className = "chip";
-        uploader.textContent = video.username ? `Feltöltő: ${video.username}` : "Feltöltő: ismeretlen";
+        uploader.textContent = video.username ? `Felt\u00f6lt\u0151: ${video.username}` : "Felt\u00f6lt\u0151: ismeretlen";
         const date = document.createElement("span");
         const uploadedAt = video.content_created_at || video.uploaded_at;
-        date.textContent = uploadedAt ? new Date(uploadedAt).toLocaleString("hu-HU") : "Dátum ismeretlen";
+        date.textContent = uploadedAt ? new Date(uploadedAt).toLocaleString("hu-HU") : "D\u00e1tum ismeretlen";
         meta.append(uploader, date);
 
         const actions = document.createElement("div");
@@ -169,13 +169,13 @@
       async function shareVideo(videoId, buttonEl) {
         const token = getStoredToken();
         if (!token) {
-          showStatus("Jelentkezz be a megosztáshoz.", "warning");
+          showStatus("Jelentkezz be a megoszt\u00e1shoz.", "warning");
           return;
         }
 
         const originalLabel = buttonEl.textContent;
         buttonEl.disabled = true;
-        buttonEl.textContent = "Küldés...";
+        buttonEl.textContent = "K\u00fcld\u00e9s...";
 
         try {
           const response = await fetch("/api/discord/share-video", {
@@ -190,13 +190,13 @@
           const result = await response.json().catch(() => ({}));
 
           if (!response.ok) {
-            throw new Error(result?.message || "Nem sikerült elküldeni a videót a botnak.");
+            throw new Error(result?.message || "Nem siker\u00fclt elk\u00fcldeni a vide\u00f3t a botnak.");
           }
 
-          showStatus(result?.message || "Videó sikeresen megosztva Discordon!", "success");
+          showStatus("Vide\u00f3 sikeresen megosztva a Discordon.", "success");
         } catch (err) {
           console.error(err);
-          showStatus(err.message || "Ismeretlen hiba történt a megosztás során.", "error");
+          showStatus(err.message || "Ismeretlen hiba t\u00f6rt\u00e9nt a megoszt\u00e1s sor\u00e1n.", "error");
         } finally {
           buttonEl.disabled = false;
           buttonEl.textContent = originalLabel;
@@ -251,7 +251,7 @@
           }
         } catch (error) {
           console.error(error);
-          showStatus("Nem sikerült betölteni a videókat.", "error");
+          showStatus("Nem siker\u00fclt bet\u00f6lteni a vide\u00f3kat.", "error");
           stopInfiniteScroll();
         } finally {
           isLoading = false;
@@ -262,7 +262,7 @@
       async function init() {
         const token = getStoredToken();
         if (!token) {
-          showStatus("Jelentkezz be a videók megosztásához.", "warning");
+          showStatus("Jelentkezz be a vide\u00f3k megoszt\u00e1s\u00e1hoz.", "warning");
           return;
         }
         hideStatus();

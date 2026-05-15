@@ -1,5 +1,5 @@
 
-    const CLIENT_BUILD_VERSION = "20260224-3";
+    const CLIENT_BUILD_VERSION = "20260508-4";
     console.info(`[UMKGL] client build ${CLIENT_BUILD_VERSION}`);
 
 
@@ -138,6 +138,12 @@
     const uploadAvatarBtn = document.getElementById('uploadAvatarBtn');
     const avatarInput = document.getElementById('avatarInput');
     const avatarUploadStatus = document.getElementById('avatarUploadStatus');
+
+    // The thumbnail picker is reused from both Archive and Clips. Keep it at <body> level
+    // so section-level visibility (e.g. hidden #archivum) cannot suppress the modal.
+    if (archiveThumbnailPickerModal && archiveThumbnailPickerModal.parentElement !== document.body) {
+      document.body.appendChild(archiveThumbnailPickerModal);
+    }
     const profileAvatarPreview = document.getElementById('profileAvatarPreview');
     const p2pFileInput = document.getElementById("p2pFileInput");
     const transferList = document.getElementById("transferList");
@@ -294,12 +300,14 @@
     let socket = null;
     let peerId = null;
     let selectedReceiver = null;
-    const P2P_CHUNK_SIZE = 64 * 1024;
-    const P2P_ACK_EVERY_BYTES = 5 * 1024 * 1024;
-    const P2P_ACK_EVERY_CHUNKS = 50;
-    const P2P_BUFFERED_THRESHOLD = 24 * 1024 * 1024;
-    const P2P_RAW_BATCH_BYTES = 24 * 1024 * 1024;
-    const P2P_BACKPRESSURE_POLL_MS = 4;
+    // Fast mode prioritizes throughput over strict transfer validation.
+    const P2P_FAST_TRANSFER_MODE = false;
+    const P2P_CHUNK_SIZE = P2P_FAST_TRANSFER_MODE ? 256 * 1024 : 64 * 1024;
+    const P2P_ACK_EVERY_BYTES = P2P_FAST_TRANSFER_MODE ? 32 * 1024 * 1024 : 5 * 1024 * 1024;
+    const P2P_ACK_EVERY_CHUNKS = P2P_FAST_TRANSFER_MODE ? 200 : 50;
+    const P2P_BUFFERED_THRESHOLD = P2P_FAST_TRANSFER_MODE ? 64 * 1024 * 1024 : 24 * 1024 * 1024;
+    const P2P_RAW_BATCH_BYTES = P2P_FAST_TRANSFER_MODE ? 64 * 1024 * 1024 : 24 * 1024 * 1024;
+    const P2P_BACKPRESSURE_POLL_MS = P2P_FAST_TRANSFER_MODE ? 1 : 4;
     const P2P_CHUNK_MODE_RAW = "raw-v1";
     const P2P_CHUNK_MODE_LEGACY = "legacy";
     const P2P_SIGNAL_TIMEOUT_MS = 4000;
@@ -952,7 +960,15 @@
         return;
       }
 
-      const expectedSize = Number.isFinite(transfer.size) ? transfer.size : null;
+      const expectedSizeRaw = Number(transfer.size);
+      let expectedSize =
+        Number.isFinite(expectedSizeRaw) && expectedSizeRaw >= 0 ? expectedSizeRaw : null;
+
+      if (expectedSize === 0 && transfer.received > 0) {
+        // Guard against malformed metadata where declared size becomes 0.
+        expectedSize = null;
+      }
+
       if (expectedSize !== null && transfer.received < expectedSize) {
         console.error(
           "Átvitel sikertelen: a beérkezett méret nem egyezik a metaadatban lévő mérettel.",
@@ -971,8 +987,20 @@
       let blob = new Blob(transfer.chunks, {
         type: transfer.mimeType || "application/octet-stream",
       });
+      if (expectedSize !== null && expectedSize > 0 && blob.size === 0) {
+        console.error("Transfer failed: generated blob is empty.");
+        finalizeTransfer(transfer, "Hiba: üres fájl érkezett, letöltés megszakítva.");
+        if (conn?.open) {
+          conn.send({
+            type: "complete_ack",
+            success: false,
+            message: "Üres fájl",
+          });
+        }
+        return;
+      }
 
-      if (expectedSize !== null && transfer.received > expectedSize) {
+      if (expectedSize !== null && expectedSize > 0 && transfer.received > expectedSize) {
         console.warn(
           "A beérkezett méret nagyobb a vártnál, a fájl mérete korrigálva lesz.",
         );
@@ -1311,11 +1339,14 @@
           }
 
           const transferId = `incoming-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const declaredSizeRaw = Number(data.size);
+          const declaredSize =
+            Number.isFinite(declaredSizeRaw) && declaredSizeRaw >= 0 ? declaredSizeRaw : null;
           transfer = createTransferCard({
             id: transferId,
             direction: "incoming",
             name: data.name,
-            size: data.size,
+            size: declaredSize,
             mimeType: data.mimeType,
             status: "Várakozás elfogadásra...",
           });
@@ -1430,7 +1461,10 @@
             return;
           }
 
-          if (Number.isFinite(transfer.size) && transfer.received < transfer.size) {
+          if (
+            Number.isFinite(transfer.size) &&
+            transfer.received < transfer.size
+          ) {
             transfer.pendingComplete = true;
             updateTransferStatus(transfer, "Véglegesítésre vár...");
             return;
@@ -1552,17 +1586,20 @@
         return;
       }
 
-      if (conn.open) {
-        conn.send({ type: "ack_request", targetBytes: file.size, targetChunks: chunksSent });
-      }
+      const requireFinalChunkAck = true;
+      if (requireFinalChunkAck) {
+        if (conn.open) {
+          conn.send({ type: "ack_request", targetBytes: file.size, targetChunks: chunksSent });
+        }
 
-      try {
-        await waitForChunkAckWithRetry(transfer, conn, file.size);
-      } catch (err) {
-        transfer.isCancelled = true;
-        finalizeTransfer(transfer, "Nem érkezett végleges visszaigazolás.");
-        conn.close();
-        return;
+        try {
+          await waitForChunkAckWithRetry(transfer, conn, file.size);
+        } catch (err) {
+          transfer.isCancelled = true;
+          finalizeTransfer(transfer, "Nem érkezett végleges visszaigazolás.");
+          conn.close();
+          return;
+        }
       }
 
       updateTransferStatus(transfer, "Átvitel lezárása...");
@@ -2687,7 +2724,7 @@
       userListContainer.innerHTML = "";
 
       if (!Array.isArray(users) || users.length === 0) {
-        userListContainer.textContent = "Nincs megjeleníthető felhasználó.";
+        userListContainer.textContent = "Nincs megjelen\u00edthet\u0151 felhaszn\u00e1l\u00f3.";
         if (savePermissionsBtn) {
           savePermissionsBtn.disabled = true;
         }
@@ -2700,16 +2737,16 @@
         const thead = document.createElement("thead");
         thead.innerHTML = `
           <tr>
-            <th>Felhaszn\u00E1l\u00F3nAv</th>
+            <th>Felhaszn\u00e1l\u00f3n\u00e9v</th>
             <th>Felt\u00F6lt\u00E9si jogosults\u00E1g</th>
             <th>P2P jog</th>
-            <th>Klip nAzAsi jog</th>
-            <th>ArchAvum megtekintAs</th>
-            <th>ArchAvum szerkesztAs</th>
+            <th>Klip n\u00e9z\u00e9si jog</th>
+            <th>Arch\u00edvum megtekint\u00e9s</th>
+            <th>Arch\u00edvum szerkeszt\u00e9s</th>
             <th>Discord 2 jog</th>
             <th>Max f\u00E1jlm\u00E9ret (MB)</th>
-            <th>Vide? limit</th>
-            <th>FeltAltAtt videAlk</th>
+            <th>Vide\u00f3 limit</th>
+            <th>Felt\u00f6lt\u00f6tt vide\u00f3k</th>
           </tr>
         `;
       table.appendChild(thead);
@@ -3018,18 +3055,18 @@
           }
         </style>
         <div class="clip-window">
-          <h1>FeltAltAtt klipek</h1>
+          <h1>Felt\u00f6lt\u00f6tt klipek</h1>
           <p class="clip-window__subtitle">Egyszer\u0171, \u00E1ttekinthet\u0151 lista a klipjeidr\u0151l.</p>
           <div class="clip-window__controls">
             <label for="clipWindowVariant">Megjelen\u00EDtett f\u00E1jlok</label>
             <select id="clipWindowVariant" class="clip-window__select">
-              <option value="original">Eredeti videAlk</option>
-              <option value="720p">720p videAlk</option>
+              <option value="original">Eredeti vide\u00f3k</option>
+              <option value="720p">720p vide\u00f3k</option>
               <option value="other">Egy\u00E9b f\u00E1jlok</option>
             </select>
             <span id="clipWindowCount" class="clip-window__count"></span>
           </div>
-          <div id="clipWindowStatus" class="clip-window__status">Klipek betAltAse folyamatban...</div>
+          <div id="clipWindowStatus" class="clip-window__status">Klipek bet\u00f6lt\u00e9se folyamatban...</div>
           <div id="clipWindowTable"></div>
         </div>
       `;
@@ -3348,14 +3385,14 @@
         <div class="process-window">
           <h1>Feldolgoz\u00E1si \u00E1llapot</h1>
           <p class="process-window__subtitle">Aktu\u00E1lis feladat \u00E9s v\u00E1rakoz\u00F3 f\u00E1jlok \u00E1ttekint\u00E9se.</p>
-          <div id="processStatusText" class="process-window__status">Allapot betAltAse...</div>
+          <div id="processStatusText" class="process-window__status">\u00c1llapot bet\u00f6lt\u00e9se...</div>
           <div id="processCurrentTask"></div>
           <div class="process-window__queue-header">
             <h2>V\u00E1rakoz\u00F3 f\u00E1jlok</h2>
             <span id="processQueueCount" class="process-window__badge"></span>
           </div>
           <ul id="processQueueList" class="process-window__list"></ul>
-          <button id="processRefreshBtn" type="button" class="process-window__refresh">FrissAtAs</button>
+          <button id="processRefreshBtn" type="button" class="process-window__refresh">Friss\u00edt\u00e9s</button>
         </div>
       `;
 
@@ -3687,8 +3724,43 @@
       });
     }
 
+    let isLoginSubmitting = false;
+
+    function setLoginFormBusy(isBusy) {
+      if (!loginForm) {
+        return;
+      }
+
+      const submitButton = loginForm.querySelector('button[type="submit"]');
+      if (submitButton) {
+        if (!submitButton.dataset.defaultText) {
+          submitButton.dataset.defaultText = submitButton.textContent || "Bel\u00e9p\u00e9s";
+        }
+        submitButton.disabled = isBusy;
+        submitButton.textContent = isBusy
+          ? "Bel\u00e9p\u00e9s..."
+          : (submitButton.dataset.defaultText || "Bel\u00e9p\u00e9s");
+      }
+
+      const loginUserInput = document.getElementById("loginUser");
+      const loginPassInput = document.getElementById("loginPass");
+      if (loginUserInput) {
+        loginUserInput.disabled = isBusy;
+      }
+      if (loginPassInput) {
+        loginPassInput.disabled = isBusy;
+      }
+    }
+
     loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (isLoginSubmitting) {
+        return;
+      }
+
+      isLoginSubmitting = true;
+      setLoginFormBusy(true);
+
       const username = document.getElementById("loginUser").value;
       const password = document.getElementById("loginPass").value;
 
@@ -3744,6 +3816,9 @@
           title: "Sikertelen bejelentkez\u00e9s",
           message: "Hiba t\u00f6rt\u00e9nt a bejelentkez\u00e9s sor\u00e1n. Pr\u00f3b\u00e1ld meg k\u00e9s\u0151bb.",
         });
+      } finally {
+        isLoginSubmitting = false;
+        setLoginFormBusy(false);
       }
     });
 
@@ -4138,6 +4213,14 @@
       let activeVideoModalContext = "clips";
       let modalVideoPlaybackToken = 0;
       let modalVideoErrorHandlerAttached = false;
+      const MEDIA_SESSION_ARTWORK_PATH = "/uploads/boritok/lockscreen.png";
+      const MEDIA_SESSION_ARTWORK_Y_OFFSET_PX = 30;
+      const MEDIA_SESSION_ARTWORK_SIZES = [96, 128, 192, 256, 384, 512];
+      let mediaSessionHandlersAttached = false;
+      let mediaSessionPlayerHandlersAttached = false;
+      let mediaSessionArtworkEntriesCache = null;
+      let mediaSessionArtworkBuildPromise = null;
+      let mediaSessionMetadataToken = 0;
       const ARCHIVE_VIDEO_PAGE_SIZE_KEY = "archiveVideoPageSize";
       const ARCHIVE_VIDEO_SORT_ORDER_KEY = "archiveVideoSortOrder";
       const savedArchivePageSize = Number.parseInt(localStorage.getItem(ARCHIVE_VIDEO_PAGE_SIZE_KEY), 10);
@@ -5234,7 +5317,6 @@
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
         const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
         const availability = getArchiveVideoQualityAvailability(video);
-        const originalQuality = (video?.original_quality || "").toString();
 
         if (normalizedQuality === "original") {
           return {
@@ -5246,7 +5328,7 @@
           };
         }
 
-        if (normalizedQuality === "720p" && availability["720p"] && originalQuality !== "720p") {
+        if (normalizedQuality === "720p" && availability["720p"]) {
           return {
             src: buildArchiveVideoPath(video?.filename, "720p"),
             originalSource,
@@ -5779,6 +5861,12 @@
         if (archiveThumbnailPickerModal) {
           archiveThumbnailPickerModal.classList.remove("modal-overlay--visible");
           archiveThumbnailPickerModal.style.display = "none";
+          archiveThumbnailPickerModal.style.removeProperty("position");
+          archiveThumbnailPickerModal.style.removeProperty("inset");
+          archiveThumbnailPickerModal.style.removeProperty("z-index");
+          archiveThumbnailPickerModal.style.removeProperty("visibility");
+          archiveThumbnailPickerModal.style.removeProperty("opacity");
+          archiveThumbnailPickerModal.style.removeProperty("pointer-events");
           archiveThumbnailPickerModal.setAttribute("aria-hidden", "true");
         }
 
@@ -5818,6 +5906,23 @@
         }
       }
 
+      function showArchiveThumbnailPickerModal() {
+        if (!archiveThumbnailPickerModal) {
+          return false;
+        }
+
+        archiveThumbnailPickerModal.style.setProperty("display", "flex", "important");
+        archiveThumbnailPickerModal.style.setProperty("position", "fixed", "important");
+        archiveThumbnailPickerModal.style.setProperty("inset", "0", "important");
+        archiveThumbnailPickerModal.style.setProperty("z-index", "2500", "important");
+        archiveThumbnailPickerModal.style.setProperty("visibility", "visible", "important");
+        archiveThumbnailPickerModal.style.setProperty("opacity", "1", "important");
+        archiveThumbnailPickerModal.style.setProperty("pointer-events", "auto", "important");
+        archiveThumbnailPickerModal.classList.add("modal-overlay--visible");
+        archiveThumbnailPickerModal.setAttribute("aria-hidden", "false");
+        return true;
+      }
+
       function openArchiveThumbnailPicker(video, previewElement, triggerButton) {
         if (!archiveThumbnailPickerModal || !archiveThumbnailPickerVideo || !archiveThumbnailPickerSlider) {
           showArchiveVideoToast("Az indexkep-kivalaszto nem erheto el.");
@@ -5849,6 +5954,9 @@
           previewElement: previewElement || null,
           triggerButton: triggerButton || null,
           originalSource: fallbackSource,
+          apiBasePath: "/api/archive/videos",
+          toastFn: showArchiveVideoToast,
+          contextLabel: "archive",
           isUsingOriginalSource: true,
           isSaving: false,
           cropZoom: ARCHIVE_THUMBNAIL_ZOOM_MIN,
@@ -5894,9 +6002,97 @@
         setArchiveThumbnailPickerControlsEnabled(false);
         setArchiveThumbnailPickerBusyState(false);
 
-        archiveThumbnailPickerModal.style.display = "flex";
-        archiveThumbnailPickerModal.classList.add("modal-overlay--visible");
-        archiveThumbnailPickerModal.setAttribute("aria-hidden", "false");
+        showArchiveThumbnailPickerModal();
+        if (archiveThumbnailCaptureFrameBtn) {
+          archiveThumbnailCaptureFrameBtn.disabled = false;
+        }
+
+        archiveThumbnailPickerVideo.pause();
+        archiveThumbnailPickerVideo.currentTime = 0;
+        archiveThumbnailPickerVideo.src = playbackSource;
+        archiveThumbnailPickerVideo.load();
+        archiveThumbnailPickerCloseBtn?.focus({ preventScroll: true });
+      }
+
+      function openClipThumbnailPicker(video, previewElement, triggerButton) {
+        if (!archiveThumbnailPickerModal || !archiveThumbnailPickerVideo || !archiveThumbnailPickerSlider) {
+          showClipToast("Az indexkep-kivalaszto nem erheto el.");
+          return;
+        }
+
+        if (!video?.filename || !Number.isFinite(Number(video?.id))) {
+          showClipToast("Ervenytelen video.");
+          return;
+        }
+
+        if (archiveThumbnailPickerState?.isSaving) {
+          return;
+        }
+
+        if (isArchiveThumbnailPickerOpen()) {
+          closeArchiveThumbnailPicker({ restoreFocus: false });
+        }
+
+        // Keep clip picker source-accurate by always using the original file.
+        const { originalSource } = getPreferredVideoSource(video, currentVideoQuality);
+        const playbackSource = originalSource || `/uploads/${video.filename}`;
+        const fallbackSource = playbackSource;
+        const titleText = cleanVideoTitle(video.original_name || video.filename) || "Nevtelen video";
+
+        archiveThumbnailPickerState = {
+          video,
+          previewElement: previewElement || null,
+          triggerButton: triggerButton || null,
+          originalSource: fallbackSource,
+          apiBasePath: "/api/videos",
+          toastFn: showClipToast,
+          contextLabel: "clips",
+          isUsingOriginalSource: true,
+          isSaving: false,
+          cropZoom: ARCHIVE_THUMBNAIL_ZOOM_MIN,
+          cropPanX: 0,
+          cropPanY: 0,
+          cropFrameWidth: 0,
+          cropFrameHeight: 0,
+          cropFrameReady: false,
+          cropDragging: false,
+          cropDragStartX: 0,
+          cropDragStartY: 0,
+          cropStartPanX: 0,
+          cropStartPanY: 0,
+          lastCapturedFrameSecond: null,
+        };
+
+        if (archiveThumbnailPickerTitleEl) {
+          archiveThumbnailPickerTitleEl.textContent = titleText;
+        }
+        if (archiveThumbnailPickerHintEl) {
+          archiveThumbnailPickerHintEl.textContent = "Video betoltese...";
+        }
+
+        if (archiveThumbnailPickerSlider) {
+          archiveThumbnailPickerSlider.min = "0";
+          archiveThumbnailPickerSlider.max = "0";
+          archiveThumbnailPickerSlider.value = "0";
+        }
+        if (archiveThumbnailPickerCurrentEl) {
+          archiveThumbnailPickerCurrentEl.textContent = "0:00.00";
+        }
+        if (archiveThumbnailPickerDurationEl) {
+          archiveThumbnailPickerDurationEl.textContent = "0:00";
+        }
+        if (archiveThumbnailZoomRange) {
+          archiveThumbnailZoomRange.min = String(ARCHIVE_THUMBNAIL_ZOOM_MIN);
+          archiveThumbnailZoomRange.max = String(ARCHIVE_THUMBNAIL_ZOOM_MAX);
+          archiveThumbnailZoomRange.step = "0.05";
+          archiveThumbnailZoomRange.value = String(ARCHIVE_THUMBNAIL_ZOOM_MIN);
+        }
+
+        destroyArchiveThumbnailCropper();
+        setArchiveThumbnailPickerControlsEnabled(false);
+        setArchiveThumbnailPickerBusyState(false);
+
+        showArchiveThumbnailPickerModal();
         if (archiveThumbnailCaptureFrameBtn) {
           archiveThumbnailCaptureFrameBtn.disabled = false;
         }
@@ -5935,6 +6131,11 @@
           alert("Ervenytelen video azonosito.");
           return;
         }
+        const apiBasePath =
+          typeof stateAtStart.apiBasePath === "string" && stateAtStart.apiBasePath.trim()
+            ? stateAtStart.apiBasePath.trim().replace(/\/+$/, "")
+            : "/api/archive/videos";
+        const toastFn = typeof stateAtStart.toastFn === "function" ? stateAtStart.toastFn : showArchiveVideoToast;
 
         captureArchiveThumbnailFrame(true);
         const seekSeconds = Number.isFinite(stateAtStart.lastCapturedFrameSecond)
@@ -5962,7 +6163,7 @@
             formData.append("thumbnail", thumbnailBlob, `archive-thumb-${videoId}.jpg`);
             formData.append("seekSeconds", String(seekSeconds));
 
-            const customResponse = await fetch(`/api/archive/videos/${videoId}/thumbnail/custom`, {
+            const customResponse = await fetch(`${apiBasePath}/${videoId}/thumbnail/custom`, {
               method: "POST",
               headers: {
                 ...buildAuthHeaders(),
@@ -5975,7 +6176,7 @@
             }
             result = customResult;
           } else {
-            const response = await fetch(`/api/archive/videos/${videoId}/thumbnail/regenerate`, {
+            const response = await fetch(`${apiBasePath}/${videoId}/thumbnail/regenerate`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -6001,7 +6202,7 @@
             }
           }
 
-          showArchiveVideoToast(result?.message || "Indexkep frissitve.");
+          toastFn(result?.message || "Indexkep frissitve.");
           closeArchiveThumbnailPicker();
         } catch (error) {
           console.error("Archiv indexkep mentesi hiba:", error);
@@ -6454,13 +6655,19 @@
           card.appendChild(header);
 
           const videoElement = document.createElement("video");
+          const { src: previewSrc, originalSource: archiveOriginalSrc } = getPreferredArchiveVideoSource(
+            video,
+            currentVideoQuality
+          );
           videoElement.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}` : "";
-          videoElement.dataset.src = `/uploads/${video.filename}`;
+          videoElement.dataset.src = archiveOriginalSrc || `/uploads/${video.filename}`;
+          videoElement.src = previewSrc || archiveOriginalSrc || `/uploads/${video.filename}`;
           videoElement.controls = false;
-          videoElement.preload = "none";
+          videoElement.preload = "metadata";
           videoElement.playsInline = true;
           videoElement.setAttribute("playsinline", "");
           videoElement.setAttribute("webkit-playsinline", "");
+          videoElement.muted = true;
           let hasPlaybackError = false;
 
           const removePlaybackError = () => {
@@ -6670,6 +6877,7 @@
         modalVideoPlayer.load();
         modalVideoPlayer.dataset.fallbackSrc = "";
         modalVideoPlayer.dataset.fallbackAttempted = "0";
+        updateMediaSessionPlaybackState();
       }
 
       function playModalVideoSafely(expectedToken) {
@@ -6724,16 +6932,268 @@
         modalVideoErrorHandlerAttached = true;
       }
 
+      function hasMediaSessionSupport() {
+        return typeof navigator !== "undefined" && "mediaSession" in navigator && Boolean(navigator.mediaSession);
+      }
+
+      function getDefaultMediaSessionArtworkEntries() {
+        try {
+          const absoluteSrc = new URL(MEDIA_SESSION_ARTWORK_PATH, window.location.origin).href;
+          return MEDIA_SESSION_ARTWORK_SIZES.map((size) => ({
+            src: absoluteSrc,
+            sizes: `${size}x${size}`,
+            type: "image/png",
+          }));
+        } catch (_error) {
+          return [];
+        }
+      }
+
+      function loadMediaSessionArtworkImage() {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          image.decoding = "async";
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error("Nem sikerult betolteni a lockscreen kepet."));
+          image.src = MEDIA_SESSION_ARTWORK_PATH;
+        });
+      }
+
+      function buildShiftedArtworkDataUrl(image, size, offsetY) {
+        const safeSize = Number(size);
+        if (!Number.isFinite(safeSize) || safeSize <= 0) {
+          return "";
+        }
+
+        const width = Number(image?.naturalWidth || image?.width || 0);
+        const height = Number(image?.naturalHeight || image?.height || 0);
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+          return "";
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = safeSize;
+        canvas.height = safeSize;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          return "";
+        }
+
+        const extraHeight = Math.max(0, Number(offsetY) || 0) * 2;
+        const scale = Math.max(safeSize / width, (safeSize + extraHeight) / height);
+        const drawWidth = width * scale;
+        const drawHeight = height * scale;
+        const drawX = (safeSize - drawWidth) / 2;
+        const drawY = (safeSize - drawHeight) / 2 + (Number(offsetY) || 0);
+
+        context.fillStyle = "#000";
+        context.fillRect(0, 0, safeSize, safeSize);
+        context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+
+        try {
+          return canvas.toDataURL("image/png");
+        } catch (_error) {
+          return "";
+        }
+      }
+
+      async function buildShiftedMediaSessionArtworkEntries() {
+        if (Array.isArray(mediaSessionArtworkEntriesCache) && mediaSessionArtworkEntriesCache.length) {
+          return mediaSessionArtworkEntriesCache;
+        }
+        if (mediaSessionArtworkBuildPromise) {
+          return mediaSessionArtworkBuildPromise;
+        }
+
+        mediaSessionArtworkBuildPromise = (async () => {
+          if (typeof document === "undefined") {
+            return getDefaultMediaSessionArtworkEntries();
+          }
+
+          try {
+            const image = await loadMediaSessionArtworkImage();
+            const shiftedEntries = MEDIA_SESSION_ARTWORK_SIZES.map((size) => {
+              const dataUrl = buildShiftedArtworkDataUrl(image, size, MEDIA_SESSION_ARTWORK_Y_OFFSET_PX);
+              if (!dataUrl) {
+                return null;
+              }
+              return {
+                src: dataUrl,
+                sizes: `${size}x${size}`,
+                type: "image/png",
+              };
+            }).filter(Boolean);
+
+            if (shiftedEntries.length) {
+              mediaSessionArtworkEntriesCache = shiftedEntries;
+              return shiftedEntries;
+            }
+          } catch (_error) {}
+
+          const fallbackEntries = getDefaultMediaSessionArtworkEntries();
+          mediaSessionArtworkEntriesCache = fallbackEntries;
+          return fallbackEntries;
+        })();
+
+        try {
+          return await mediaSessionArtworkBuildPromise;
+        } finally {
+          mediaSessionArtworkBuildPromise = null;
+        }
+      }
+
+      function applyMediaSessionMetadata(artwork) {
+        if (!hasMediaSessionSupport() || typeof window.MediaMetadata !== "function") {
+          return;
+        }
+
+        const title = (modalVideoTitle?.textContent || "").trim() || "UMKGL HUB";
+        const contextLabel = activeVideoModalContext === "archive" ? "Archiv video" : "Klip";
+        try {
+          navigator.mediaSession.metadata = new window.MediaMetadata({
+            title,
+            artist: "UMKGL HUB",
+            album: contextLabel,
+            artwork: Array.isArray(artwork) ? artwork : [],
+          });
+        } catch (_error) {}
+      }
+
+      function updateMediaSessionMetadata() {
+        if (!hasMediaSessionSupport() || typeof window.MediaMetadata !== "function") {
+          return;
+        }
+
+        const requestToken = ++mediaSessionMetadataToken;
+        applyMediaSessionMetadata(getDefaultMediaSessionArtworkEntries());
+        buildShiftedMediaSessionArtworkEntries().then((shiftedEntries) => {
+          if (requestToken !== mediaSessionMetadataToken) {
+            return;
+          }
+          applyMediaSessionMetadata(shiftedEntries);
+        }).catch(() => {});
+      }
+
+      function updateMediaSessionPositionState() {
+        if (!hasMediaSessionSupport() || typeof navigator.mediaSession.setPositionState !== "function" || !modalVideoPlayer) {
+          return;
+        }
+
+        const duration = Number(modalVideoPlayer.duration);
+        if (!Number.isFinite(duration) || duration <= 0) {
+          return;
+        }
+
+        const currentTime = Number(modalVideoPlayer.currentTime);
+        const position = Number.isFinite(currentTime) ? Math.min(duration, Math.max(0, currentTime)) : 0;
+        const playbackRate = Number(modalVideoPlayer.playbackRate) || 1;
+        try {
+          navigator.mediaSession.setPositionState({ duration, playbackRate, position });
+        } catch (_error) {}
+      }
+
+      function updateMediaSessionPlaybackState() {
+        if (!hasMediaSessionSupport()) {
+          return;
+        }
+
+        const modalOpen = Boolean(videoPlayerModal?.classList.contains("open"));
+        const isPlaying = modalOpen && modalVideoPlayer && !modalVideoPlayer.paused && !modalVideoPlayer.ended;
+        try {
+          navigator.mediaSession.playbackState = isPlaying ? "playing" : modalOpen ? "paused" : "none";
+        } catch (_error) {}
+      }
+
+      function clearMediaSessionMetadata() {
+        if (!hasMediaSessionSupport()) {
+          return;
+        }
+
+        mediaSessionMetadataToken += 1;
+        try {
+          navigator.mediaSession.metadata = null;
+        } catch (_error) {}
+        try {
+          navigator.mediaSession.playbackState = "none";
+        } catch (_error) {}
+      }
+
+      function ensureMediaSessionHandlers() {
+        if (!hasMediaSessionSupport() || mediaSessionHandlersAttached) {
+          return;
+        }
+
+        const setAction = (action, handler) => {
+          try {
+            navigator.mediaSession.setActionHandler(action, handler);
+          } catch (_error) {}
+        };
+
+        setAction("play", () => {
+          if (!videoPlayerModal?.classList.contains("open")) {
+            return;
+          }
+          const playPromise = modalVideoPlayer?.play();
+          if (playPromise && typeof playPromise.catch === "function") {
+            playPromise.catch(() => {});
+          }
+          updateMediaSessionPlaybackState();
+        });
+        setAction("pause", () => {
+          modalVideoPlayer?.pause();
+          updateMediaSessionPlaybackState();
+        });
+        setAction("previoustrack", () => {
+          if (!videoPlayerModal?.classList.contains("open")) {
+            return;
+          }
+          showPrevVideo();
+        });
+        setAction("nexttrack", () => {
+          if (!videoPlayerModal?.classList.contains("open")) {
+            return;
+          }
+          showNextVideo();
+        });
+
+        mediaSessionHandlersAttached = true;
+      }
+
+      function ensureMediaSessionPlayerHandlers() {
+        if (!modalVideoPlayer || mediaSessionPlayerHandlersAttached) {
+          return;
+        }
+
+        const syncState = () => {
+          updateMediaSessionPlaybackState();
+          updateMediaSessionPositionState();
+        };
+
+        modalVideoPlayer.addEventListener("play", syncState);
+        modalVideoPlayer.addEventListener("playing", syncState);
+        modalVideoPlayer.addEventListener("pause", syncState);
+        modalVideoPlayer.addEventListener("ended", syncState);
+        modalVideoPlayer.addEventListener("loadedmetadata", syncState);
+        modalVideoPlayer.addEventListener("durationchange", syncState);
+        modalVideoPlayer.addEventListener("timeupdate", syncState);
+        modalVideoPlayer.addEventListener("ratechange", syncState);
+        modalVideoPlayer.addEventListener("emptied", syncState);
+        mediaSessionPlayerHandlersAttached = true;
+      }
+
       function setModalVideoSource(primarySrc, fallbackSrc) {
         if (!modalVideoPlayer) {
           return;
         }
 
         ensureModalVideoErrorHandler();
+        ensureMediaSessionHandlers();
+        ensureMediaSessionPlayerHandlers();
         clearModalVideoSource();
 
         const resolvedPrimary = primarySrc || fallbackSrc || "";
         if (!resolvedPrimary) {
+          clearMediaSessionMetadata();
           return;
         }
 
@@ -6741,6 +7201,8 @@
         modalVideoPlayer.dataset.fallbackAttempted = "0";
         modalVideoPlayer.src = resolvedPrimary;
         modalVideoPlayer.load();
+        updateMediaSessionMetadata();
+        updateMediaSessionPlaybackState();
         const playToken = ++modalVideoPlaybackToken;
         playModalVideoSafely(playToken);
       }
@@ -7919,7 +8381,7 @@
             }
 
             if (archiveUploadStatusText) {
-              archiveUploadStatusText.textContent = `FeltAltAs: ${index + 1} / ${totalFiles} - "${
+              archiveUploadStatusText.textContent = `Felt\u00f6lt\u00e9s: ${index + 1} / ${totalFiles} - "${
                 item.displayName || item.file.name
               }"...`;
             }
@@ -9533,6 +9995,35 @@
         return match ? String(match.id) : null;
       }
 
+      function getClipVideoFromActionButton(button) {
+        if (!button) return null;
+        const videoId = Number.parseInt(button.dataset.videoId || "", 10);
+        if (!Number.isFinite(videoId) || !Array.isArray(currentVideoList)) {
+          return null;
+        }
+        return currentVideoList.find((video) => Number(video?.id) === videoId) || null;
+      }
+
+      function handleClipThumbnailButtonClick(event) {
+        const refreshBtn = event.target.closest(".video-card__thumb-refresh");
+        if (refreshBtn && videoGridContainer?.contains(refreshBtn)) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (refreshBtn.disabled || !isAdminUser()) {
+            return;
+          }
+          const clipVideo = getClipVideoFromActionButton(refreshBtn);
+          if (!clipVideo) {
+            showClipToast("A klip adatai nem elerhetok, frissitsd az oldalt.");
+            return;
+          }
+          const card = refreshBtn.closest(".video-card");
+          const previewVideo = card?.querySelector("video") || null;
+          openClipThumbnailPicker(clipVideo, previewVideo, refreshBtn);
+          return;
+        }
+      }
+
       function handleClipTagClick(event) {
         const chip = event.target.closest(".tag-chip");
         if (!chip || !videoGridContainer?.contains(chip)) return;
@@ -9554,6 +10045,7 @@
 
       function attachClipTagHandlers() {
         if (!videoGridContainer || clipTagHandlersAttached) return;
+        videoGridContainer.addEventListener("click", handleClipThumbnailButtonClick, true);
         videoGridContainer.addEventListener("click", handleClipTagClick);
         videoGridContainer.addEventListener("keydown", handleClipTagKeydown);
         clipTagHandlersAttached = true;
@@ -9954,7 +10446,14 @@
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
         const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
         const availability = getQualityAvailability(video);
-        const originalQuality = (video?.original_quality || "").toString();
+        const fallbackChain =
+          normalizedQuality === "1440p"
+            ? ["1440p", "1080p", "720p"]
+            : normalizedQuality === "1080p"
+              ? ["1080p", "720p"]
+              : normalizedQuality === "720p"
+                ? ["720p"]
+                : [];
 
         if (normalizedQuality === "original") {
           return {
@@ -9966,41 +10465,15 @@
           };
         }
 
-        if (normalizedQuality !== "original" && originalQuality === normalizedQuality) {
-          return {
-            src: originalSource,
-            originalSource,
-            resolvedQuality: "original",
-            requestedQuality: normalizedQuality,
-            availability,
-          };
-        }
+        for (const fallbackQuality of fallbackChain) {
+          if (!availability[fallbackQuality]) {
+            continue;
+          }
 
-        if (normalizedQuality === "1440p" && availability["1440p"]) {
           return {
-            src: buildVideoPath(video?.filename, "1440p"),
+            src: buildVideoPath(video?.filename, fallbackQuality),
             originalSource,
-            resolvedQuality: "1440p",
-            requestedQuality: normalizedQuality,
-            availability,
-          };
-        }
-
-        if (normalizedQuality === "1080p" && availability["1080p"]) {
-          return {
-            src: buildVideoPath(video?.filename, "1080p"),
-            originalSource,
-            resolvedQuality: "1080p",
-            requestedQuality: normalizedQuality,
-            availability,
-          };
-        }
-
-        if (normalizedQuality === "720p" && availability["720p"]) {
-          return {
-            src: buildVideoPath(video?.filename, "720p"),
-            originalSource,
-            resolvedQuality: "720p",
+            resolvedQuality: fallbackQuality,
             requestedQuality: normalizedQuality,
             availability,
           };
@@ -10066,7 +10539,63 @@
         return params;
       }
 
-      async function loadVideos() {
+      function scrollClipVideoListToTop() {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement && videoPagination?.contains(activeElement)) {
+          activeElement.blur();
+        }
+
+        const scrollTargets = [];
+        const appendTarget = (node) => {
+          if (!node || scrollTargets.includes(node)) {
+            return;
+          }
+          scrollTargets.push(node);
+        };
+
+        appendTarget(document.scrollingElement);
+        appendTarget(document.documentElement);
+        appendTarget(document.body);
+        appendTarget(document.querySelector("main"));
+        appendTarget(document.querySelector("main section.active"));
+        appendTarget(document.getElementById("klipek"));
+        appendTarget(clipSection);
+        appendTarget(clipSection?.querySelector?.(".clips-content"));
+        appendTarget(videoGridContainer);
+
+        let ancestor = videoPagination || videoGridContainer || clipSection;
+        while (ancestor && ancestor instanceof HTMLElement) {
+          const styles = window.getComputedStyle(ancestor);
+          const overflowY = (styles.overflowY || "").toLowerCase();
+          const isScrollable = (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay")
+            && ancestor.scrollHeight > ancestor.clientHeight;
+          if (isScrollable) {
+            appendTarget(ancestor);
+          }
+          ancestor = ancestor.parentElement;
+        }
+
+        const applyScrollToTop = () => {
+          scrollTargets.forEach((target) => {
+            if (!target) return;
+            if (typeof target.scrollTo === "function") {
+              try {
+                target.scrollTo({ top: 0, left: 0, behavior: "auto" });
+              } catch (_error) {}
+            }
+            if (typeof target.scrollTop === "number") {
+              target.scrollTop = 0;
+            }
+          });
+          window.scrollTo(0, 0);
+        };
+
+        applyScrollToTop();
+        requestAnimationFrame(applyScrollToTop);
+        setTimeout(applyScrollToTop, 90);
+      }
+
+      async function loadVideos(options = {}) {
         if (!videoGridContainer) {
           return;
         }
@@ -10078,6 +10607,7 @@
 
         videoGridContainer.innerHTML = "";
         if (videoPagination) videoPagination.innerHTML = "";
+        const shouldScrollToTop = options?.scrollToTop === true;
 
         const params = buildVideoQueryParams();
 
@@ -10113,6 +10643,9 @@
 
           renderVideoGrid(data);
           renderPagination(pagination);
+          if (shouldScrollToTop) {
+            scrollClipVideoListToTop();
+          }
         } catch (error) {
           console.error("Klip lista betöltési hiba:", error);
           currentVideoList = [];
@@ -10207,6 +10740,7 @@
             const activeVideo = currentVideoList[currentVideoIndex];
             if (activeVideo?.id === video.id && modalVideoTitle) {
               modalVideoTitle.textContent = cleanVideoTitle(newTitle) || "Névtelen videó";
+              updateMediaSessionMetadata();
             }
           }
 
@@ -10233,6 +10767,21 @@
           header.appendChild(title);
 
           if (isAdminUser()) {
+            const refreshThumbnailBtn = document.createElement("button");
+            refreshThumbnailBtn.type = "button";
+            refreshThumbnailBtn.className = "video-card__thumb-refresh";
+            refreshThumbnailBtn.dataset.videoId = String(video.id);
+            refreshThumbnailBtn.textContent = "Uj indexkep";
+            refreshThumbnailBtn.title = "Indexkep ujrageneralasa";
+            refreshThumbnailBtn.setAttribute("aria-label", "Indexkep ujrageneralasa");
+            refreshThumbnailBtn.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const previewVideo = card.querySelector("video");
+              openClipThumbnailPicker(video, previewVideo, refreshThumbnailBtn);
+            });
+            header.appendChild(refreshThumbnailBtn);
+
             const editBtn = document.createElement("button");
             editBtn.type = "button";
             editBtn.className = "video-card__edit";
@@ -10256,16 +10805,19 @@
           card.appendChild(header);
 
           const videoElement = document.createElement("video");
+          const { src: previewSrc, originalSource } = getPreferredVideoSource(video, currentVideoQuality);
           videoElement.poster = video.thumbnail_filename
             ? `/uploads/${video.thumbnail_filename}`
             : "";
-          videoElement.dataset.src = `/uploads/${video.filename}`;
+          videoElement.dataset.src = originalSource || `/uploads/${video.filename}`;
+          videoElement.src = previewSrc || originalSource || `/uploads/${video.filename}`;
           videoElement.controls = false;
           videoElement.removeAttribute("controls");
-          videoElement.preload = "none";
+          videoElement.preload = "metadata";
           videoElement.playsInline = true;
           videoElement.setAttribute("playsinline", "");
           videoElement.setAttribute("webkit-playsinline", "");
+          videoElement.muted = true;
 
           let hasPlaybackError = false;
 
@@ -10416,6 +10968,7 @@
         videoPlayerModal.classList.remove("open");
         videoPlayerModal.setAttribute("aria-hidden", "true");
         activeVideoModalContext = "clips";
+        clearMediaSessionMetadata();
       }
 
       function showNextVideo() {
@@ -10457,7 +11010,8 @@
           btn.addEventListener("click", () => {
             if (pageNumber === currentPage) return;
             videoFilters.page = pageNumber;
-            loadVideos();
+            scrollClipVideoListToTop();
+            loadVideos({ scrollToTop: true });
           });
           return btn;
         };
@@ -11080,7 +11634,7 @@
                 }
 
                 if (uploadStatus) {
-                  uploadStatus.textContent = `FeltAltAs: ${index + 1} / ${totalFiles} - "${
+                  uploadStatus.textContent = `Felt\u00f6lt\u00e9s: ${index + 1} / ${totalFiles} - "${
                     item.displayName || item.file.name
                   }"...`;
                 }
@@ -11091,6 +11645,27 @@
                   completedFiles,
                   totalFiles,
                   etaSeconds,
+                });
+              });
+
+              xhr.upload.addEventListener("load", () => {
+                const finishedBytes = Math.min(
+                  uploadedBytesSoFar + (item.file?.size || 0),
+                  totalUploadBytes,
+                );
+
+                if (uploadStatus) {
+                  uploadStatus.textContent = `Feltöltve a szerverre: ${index + 1} / ${totalFiles} - "${
+                    item.displayName || item.file.name
+                  }", feldolgozás folyamatban...`;
+                }
+
+                updateUploadProgressUI({
+                  uploadedBytes: finishedBytes,
+                  totalBytes: totalUploadBytes,
+                  completedFiles: index,
+                  totalFiles,
+                  etaSeconds: Infinity,
                 });
               });
 
@@ -11500,5 +12075,3 @@
             // Legacy no-op (dynamic filters handled by renderAcademyFilters)
         }
   
-
-

@@ -141,6 +141,22 @@ async function initializeDatabase() {
     `);
 
     await client.query(
+      "ALTER TABLE discord2_messages ADD COLUMN IF NOT EXISTS attachment_kind TEXT"
+    );
+    await client.query(
+      "ALTER TABLE discord2_messages ADD COLUMN IF NOT EXISTS attachment_filename TEXT"
+    );
+    await client.query(
+      "ALTER TABLE discord2_messages ADD COLUMN IF NOT EXISTS attachment_original_name TEXT"
+    );
+    await client.query(
+      "ALTER TABLE discord2_messages ADD COLUMN IF NOT EXISTS attachment_mime_type TEXT"
+    );
+    await client.query(
+      "ALTER TABLE discord2_messages ADD COLUMN IF NOT EXISTS attachment_size_bytes BIGINT"
+    );
+
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_discord2_messages_channel_id ON discord2_messages(channel_id)'
     );
     await client.query(

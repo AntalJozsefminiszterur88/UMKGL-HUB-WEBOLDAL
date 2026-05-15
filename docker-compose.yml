@@ -1,6 +1,8 @@
 services:
   web:
     build: .
+    working_dir: /usr/src/app
+    command: ["node", "src/server.js"]
     restart: always
     ports:
       - "3000:3000"
@@ -18,7 +20,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - "D:/weboldal fájlok:/usr/src/app/public/uploads"
+      - "/mnt/d/weboldal fájlok:/usr/src/app/public/uploads"
     networks:
       - umgkl_net
       - shared_proxy_net
@@ -38,7 +40,7 @@ services:
       - POSTGRES_PASSWORD=mypassword
       - POSTGRES_DB=mydb
     volumes:
-      - "D:/weboldal fájlok/adatbazis:/var/lib/postgresql/data"
+      - /home/server/docker-data/umkgl-hub-weboldal/postgres-data-restored:/var/lib/postgresql/data
     networks:
       - umgkl_net
 

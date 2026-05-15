@@ -29,7 +29,7 @@
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
       referrerpolicy="no-referrer"
     ></script>
-    <link rel="stylesheet" href="css/index.css?v=20260224-2">
+    <link rel="stylesheet" href="css/index.css?v=20260508-6">
   </head>
   <body>
     <header>
@@ -284,6 +284,16 @@
                       </div>
                     </div>
                   </div>
+                  <button
+                    id="discord2ScreenShareBtn"
+                    class="discord2-voice-session-btn discord2-voice-session-btn--screen"
+                    type="button"
+                    title="Start screen share"
+                    aria-label="Start screen share"
+                    aria-pressed="false"
+                  >
+                    <i class="fa-solid fa-display"></i>
+                  </button>
                   <button id="discord2LeaveVoiceBtn" class="discord2-userbar-btn discord2-userbar-btn--danger" type="button" title="Kilépés a hangcsatornából">
                     <i class="fa-solid fa-phone-slash"></i>
                   </button>
@@ -320,11 +330,24 @@
               </div>
             </header>
 
+            <section id="discord2ScreenStage" class="discord2-screen-stage" style="display:none;" aria-live="polite">
+              <div class="discord2-screen-stage__header">
+                <div>
+                  <h4>Live screen share</h4>
+                  <p id="discord2ScreenStageMeta">No active streams</p>
+                </div>
+              </div>
+              <div id="discord2ScreenStageGrid" class="discord2-screen-stage__grid"></div>
+            </section>
+
             <div id="discord2MessageList" class="discord2-message-list"></div>
+            <div id="discord2DropOverlay" class="discord2-drop-overlay" aria-hidden="true">
+              <div class="discord2-drop-overlay__box" aria-hidden="true"></div>
+            </div>
 
             <div class="discord2-composer">
               <input id="discord2MessageInput" type="text" placeholder="Üzenet küldése..." autocomplete="off" />
-              <input id="discord2UploadInput" type="file" style="display: none;" />
+              <input id="discord2UploadInput" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.mp4,.webm,.ogv,.ogg,.mov,image/png,image/jpeg,image/jpg,image/gif,image/webp,video/mp4,video/webm,video/ogg,video/quicktime" style="display: none;" />
               <button id="discord2UploadBtn" class="discord2-composer-btn" type="button" title="Fájl csatolása">📎</button>
               <button id="discord2SendBtn" class="discord2-composer-btn discord2-composer-btn--send" type="button">Küldés</button>
             </div>
@@ -528,7 +551,7 @@
                   <select id="discord2PersonalNoiseSuppression">
                     <option value="none">None</option>
                     <option value="standard" selected>Standard</option>
-                    <option value="krisp">Krisp</option>
+                    <option value="krisp">DeepFilterNet</option>
                   </select>
 
                   <label class="discord2-toggle-row" for="discord2PersonalEchoCancellation">
@@ -574,6 +597,20 @@
         <div id="discord2ContextMenu" class="discord2-context-menu" aria-hidden="true">
           <button type="button" data-action="rename">Átnevezés</button>
           <button type="button" data-action="delete">Törlés</button>
+        </div>
+
+        <div id="discord2MediaViewerModal" class="archive-viewer-modal" aria-hidden="true">
+          <div class="archive-viewer-content discord2-media-viewer-content">
+            <div class="archive-viewer-header">
+              <h3 id="discord2MediaViewerTitle">Csatolmány</h3>
+              <button id="discord2MediaViewerClose" class="archive-viewer-close" type="button" aria-label="Bezárás">&times;</button>
+            </div>
+            <div class="archive-viewer-body discord2-media-viewer-body">
+              <img id="discord2MediaViewerImage" class="discord2-media-viewer-image" alt="Discord 2 kép" style="display:none;" />
+              <video id="discord2MediaViewerVideo" class="discord2-media-viewer-video" controls preload="metadata" style="display:none;"></video>
+              <a id="discord2MediaViewerLink" class="primary-button link-button" href="#" target="_blank" rel="noopener noreferrer">Megnyitás új lapon</a>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1191,66 +1228,6 @@
           </div>
         </div>
 
-        <div id="archiveThumbnailPickerModal" class="modal-overlay" style="display: none;" aria-hidden="true">
-          <div class="upload-modal-content archive-thumbnail-picker">
-            <div class="upload-modal-header">
-              <h3 class="upload-modal-title">Indexkep kivalasztasa</h3>
-              <button class="close-btn" id="archiveThumbnailPickerClose" type="button" aria-label="Bezaras">&times;</button>
-            </div>
-
-            <p id="archiveThumbnailPickerTitle" class="archive-thumbnail-picker__title"></p>
-
-            <div class="archive-thumbnail-picker__player">
-              <video
-                id="archiveThumbnailPickerVideo"
-                class="archive-thumbnail-picker__video"
-                controls
-                preload="metadata"
-                playsinline
-                webkit-playsinline
-              ></video>
-            </div>
-
-            <div class="archive-thumbnail-picker__crop-editor">
-              <div class="archive-thumbnail-picker__crop-header">
-                <span class="archive-thumbnail-picker__crop-label">Kartya-indexkep kivagasa</span>
-                <button id="archiveThumbnailCaptureFrameBtn" class="secondary-btn" type="button">
-                  Aktualis kepkocka
-                </button>
-              </div>
-
-              <div id="archiveThumbnailCropStage" class="archive-thumbnail-picker__crop-stage">
-                <canvas id="archiveThumbnailCropCanvas" class="archive-thumbnail-picker__crop-canvas"></canvas>
-                <div id="archiveThumbnailCropWindow" class="archive-thumbnail-picker__crop-window" aria-hidden="true"></div>
-              </div>
-
-            </div>
-
-            <div class="archive-thumbnail-picker__timeline">
-              <div class="archive-thumbnail-picker__time">
-                <span id="archiveThumbnailCurrent">0:00.00</span>
-                <span id="archiveThumbnailDuration">0:00</span>
-              </div>
-              <input id="archiveThumbnailSlider" type="range" min="0" max="0" step="0.04" value="0" disabled />
-            </div>
-
-            <div class="archive-thumbnail-picker__toolbar">
-              <button id="archiveThumbnailStepBack" class="secondary-btn" type="button">-5 mp</button>
-              <button id="archiveThumbnailStepForward" class="secondary-btn" type="button">+5 mp</button>
-              <p id="archiveThumbnailPickerHint" class="archive-thumbnail-picker__hint">
-                Lejatszas kozben allitsd meg ott, amelyik kepkockat indexkepnek szeretned.
-              </p>
-            </div>
-
-            <div class="upload-modal-footer archive-thumbnail-picker__footer">
-              <div></div>
-              <div class="upload-action-buttons">
-                <button id="archiveThumbnailPickerCancel" class="secondary-btn" type="button">Megse</button>
-                <button id="archiveThumbnailPickerSave" class="primary-btn" type="button" disabled>Indexkep mentese</button>
-              </div>
-            </div>
-          </div>
-        </div>
       </section>
 
 <!-- Programok -->
@@ -1322,6 +1299,66 @@
         </div>
       </section>
     </main>
+
+    <div id="archiveThumbnailPickerModal" class="modal-overlay" style="display: none;" aria-hidden="true">
+      <div class="upload-modal-content archive-thumbnail-picker">
+        <div class="upload-modal-header">
+          <h3 class="upload-modal-title">Indexkep kivalasztasa</h3>
+          <button class="close-btn" id="archiveThumbnailPickerClose" type="button" aria-label="Bezaras">&times;</button>
+        </div>
+
+        <p id="archiveThumbnailPickerTitle" class="archive-thumbnail-picker__title"></p>
+
+        <div class="archive-thumbnail-picker__player">
+          <video
+            id="archiveThumbnailPickerVideo"
+            class="archive-thumbnail-picker__video"
+            controls
+            preload="metadata"
+            playsinline
+            webkit-playsinline
+          ></video>
+        </div>
+
+        <div class="archive-thumbnail-picker__crop-editor">
+          <div class="archive-thumbnail-picker__crop-header">
+            <span class="archive-thumbnail-picker__crop-label">Kartya-indexkep kivagasa</span>
+            <button id="archiveThumbnailCaptureFrameBtn" class="secondary-btn" type="button">
+              Aktualis kepkocka
+            </button>
+          </div>
+
+          <div id="archiveThumbnailCropStage" class="archive-thumbnail-picker__crop-stage">
+            <canvas id="archiveThumbnailCropCanvas" class="archive-thumbnail-picker__crop-canvas"></canvas>
+            <div id="archiveThumbnailCropWindow" class="archive-thumbnail-picker__crop-window" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <div class="archive-thumbnail-picker__timeline">
+          <div class="archive-thumbnail-picker__time">
+            <span id="archiveThumbnailCurrent">0:00.00</span>
+            <span id="archiveThumbnailDuration">0:00</span>
+          </div>
+          <input id="archiveThumbnailSlider" type="range" min="0" max="0" step="0.04" value="0" disabled />
+        </div>
+
+        <div class="archive-thumbnail-picker__toolbar">
+          <button id="archiveThumbnailStepBack" class="secondary-btn" type="button">-5 mp</button>
+          <button id="archiveThumbnailStepForward" class="secondary-btn" type="button">+5 mp</button>
+          <p id="archiveThumbnailPickerHint" class="archive-thumbnail-picker__hint">
+            Lejatszas kozben allitsd meg ott, amelyik kepkockat indexkepnek szeretned.
+          </p>
+        </div>
+
+        <div class="upload-modal-footer archive-thumbnail-picker__footer">
+          <div></div>
+          <div class="upload-action-buttons">
+            <button id="archiveThumbnailPickerCancel" class="secondary-btn" type="button">Megse</button>
+            <button id="archiveThumbnailPickerSave" class="primary-btn" type="button" disabled>Indexkep mentese</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="avatarCropperModal" class="avatar-cropper-modal" aria-hidden="true">
       <div class="avatar-cropper-dialog" role="dialog" aria-modal="true" aria-labelledby="avatarCropperTitle">
@@ -1420,19 +1457,17 @@
       </div>
     </div>
 
-  <script src="js/libs/vad/ort.js"></script>
-  <script src="js/libs/vad/vad.js"></script>
+  <script src="js/libs/vad/ort.js?v=20260508-4" charset="UTF-8"></script>
+  <script src="js/libs/vad/vad.js?v=20260508-4" charset="UTF-8"></script>
+  <script src="js/libs/deepfilter.js" charset="UTF-8"></script>
   <script>
     window.vad = window.vad || window.import_vad;
   </script>
-  <script src="js/discord2.js?v=20260223-1"></script>
-  <script src="js/index.js?v=20260228-1"></script>
+  <script src="js/discord2.js?v=20260509-1" charset="UTF-8"></script>
+  <script src="js/index.js?v=20260508-4" charset="UTF-8"></script>
 
 
 
 
   </body>
 </html>
-
-
-
