@@ -1273,7 +1273,7 @@
             if (!this.deepFilterCore) {
               this.deepFilterCore = new window.DeepFilter.DeepFilterNet3Core({
                 sampleRate: this.audioContext.sampleRate,
-                noiseReductionLevel: 100, // Erőteljes szűrés a Krisp érzésért
+                noiseReductionLevel: 100, // Erőteljes szűrés a tiszta hangzásért
                 assetConfig: {
                   cdnUrl: "/js/libs/deepfilter"
                 }
