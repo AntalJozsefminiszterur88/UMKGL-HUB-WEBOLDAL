@@ -1,0 +1,1862 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UMKGL HOI4 Sorsoló</title>
+  <style>
+    :root {
+      --bg: #10130f;
+      --ink: #f3eddf;
+      --muted: #bcb3a2;
+      --line: rgba(230, 211, 156, .24);
+      --panel: rgba(34, 38, 31, .93);
+      --panel-2: rgba(17, 20, 16, .74);
+      --field: #151812;
+      --gold: #d9b65b;
+      --gold-2: #a77d34;
+      --red: #b45542;
+      --green: #748d55;
+      --blue: #607f8e;
+      --purple: #7c668b;
+      --shadow: rgba(0, 0, 0, .36);
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: dark;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(16, 19, 15, .76), rgba(16, 19, 15, .95)),
+        url("1936.svg") center top / cover fixed,
+        #10130f;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        repeating-linear-gradient(90deg, rgba(243, 237, 223, .035) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(243, 237, 223, .027) 0 1px, transparent 1px 72px);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      width: min(1540px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 20px 0 34px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: end;
+      padding: 14px 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .emblem {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 56px;
+      height: 56px;
+      border: 2px solid var(--gold);
+      color: var(--gold);
+      background: linear-gradient(145deg, #2f3526, #11150f);
+      font-weight: 950;
+      box-shadow: inset 0 0 0 4px rgba(0, 0, 0, .25), 0 12px 24px var(--shadow);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 4.7rem);
+      line-height: .92;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      text-shadow: 0 2px 0 #000, 0 0 30px rgba(217, 182, 91, .28);
+    }
+
+    .subtitle {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: .92rem;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .status-ribbon {
+      justify-self: end;
+      min-width: 220px;
+      padding: 10px 12px;
+      border: 1px solid rgba(217, 182, 91, .5);
+      color: var(--gold);
+      background: rgba(0, 0, 0, .28);
+      font-weight: 900;
+      text-align: center;
+      text-transform: uppercase;
+      box-shadow: 0 12px 24px var(--shadow);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(340px, 430px) 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .side-stack,
+    .main-stack {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(39, 43, 34, .96), rgba(20, 23, 18, .96));
+      box-shadow: 0 18px 42px var(--shadow);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0, 0, 0, .18);
+    }
+
+    .panel-header h2,
+    .panel-header h3 {
+      color: #f6dfae;
+      font-size: .98rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 86px;
+      gap: 10px;
+    }
+
+    .field-grid.three {
+      grid-template-columns: minmax(0, 1fr) minmax(104px, .65fr) minmax(104px, .65fr);
+    }
+
+    .field-grid.country-form {
+      grid-template-columns: minmax(0, 1fr) 92px 88px;
+      align-items: end;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid rgba(230, 211, 156, .36);
+      border-radius: 0;
+      color: var(--ink);
+      background: var(--field);
+      padding: 8px 10px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.4;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 2px rgba(217, 182, 91, .18);
+    }
+
+    input[type="checkbox"] {
+      width: 18px;
+      min-height: 18px;
+      accent-color: var(--gold);
+    }
+
+    input[type="range"] {
+      min-height: 30px;
+      padding: 0;
+      accent-color: var(--gold);
+    }
+
+    .check-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 8px 10px;
+      border: 1px solid rgba(230, 211, 156, .28);
+      background: rgba(0, 0, 0, .18);
+      color: var(--ink);
+      font-size: .84rem;
+      text-transform: none;
+    }
+
+    .segmented {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      min-width: 260px;
+      border: 1px solid rgba(217, 182, 91, .36);
+      background: rgba(0, 0, 0, .22);
+    }
+
+    .segmented button {
+      min-height: 40px;
+      border: 0;
+      color: var(--muted);
+      background: transparent;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .segmented button.active {
+      color: #20170b;
+      background: linear-gradient(180deg, #ecd07d, #bc8f39);
+    }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .btn {
+      min-height: 42px;
+      border: 1px solid rgba(217, 182, 91, .55);
+      color: #221808;
+      background: linear-gradient(180deg, #efd17a, #ba8b36);
+      font-weight: 950;
+      text-transform: uppercase;
+      box-shadow: 0 3px 0 #573d17;
+    }
+
+    .btn:hover {
+      filter: brightness(1.05);
+    }
+
+    .btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 #573d17;
+    }
+
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+      transform: none;
+    }
+
+    .btn.secondary {
+      color: var(--ink);
+      background: linear-gradient(180deg, #53634a, #2d3728);
+      border-color: rgba(116, 141, 85, .58);
+      box-shadow: 0 3px 0 #141b12;
+    }
+
+    .btn.danger {
+      color: #fff1eb;
+      background: linear-gradient(180deg, #b95b46, #743125);
+      border-color: rgba(255, 199, 176, .44);
+      box-shadow: 0 3px 0 #3c1811;
+    }
+
+    .icon-btn {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 34px;
+      height: 32px;
+      border: 1px solid rgba(255, 255, 255, .16);
+      color: var(--ink);
+      background: rgba(0, 0, 0, .22);
+      font-weight: 950;
+    }
+
+    .icon-btn:hover {
+      border-color: rgba(217, 182, 91, .6);
+      color: var(--gold);
+    }
+
+    .badge,
+    .small-badge {
+      display: inline-grid;
+      place-items: center;
+      min-width: 34px;
+      min-height: 28px;
+      padding: 3px 8px;
+      border: 1px solid rgba(217, 182, 91, .42);
+      color: var(--gold);
+      background: rgba(0, 0, 0, .25);
+      font-size: .78rem;
+      font-weight: 950;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .badge.green {
+      border-color: rgba(116, 141, 85, .52);
+      color: #d7e6c0;
+    }
+
+    .badge.blue {
+      border-color: rgba(96, 127, 142, .62);
+      color: #d6edf7;
+    }
+
+    .player-list,
+    .country-list-editor {
+      display: grid;
+      gap: 8px;
+      max-height: 460px;
+      overflow: auto;
+      padding-right: 3px;
+    }
+
+    .player-list {
+      margin-top: 14px;
+    }
+
+    .country-list-editor {
+      margin-top: 12px;
+      max-height: 290px;
+    }
+
+    .player-row,
+    .country-row {
+      display: grid;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, .08);
+      background: rgba(0, 0, 0, .18);
+      padding: 9px;
+    }
+
+    .player-row {
+      grid-template-columns: 24px minmax(98px, 1fr) minmax(112px, 150px) 36px;
+    }
+
+    .country-row {
+      grid-template-columns: minmax(120px, 1fr) 72px 76px 36px;
+    }
+
+    .name-block {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .name-block strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: .94rem;
+    }
+
+    .note {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: .78rem;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .skill-edit {
+      display: grid;
+      grid-template-columns: 1fr 34px;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .section-grid {
+      display: grid;
+      grid-template-columns: minmax(310px, 440px) 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .wheel-wrap {
+      display: grid;
+      place-items: center;
+      gap: 12px;
+    }
+
+    .wheel-area {
+      position: relative;
+      width: min(100%, 360px);
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+    }
+
+    .wheel {
+      width: 100%;
+      height: 100%;
+      filter: drop-shadow(0 18px 26px rgba(0, 0, 0, .44));
+      transition: transform 4s cubic-bezier(.12, .72, .17, 1);
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
+    .pointer {
+      position: absolute;
+      top: -5px;
+      left: 50%;
+      width: 0;
+      height: 0;
+      transform: translateX(-50%);
+      border-left: 16px solid transparent;
+      border-right: 16px solid transparent;
+      border-top: 34px solid #f7da74;
+      filter: drop-shadow(0 3px 2px #000);
+      z-index: 3;
+    }
+
+    .wheel-center {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      width: 96px;
+      height: 96px;
+      border: 2px solid #efd17a;
+      border-radius: 50%;
+      color: var(--gold);
+      background: radial-gradient(circle, #303725, #141810);
+      font-weight: 950;
+      line-height: 1.12;
+      text-align: center;
+      text-transform: uppercase;
+      box-shadow: inset 0 0 0 6px rgba(0, 0, 0, .25);
+      pointer-events: none;
+    }
+
+    .selected-output {
+      display: grid;
+      place-items: center;
+      min-height: 50px;
+      color: #fff1c7;
+      font-size: 1.06rem;
+      font-weight: 950;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .teams {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .team-card {
+      border: 1px solid rgba(217, 182, 91, .22);
+      background: rgba(0, 0, 0, .21);
+      min-height: 170px;
+    }
+
+    .team-card.active {
+      border-color: rgba(255, 224, 104, .82);
+      box-shadow: 0 0 0 2px rgba(255, 224, 104, .12), 0 0 28px rgba(255, 224, 104, .18);
+    }
+
+    .team-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 12px;
+      border-bottom: 1px solid rgba(217, 182, 91, .16);
+      background: rgba(217, 182, 91, .08);
+    }
+
+    .team-title strong {
+      color: #f6dfae;
+      text-transform: uppercase;
+    }
+
+    .team-body {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .member-list,
+    .assigned-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .member-list li,
+    .assigned-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px dashed rgba(255, 255, 255, .09);
+      padding-bottom: 7px;
+    }
+
+    .assigned-list .major {
+      color: var(--gold);
+      font-weight: 950;
+    }
+
+    .assigned-list .minor {
+      color: #dce9cc;
+    }
+
+    .empty {
+      padding: 12px;
+      border: 1px dashed rgba(217, 182, 91, .26);
+      color: var(--muted);
+      background: rgba(0, 0, 0, .14);
+      line-height: 1.35;
+    }
+
+    .meta-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .map-frame {
+      position: relative;
+      overflow: hidden;
+      min-height: 300px;
+      border: 1px solid rgba(217, 182, 91, .28);
+      background: #213642;
+    }
+
+    .map-frame img {
+      display: block;
+      width: 100%;
+      min-height: 300px;
+      max-height: 430px;
+      object-fit: cover;
+      opacity: .78;
+      filter: saturate(.86) contrast(1.05);
+    }
+
+    .map-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .map-dot {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #11150f;
+      border-radius: 50%;
+      background: #dce9cc;
+      box-shadow: 0 0 0 2px rgba(243, 237, 223, .4), 0 0 16px rgba(0, 0, 0, .48);
+      transform: translate(-50%, -50%);
+      transition: background .2s, transform .2s, box-shadow .2s;
+    }
+
+    .map-dot.major {
+      background: var(--gold);
+    }
+
+    .map-dot.active {
+      background: #ffe36f;
+      box-shadow: 0 0 0 3px rgba(255, 227, 111, .52), 0 0 22px rgba(255, 227, 111, .8);
+      transform: translate(-50%, -50%) scale(1.45);
+    }
+
+    .map-dot span {
+      position: absolute;
+      left: 50%;
+      top: -23px;
+      transform: translateX(-50%);
+      color: #fff4ca;
+      font-size: .72rem;
+      font-weight: 950;
+      opacity: 0;
+      text-shadow: 0 1px 3px #000, 0 0 6px #000;
+      transition: opacity .2s;
+      white-space: nowrap;
+    }
+
+    .map-dot.active span,
+    .map-frame:hover .map-dot.major span {
+      opacity: 1;
+    }
+
+    .country-section {
+      grid-template-columns: minmax(310px, 560px);
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 22px;
+      z-index: 20;
+      max-width: calc(100vw - 32px);
+      padding: 12px 16px;
+      border: 1px solid rgba(217, 182, 91, .48);
+      color: #f6dfae;
+      background: rgba(18, 20, 16, .97);
+      box-shadow: 0 16px 34px rgba(0, 0, 0, .42);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-50%) translateY(16px);
+      transition: opacity .2s, transform .2s;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 1180px) {
+      .layout,
+      .section-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .status-ribbon {
+        justify-self: start;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .app {
+        width: min(100vw - 20px, 1540px);
+        padding-top: 12px;
+      }
+
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .brand {
+        align-items: flex-start;
+      }
+
+      .emblem {
+        width: 48px;
+        height: 48px;
+      }
+
+      .field-grid,
+      .field-grid.three,
+      .field-grid.country-form,
+      .btn-row,
+      .player-row,
+      .country-row {
+        grid-template-columns: 1fr;
+      }
+
+      .player-row,
+      .country-row {
+        align-items: stretch;
+      }
+
+      .segmented {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .wheel-area {
+        width: min(100%, 310px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="emblem" aria-hidden="true">U</div>
+        <div>
+          <h1>UMKGL HOI4 Sorsoló</h1>
+          <p class="subtitle">balanced lobby draft, csapatkerék, országkerék</p>
+        </div>
+      </div>
+      <div class="status-ribbon" id="statusRibbon">Draft készenlét</div>
+    </header>
+
+    <section class="layout">
+      <aside class="side-stack">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Játékosok</h2>
+            <span class="small-badge" id="playerSummary">0 aktív</span>
+          </div>
+          <div class="panel-body">
+            <div class="field-grid">
+              <label>
+                Név
+                <input id="playerName" type="text" autocomplete="off" placeholder="Új játékos">
+              </label>
+              <label>
+                Skill
+                <input id="playerSkill" type="number" min="1" max="10" value="5">
+              </label>
+            </div>
+            <label style="margin-top: 10px;">
+              Megjegyzés
+              <input id="playerNote" type="text" autocomplete="off" placeholder="opcionális">
+            </label>
+            <div class="btn-row">
+              <button class="btn" id="addPlayerBtn">Hozzáadás</button>
+              <button class="btn secondary" id="resetPlayersBtn">Alap lobby</button>
+            </div>
+            <div class="player-list" id="playerList"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Országpool</h2>
+            <span class="small-badge" id="countrySummary">0</span>
+          </div>
+          <div class="panel-body">
+            <div class="segmented" role="group" aria-label="Major mód">
+              <button id="withMajorsBtn" class="active" type="button">Majorokkal</button>
+              <button id="withoutMajorsBtn" type="button">Major nélkül</button>
+            </div>
+            <div class="field-grid country-form" style="margin-top: 12px;">
+              <label>
+                Ország
+                <input id="countryName" type="text" autocomplete="off" placeholder="pl. Törökország">
+              </label>
+              <label>
+                Rövid
+                <input id="countryShort" type="text" autocomplete="off" maxlength="5" placeholder="TUR">
+              </label>
+              <label class="check-label">
+                <input id="countryMajor" type="checkbox">
+                Major
+              </label>
+            </div>
+            <div class="btn-row">
+              <button class="btn" id="addCountryBtn">Ország +</button>
+              <button class="btn secondary" id="resetCountriesBtn">Alap pool</button>
+            </div>
+            <div class="country-list-editor" id="countryList"></div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="main-stack">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Sorsolás</h2>
+            <span class="small-badge" id="balanceInfo">-</span>
+          </div>
+          <div class="panel-body">
+            <div class="field-grid three">
+              <label>
+                Csapatok száma
+                <select id="teamCount">
+                  <option value="2">2</option>
+                </select>
+              </label>
+              <label>
+                Ország / csapat
+                <input id="countriesPerTeam" type="number" min="9" max="9" value="9">
+              </label>
+              <label>
+                Káosz
+                <input id="chaosLevel" type="number" min="0" max="5" value="1">
+              </label>
+            </div>
+            <div class="btn-row">
+              <button class="btn" id="generateTeamsBtn">Csapatok generálása</button>
+              <button class="btn secondary" id="copyDiscordBtn">Discord export</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="section-grid">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Csapatkerék</h2>
+              <span class="small-badge" id="teamRevealInfo">0/0</span>
+            </div>
+            <div class="panel-body wheel-wrap">
+              <div class="wheel-area">
+                <div class="pointer" aria-hidden="true"></div>
+                <svg id="teamWheel" class="wheel" viewBox="0 0 420 420" role="img" aria-label="Csapatsorsoló kerék"></svg>
+                <div class="wheel-center">Team<br>Draft</div>
+              </div>
+              <div class="selected-output" id="teamSpinResult">Generálj csapatokat</div>
+              <button class="btn" id="spinTeamBtn">Játékos kipörgetése</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Csapatbeosztás</h2>
+              <div class="meta-line">
+                <span class="small-badge" id="activeSkillInfo">-</span>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="teams" id="teams"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="section-grid country-section">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Országkerék</h2>
+              <div class="meta-line">
+                <span class="small-badge" id="poolInfo">Pool: -</span>
+                <select id="teamPicker" aria-label="Csapat választása"></select>
+              </div>
+            </div>
+            <div class="panel-body wheel-wrap">
+              <div class="wheel-area">
+                <div class="pointer" aria-hidden="true"></div>
+                <svg id="countryWheel" class="wheel" viewBox="0 0 420 420" role="img" aria-label="Országsorsoló kerék"></svg>
+                <div class="wheel-center">Country<br>Draft</div>
+              </div>
+              <div class="selected-output" id="countrySpinResult">Várja a csapatokat</div>
+              <button class="btn" id="spinCountryBtn">Ország kipörgetése</button>
+            </div>
+          </section>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const STORAGE_KEY = "umkgl-hoi4-sorsolo-v2";
+
+    const defaultPlayers = [
+      { name: "Jani", skill: 10, active: true, note: "" },
+      { name: "Norbert", skill: 10, active: true, note: "" },
+      { name: "Balázs", skill: 10, active: true, note: "" },
+      { name: "Márk", skill: 9, active: true, note: "" },
+      { name: "Krisz", skill: 8, active: true, note: "" },
+      { name: "Patrik", skill: 7, active: true, note: "" },
+      { name: "Dávid", skill: 6, active: true, note: "csak azért 6, mert holland handicap van" },
+      { name: "Gergő", skill: 5, active: true, note: "" }
+    ];
+
+    const defaultCountries = [
+      { name: "Dutch East Indies", short: "DEI", major: false, x: 78, y: 75 },
+      { name: "Németország", short: "GER", major: true, x: 50, y: 36 },
+      { name: "Franciaország", short: "FRA", major: true, x: 47, y: 42 },
+      { name: "USA", short: "USA", major: true, x: 20, y: 38 },
+      { name: "Soviet Union", short: "SOV", major: true, x: 63, y: 28 },
+      { name: "UK Bruv", short: "UK", major: true, x: 45, y: 30 },
+      { name: "Guanxi", short: "GXC", major: false, x: 76, y: 61 },
+      { name: "India", short: "RAJ", major: false, x: 67, y: 62 },
+      { name: "Japán", short: "JAP", major: true, x: 85, y: 44 },
+      { name: "Törökország", short: "TUR", major: false, x: 60, y: 54 },
+      { name: "Irán", short: "PER", major: false, x: 61, y: 58 },
+      { name: "Lengyelország", short: "POL", major: false, x: 54, y: 34 },
+      { name: "Svédország", short: "SWE", major: false, x: 52, y: 20 },
+      { name: "Finnország", short: "FIN", major: false, x: 57, y: 19 },
+      { name: "Kanada", short: "CAN", major: false, x: 16, y: 23 },
+      { name: "Mexikó", short: "MEX", major: false, x: 21, y: 50 },
+      { name: "Brazília", short: "BRA", major: false, x: 33, y: 73 },
+      { name: "Argentina", short: "ARG", major: false, x: 28, y: 86 },
+      { name: "Magyarország", short: "HUN", major: false, x: 53, y: 43 },
+      { name: "Románia", short: "ROM", major: false, x: 56, y: 44 },
+      { name: "Yugoslav", short: "YUG", major: false, x: 53, y: 49 },
+      { name: "Olaszország", short: "ITA", major: true, x: 51, y: 49 },
+      { name: "Spanyolország", short: "SPA", major: false, x: 43, y: 52 },
+      { name: "Görögország", short: "GRE", major: false, x: 55, y: 55 },
+      { name: "Kína", short: "CHI", major: false, x: 75, y: 50 }
+    ];
+
+    const wheelColors = ["#b45542", "#d9b65b", "#748d55", "#607f8e", "#9d8f57", "#7c668b", "#b9784d", "#5d8a67"];
+
+    const state = {
+      players: withIds(defaultPlayers),
+      countries: withIds(defaultCountries),
+      teams: [],
+      countryPool: [],
+      playerDraftPool: [],
+      majorMode: "with",
+      currentTeamIndex: 0,
+      teamRotation: 0,
+      countryRotation: 0,
+      spinningTeam: false,
+      spinningCountry: false,
+      teamSpin: null,
+      countrySpin: null,
+      highlightedCountries: new Set()
+    };
+
+    const el = {
+      statusRibbon: document.getElementById("statusRibbon"),
+      playerSummary: document.getElementById("playerSummary"),
+      playerName: document.getElementById("playerName"),
+      playerSkill: document.getElementById("playerSkill"),
+      playerNote: document.getElementById("playerNote"),
+      addPlayerBtn: document.getElementById("addPlayerBtn"),
+      resetPlayersBtn: document.getElementById("resetPlayersBtn"),
+      playerList: document.getElementById("playerList"),
+      countrySummary: document.getElementById("countrySummary"),
+      withMajorsBtn: document.getElementById("withMajorsBtn"),
+      withoutMajorsBtn: document.getElementById("withoutMajorsBtn"),
+      countryName: document.getElementById("countryName"),
+      countryShort: document.getElementById("countryShort"),
+      countryMajor: document.getElementById("countryMajor"),
+      addCountryBtn: document.getElementById("addCountryBtn"),
+      resetCountriesBtn: document.getElementById("resetCountriesBtn"),
+      countryList: document.getElementById("countryList"),
+      teamCount: document.getElementById("teamCount"),
+      countriesPerTeam: document.getElementById("countriesPerTeam"),
+      chaosLevel: document.getElementById("chaosLevel"),
+      generateTeamsBtn: document.getElementById("generateTeamsBtn"),
+      copyDiscordBtn: document.getElementById("copyDiscordBtn"),
+      balanceInfo: document.getElementById("balanceInfo"),
+      activeSkillInfo: document.getElementById("activeSkillInfo"),
+      teams: document.getElementById("teams"),
+      teamWheel: document.getElementById("teamWheel"),
+      countryWheel: document.getElementById("countryWheel"),
+      teamSpinResult: document.getElementById("teamSpinResult"),
+      countrySpinResult: document.getElementById("countrySpinResult"),
+      spinTeamBtn: document.getElementById("spinTeamBtn"),
+      spinCountryBtn: document.getElementById("spinCountryBtn"),
+      teamRevealInfo: document.getElementById("teamRevealInfo"),
+      teamPicker: document.getElementById("teamPicker"),
+      poolInfo: document.getElementById("poolInfo"),
+      toast: document.getElementById("toast")
+    };
+
+    function withIds(items) {
+      return items.map(item => ({ ...item, id: makeId() }));
+    }
+
+    function makeId() {
+      return globalThis.crypto?.randomUUID
+        ? globalThis.crypto.randomUUID()
+        : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]);
+    }
+
+    function shuffle(items) {
+      const copy = [...items];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function toast(message) {
+      el.toast.textContent = message;
+      el.toast.classList.add("show");
+      window.clearTimeout(toast.timer);
+      toast.timer = window.setTimeout(() => el.toast.classList.remove("show"), 2500);
+    }
+
+    function persist() {
+      const payload = {
+        players: state.players,
+        countries: state.countries,
+        majorMode: state.majorMode,
+        teamCount: el.teamCount.value,
+        countriesPerTeam: el.countriesPerTeam.value,
+        chaosLevel: el.chaosLevel.value
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    }
+
+    function restore() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.players)) {
+          state.players = data.players.map(player => ({
+            id: player.id || makeId(),
+            name: String(player.name || ""),
+            skill: clamp(Number(player.skill) || 5, 1, 10),
+            active: player.active !== false,
+            note: String(player.note || "")
+          })).filter(player => player.name.trim());
+        }
+        if (Array.isArray(data.countries)) {
+          state.countries = data.countries.map(country => ({
+            id: country.id || makeId(),
+            name: String(country.name || ""),
+            short: String(country.short || "").slice(0, 5).toUpperCase(),
+            major: Boolean(country.major),
+            x: Number(country.x) || null,
+            y: Number(country.y) || null
+          })).filter(country => country.name.trim());
+        }
+        state.majorMode = data.majorMode === "without" ? "without" : "with";
+        el.teamCount.value = "2";
+        el.countriesPerTeam.value = "9";
+        el.chaosLevel.value = data.chaosLevel || "1";
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+
+    function activePlayers() {
+      return state.players.filter(player => player.active);
+    }
+
+    function availableCountriesBase() {
+      return state.majorMode === "without"
+        ? state.countries.filter(country => !country.major)
+        : [...state.countries];
+    }
+
+    function addPlayer() {
+      const name = el.playerName.value.trim();
+      const skill = clamp(Number(el.playerSkill.value) || 5, 1, 10);
+      const note = el.playerNote.value.trim();
+      if (!name) {
+        toast("Adj meg egy játékosnevet.");
+        return;
+      }
+      state.players.push({ id: makeId(), name, skill, note, active: true });
+      el.playerName.value = "";
+      el.playerSkill.value = "5";
+      el.playerNote.value = "";
+      renderPlayers();
+      renderOverview();
+      persist();
+    }
+
+    function addCountry() {
+      const name = el.countryName.value.trim();
+      const short = (el.countryShort.value.trim() || name.slice(0, 3)).slice(0, 5).toUpperCase();
+      if (!name) {
+        toast("Adj meg egy országnevet.");
+        return;
+      }
+      state.countries.push({
+        id: makeId(),
+        name,
+        short,
+        major: el.countryMajor.checked,
+        x: null,
+        y: null
+      });
+      el.countryName.value = "";
+      el.countryShort.value = "";
+      el.countryMajor.checked = false;
+      resetDraftAfterPoolChange();
+      renderCountries();
+      renderCountryWheel();
+      renderOverview();
+      persist();
+    }
+
+    function renderPlayers() {
+      const active = activePlayers();
+      const totalSkill = active.reduce((sum, player) => sum + player.skill, 0);
+      el.playerSummary.textContent = `${active.length}/${state.players.length} aktív`;
+      el.activeSkillInfo.textContent = active.length ? `${totalSkill} total skill` : "-";
+
+      if (!state.players.length) {
+        el.playerList.innerHTML = '<div class="empty">Nincs játékos a lobbyban.</div>';
+        return;
+      }
+
+      el.playerList.innerHTML = state.players.map(player => `
+        <div class="player-row" data-player-id="${player.id}">
+          <input class="player-active" type="checkbox" ${player.active ? "checked" : ""} title="Aktív">
+          <div class="name-block">
+            <strong title="${escapeHtml(player.name)}">${escapeHtml(player.name)}</strong>
+            ${player.note ? `<span class="note" title="${escapeHtml(player.note)}">${escapeHtml(player.note)}</span>` : '<span class="note">-</span>'}
+          </div>
+          <div class="skill-edit">
+            <input class="player-skill" type="range" min="1" max="10" value="${player.skill}" aria-label="${escapeHtml(player.name)} skill">
+            <span class="badge">${player.skill}</span>
+          </div>
+          <button class="icon-btn remove-player" type="button" title="Játékos törlése">×</button>
+        </div>
+      `).join("");
+    }
+
+    function renderCountries() {
+      const pool = availableCountriesBase();
+      el.countrySummary.textContent = `${pool.length}/${state.countries.length}`;
+      el.withMajorsBtn.classList.toggle("active", state.majorMode === "with");
+      el.withoutMajorsBtn.classList.toggle("active", state.majorMode === "without");
+
+      if (!state.countries.length) {
+        el.countryList.innerHTML = '<div class="empty">Nincs ország a poolban.</div>';
+        return;
+      }
+
+      el.countryList.innerHTML = state.countries.map(country => `
+        <div class="country-row" data-country-id="${country.id}">
+          <div class="name-block">
+            <strong title="${escapeHtml(country.name)}">${escapeHtml(country.name)}</strong>
+            <span class="note">${country.major ? "major" : "minor"}</span>
+          </div>
+          <input class="country-short" type="text" maxlength="5" value="${escapeHtml(country.short)}" aria-label="${escapeHtml(country.name)} rövid név">
+          <label class="check-label">
+            <input class="country-major" type="checkbox" ${country.major ? "checked" : ""}>
+            Major
+          </label>
+          <button class="icon-btn remove-country" type="button" title="Ország törlése">×</button>
+        </div>
+      `).join("");
+
+    }
+
+    function resetDraftAfterPoolChange() {
+      cancelActiveSpins();
+      const pool = availableCountriesBase();
+      const keepPlayerDraftPosition = state.teams.length > 0 && !playerDraftComplete();
+      state.countryPool = state.teams.length ? shuffle(pool) : [];
+      state.highlightedCountries.clear();
+      state.teams.forEach(team => {
+        team.countries = [];
+      });
+      if (!keepPlayerDraftPosition) {
+        state.currentTeamIndex = 0;
+      }
+      el.countryRotation = 0;
+      el.countryWheel.style.transform = "rotate(0deg)";
+      el.countrySpinResult.textContent = state.teams.length && playerDraftComplete()
+        ? "Az országkerék indulhat"
+        : "Várja a csapatokat";
+      renderTeams();
+      renderTeamPicker();
+      renderCountryWheel();
+      renderOverview();
+    }
+
+    function resetPlayers() {
+      cancelActiveSpins();
+      state.players = withIds(defaultPlayers);
+      state.teams = [];
+      state.playerDraftPool = [];
+      state.currentTeamIndex = 0;
+      state.highlightedCountries.clear();
+      renderAll();
+      persist();
+      toast("Alap UMKGL lobby betöltve.");
+    }
+
+    function resetCountries() {
+      state.countries = withIds(defaultCountries);
+      resetDraftAfterPoolChange();
+      renderCountries();
+      persist();
+      toast("Alap országpool betöltve.");
+    }
+
+    function generateTeams() {
+      cancelActiveSpins();
+      const players = activePlayers();
+      const teamCount = 2;
+      const countriesPerTeam = 9;
+      const pool = availableCountriesBase();
+      const requiredCountries = teamCount * countriesPerTeam;
+
+      if (players.length < teamCount) {
+        toast("Legalább annyi aktív játékos kell, ahány csapat van.");
+        return;
+      }
+      if (pool.length < requiredCountries) {
+        toast(`Kevés ország van a poolban: ${requiredCountries} kellene.`);
+        return;
+      }
+
+      state.teams = Array.from({ length: teamCount }, (_, index) => ({
+        id: makeId(),
+        name: `Csapat ${index + 1}`,
+        players: [],
+        countries: [],
+        targetCountries: countriesPerTeam,
+        targetPlayers: Math.floor(players.length / teamCount) + (index < players.length % teamCount ? 1 : 0)
+      }));
+      state.playerDraftPool = shuffle(players).map(player => ({
+        id: player.id,
+        player,
+        name: player.name,
+        skill: player.skill
+      }));
+      state.countryPool = shuffle(pool);
+      state.currentTeamIndex = 0;
+      state.teamRotation = 0;
+      state.countryRotation = 0;
+      state.highlightedCountries.clear();
+      el.teamWheel.style.transform = "rotate(0deg)";
+      el.countryWheel.style.transform = "rotate(0deg)";
+      el.teamSpinResult.textContent = "Pörgesd ki az első játékost";
+      el.countrySpinResult.textContent = "Előbb sorsold be a játékosokat";
+      renderAll();
+      toast("A névsorsolás előkészítve: Csapat 1 indul, utána Csapat 2.");
+    }
+
+    function makeBalancedTeams(players, teamCount) {
+      const chaos = clamp(Number(el.chaosLevel.value) || 0, 0, 5);
+      const sorted = shuffle(players)
+        .map(player => ({ ...player, draftScore: player.skill + (Math.random() - .5) * chaos }))
+        .sort((a, b) => b.draftScore - a.draftScore);
+
+      const teams = Array.from({ length: teamCount }, () => ({ players: [] }));
+      sorted.forEach((player, index) => {
+        const round = Math.floor(index / teamCount);
+        const slot = index % teamCount;
+        const teamIndex = round % 2 === 0 ? slot : teamCount - 1 - slot;
+        teams[teamIndex].players.push(stripDraftScore(player));
+      });
+
+      improveBalance(teams, 900);
+      teams.forEach(team => team.players.sort((a, b) => b.skill - a.skill));
+      return teams;
+    }
+
+    function stripDraftScore(player) {
+      const { draftScore, ...clean } = player;
+      return clean;
+    }
+
+    function improveBalance(teams, attempts) {
+      let bestDiff = teamDiff(teams);
+      for (let i = 0; i < attempts; i++) {
+        const high = highestTeamIndex(teams);
+        const low = lowestTeamIndex(teams);
+        if (high === low || !teams[high].players.length || !teams[low].players.length) return;
+
+        const highPlayerIndex = Math.floor(Math.random() * teams[high].players.length);
+        const lowPlayerIndex = Math.floor(Math.random() * teams[low].players.length);
+        swapPlayers(teams, high, highPlayerIndex, low, lowPlayerIndex);
+        const diff = teamDiff(teams);
+        if (diff <= bestDiff) {
+          bestDiff = diff;
+        } else {
+          swapPlayers(teams, high, highPlayerIndex, low, lowPlayerIndex);
+        }
+      }
+    }
+
+    function swapPlayers(teams, teamA, indexA, teamB, indexB) {
+      const temp = teams[teamA].players[indexA];
+      teams[teamA].players[indexA] = teams[teamB].players[indexB];
+      teams[teamB].players[indexB] = temp;
+    }
+
+    function teamPower(team) {
+      return team.players.reduce((sum, player) => sum + player.skill, 0);
+    }
+
+    function teamDiff(teams) {
+      const powers = teams.map(teamPower);
+      return Math.max(...powers) - Math.min(...powers);
+    }
+
+    function plannedTeamPower(team) {
+      const roster = team.plannedPlayers || team.players;
+      return roster.reduce((sum, player) => sum + player.skill, 0);
+    }
+
+    function plannedTeamDiff(teams) {
+      const powers = teams.map(plannedTeamPower);
+      return Math.max(...powers) - Math.min(...powers);
+    }
+
+    function normalizeDegrees(value) {
+      return ((value % 360) + 360) % 360;
+    }
+
+    function targetRotationForIndex(index, length) {
+      const segment = 360 / length;
+      const safeSliceStart = segment * 0.16;
+      const safeSliceEnd = segment * 0.84;
+      const randomPointInsideSlice = safeSliceStart + Math.random() * (safeSliceEnd - safeSliceStart);
+      return normalizeDegrees(-(index * segment + randomPointInsideSlice));
+    }
+
+    function spinWheelToIndex(svg, rotationKey, index, length) {
+      const target = targetRotationForIndex(index, length);
+      const current = normalizeDegrees(state[rotationKey]);
+      const delta = normalizeDegrees(target - current);
+      state[rotationKey] += 1440 + delta;
+      svg.style.transform = `rotate(${state[rotationKey]}deg)`;
+      return state[rotationKey];
+    }
+
+    function jumpWheelToRotation(svg, rotation) {
+      const previousTransition = svg.style.transition;
+      svg.style.transition = "none";
+      svg.style.transform = `rotate(${rotation}deg)`;
+      svg.getBoundingClientRect();
+      svg.style.transition = previousTransition;
+    }
+
+    function finishActiveSpin(spinKey) {
+      const spin = state[spinKey];
+      if (!spin) return false;
+      window.clearTimeout(spin.timer);
+      jumpWheelToRotation(spin.svg, spin.finalRotation);
+      spin.finish();
+      return true;
+    }
+
+    function cancelActiveSpins() {
+      if (state.teamSpin) {
+        window.clearTimeout(state.teamSpin.timer);
+        state.teamSpin = null;
+      }
+      if (state.countrySpin) {
+        window.clearTimeout(state.countrySpin.timer);
+        state.countrySpin = null;
+      }
+      state.spinningTeam = false;
+      state.spinningCountry = false;
+      el.spinTeamBtn.textContent = "Játékos kipörgetése";
+      el.spinCountryBtn.textContent = "Ország kipörgetése";
+    }
+
+    function highestTeamIndex(teams) {
+      return teams.reduce((best, team, index) => teamPower(team) > teamPower(teams[best]) ? index : best, 0);
+    }
+
+    function lowestTeamIndex(teams) {
+      return teams.reduce((best, team, index) => teamPower(team) < teamPower(teams[best]) ? index : best, 0);
+    }
+
+    function remainingPlayerDraftEntries() {
+      return state.playerDraftPool;
+    }
+
+    function playerDraftComplete() {
+      return state.teams.length > 0 && state.playerDraftPool.length === 0;
+    }
+
+    function allTeamsRevealed() {
+      return playerDraftComplete();
+    }
+
+    function spinTeam() {
+      if (state.spinningTeam) {
+        finishActiveSpin("teamSpin");
+        return;
+      }
+      const pack = remainingPlayerDraftEntries();
+      if (!state.teams.length) {
+        toast("Először generálj csapatokat.");
+        return;
+      }
+      if (!pack.length) {
+        toast("Minden játékos be lett sorsolva.");
+        return;
+      }
+
+      state.spinningTeam = true;
+      el.spinTeamBtn.textContent = "Azonnal mutasd";
+      el.statusRibbon.textContent = "Játékoskerék pörög";
+      const winningIndex = Math.floor(Math.random() * pack.length);
+      renderTeamWheel();
+      const finalRotation = spinWheelToIndex(el.teamWheel, "teamRotation", winningIndex, pack.length);
+
+      const finishTeamSpin = () => {
+        window.clearTimeout(state.teamSpin?.timer);
+        state.teamSpin = null;
+        const winner = pack[winningIndex];
+        const targetTeam = state.teams[state.currentTeamIndex];
+        targetTeam.players.push(winner.player);
+        state.playerDraftPool = state.playerDraftPool.filter(entry => entry.id !== winner.id);
+        state.currentTeamIndex = (state.currentTeamIndex + 1) % state.teams.length;
+        state.spinningTeam = false;
+        el.spinTeamBtn.textContent = "Játékos kipörgetése";
+        el.teamSpinResult.textContent = `${winner.player.name} -> ${targetTeam.name}`;
+        renderTeams();
+        renderWheel(el.teamWheel, pack, entry => entry.player.name, winner.id);
+        renderOverview();
+        if (allTeamsRevealed()) {
+          el.countrySpinResult.textContent = "Az országkerék indulhat";
+          el.statusRibbon.textContent = "Országdraft készenlét";
+        } else {
+          el.statusRibbon.textContent = "Névsorsolás folyamatban";
+        }
+      };
+
+      state.teamSpin = {
+        svg: el.teamWheel,
+        finalRotation,
+        finish: finishTeamSpin,
+        timer: window.setTimeout(finishTeamSpin, 4100)
+      };
+    }
+
+    function currentTeam() {
+      return state.teams[state.currentTeamIndex];
+    }
+
+    function teamCountryComplete(team) {
+      return team && team.countries.length >= team.targetCountries;
+    }
+
+    function countryDraftComplete() {
+      return state.teams.length > 0 && state.teams.every(teamCountryComplete);
+    }
+
+    function availableForCurrentTeam() {
+      const team = currentTeam();
+      if (!team || teamCountryComplete(team)) return [];
+      return state.countryPool;
+    }
+
+    function moveToNextCountryTeam() {
+      if (countryDraftComplete()) return;
+      for (let i = 0; i < state.teams.length; i++) {
+        const index = (state.currentTeamIndex + i) % state.teams.length;
+        if (!teamCountryComplete(state.teams[index])) {
+          state.currentTeamIndex = index;
+          el.teamPicker.value = String(index);
+          return;
+        }
+      }
+    }
+
+    function spinCountry() {
+      if (state.spinningCountry) {
+        finishActiveSpin("countrySpin");
+        return;
+      }
+      if (!state.teams.length) {
+        toast("Először generálj csapatokat.");
+        return;
+      }
+      if (!allTeamsRevealed()) {
+        toast("Előbb pörgesd ki az összes csapatot.");
+        return;
+      }
+      if (countryDraftComplete()) {
+        toast("Minden csapat megkapta az országát.");
+        return;
+      }
+
+      moveToNextCountryTeam();
+      const team = currentTeam();
+      const pack = availableForCurrentTeam();
+      if (!pack.length) {
+        toast("Elfogyott az országpool.");
+        return;
+      }
+
+      state.spinningCountry = true;
+      el.spinCountryBtn.textContent = "Azonnal mutasd";
+      el.statusRibbon.textContent = `${team.name} országot húz`;
+      const winningIndex = Math.floor(Math.random() * pack.length);
+      renderCountryWheel();
+      const finalRotation = spinWheelToIndex(el.countryWheel, "countryRotation", winningIndex, pack.length);
+
+      const finishCountrySpin = () => {
+        window.clearTimeout(state.countrySpin?.timer);
+        state.countrySpin = null;
+        const winner = pack[winningIndex];
+        team.countries.push(winner);
+        state.countryPool = state.countryPool.filter(country => country.id !== winner.id);
+        state.spinningCountry = false;
+        el.spinCountryBtn.textContent = "Ország kipörgetése";
+        el.countrySpinResult.textContent = `${team.name}: ${winner.name}`;
+        state.currentTeamIndex = (state.currentTeamIndex + 1) % state.teams.length;
+        moveToNextCountryTeam();
+        renderTeams();
+        renderTeamPicker();
+        renderWheel(el.countryWheel, pack, country => country.short || country.name.slice(0, 3).toUpperCase(), winner.id);
+        renderOverview();
+        el.statusRibbon.textContent = countryDraftComplete() ? "Draft kész" : `${currentTeam()?.name || "Következő csapat"} jön`;
+      };
+
+      state.countrySpin = {
+        svg: el.countryWheel,
+        finalRotation,
+        finish: finishCountrySpin,
+        timer: window.setTimeout(finishCountrySpin, 4100)
+      };
+    }
+
+    function renderTeams() {
+      if (!state.teams.length) {
+        el.teams.innerHTML = '<div class="empty">A csapatok generálás után jelennek meg.</div>';
+        el.balanceInfo.textContent = "-";
+        return;
+      }
+
+      const diff = state.playerDraftPool.length ? plannedTeamDiff(state.teams) : teamDiff(state.teams);
+      el.balanceInfo.textContent = `Diff ${diff}`;
+      el.teams.innerHTML = state.teams.map((team, index) => {
+        const isPlayerTarget = index === state.currentTeamIndex && !playerDraftComplete();
+        const isCountryTarget = index === state.currentTeamIndex && playerDraftComplete() && !countryDraftComplete();
+        const plannedCount = team.targetPlayers ?? team.players.length;
+        return `
+          <article class="team-card ${isPlayerTarget || isCountryTarget ? "active" : ""}">
+            <div class="team-title">
+              <strong>${team.name}</strong>
+              <span class="small-badge">${teamPower(team)} skill</span>
+            </div>
+            <div class="team-body">
+              <div class="meta-line">
+                <span class="badge green">${team.players.length}/${plannedCount} játékos</span>
+                <span class="badge blue">${team.countries.length}/${team.targetCountries} ország</span>
+              </div>
+              ${team.players.length ? `<ul class="member-list">
+                ${team.players.map(player => `
+                  <li>
+                    <span>${escapeHtml(player.name)}</span>
+                    <span>${player.skill}</span>
+                  </li>
+                `).join("")}
+              </ul>` : '<div class="empty">Még nem húzott játékost.</div>'}
+              ${team.countries.length ? `<ul class="assigned-list">
+                ${team.countries.map(country => `
+                  <li>
+                    <span class="${country.major ? "major" : "minor"}">${escapeHtml(country.name)}</span>
+                    <span>${escapeHtml(country.short)}</span>
+                  </li>
+                `).join("")}
+              </ul>` : '<div class="empty">Még nincs ország.</div>'}
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderTeamPicker() {
+      if (!state.teams.length) {
+        el.teamPicker.innerHTML = '<option>Nincs csapat</option>';
+        return;
+      }
+      el.teamPicker.innerHTML = state.teams.map((team, index) => `
+        <option value="${index}">${team.name} (${team.countries.length}/${team.targetCountries})</option>
+      `).join("");
+      el.teamPicker.value = String(state.currentTeamIndex);
+    }
+
+    function renderWheel(svg, pack, labelGetter, activeId = null) {
+      if (!pack.length) {
+        svg.innerHTML = '<circle cx="210" cy="210" r="185" fill="#25291f" stroke="#d9b65b" stroke-width="4"></circle>';
+        return;
+      }
+
+      const center = 210;
+      const radius = 190;
+      const segment = 360 / pack.length;
+      const labelRadius = pack.length > 28 ? 150 : 132;
+      const fontSize = pack.length > 36 ? 9 : pack.length > 22 ? 11 : 17;
+
+      const pieces = pack.map((item, index) => {
+        const start = (index * segment - 90) * Math.PI / 180;
+        const end = ((index + 1) * segment - 90) * Math.PI / 180;
+        const large = segment > 180 ? 1 : 0;
+        const x1 = center + radius * Math.cos(start);
+        const y1 = center + radius * Math.sin(start);
+        const x2 = center + radius * Math.cos(end);
+        const y2 = center + radius * Math.sin(end);
+        const mid = ((index + .5) * segment - 90) * Math.PI / 180;
+        const lx = center + labelRadius * Math.cos(mid);
+        const ly = center + labelRadius * Math.sin(mid);
+        const color = activeId === item.id ? "#ffe36f" : wheelColors[index % wheelColors.length];
+        const textColor = item.major ? "#20170b" : "#fff7d4";
+        return `
+          <path d="M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z"
+            fill="${color}" stroke="#10130f" stroke-width="2"></path>
+          <text x="${lx}" y="${ly}" fill="${textColor}" font-size="${fontSize}" font-weight="950" text-anchor="middle" dominant-baseline="middle"
+            transform="rotate(${index * segment + segment / 2}, ${lx}, ${ly})">${escapeHtml(labelGetter(item))}</text>
+        `;
+      }).join("");
+
+      svg.innerHTML = `
+        <circle cx="210" cy="210" r="203" fill="#11150f" stroke="#d9b65b" stroke-width="4"></circle>
+        ${pieces}
+        <circle cx="210" cy="210" r="54" fill="#20251b" stroke="#efd17a" stroke-width="3"></circle>
+      `;
+    }
+
+    function renderTeamWheel() {
+      const pack = remainingPlayerDraftEntries();
+      renderWheel(el.teamWheel, pack, entry => entry.player.name);
+    }
+
+    function renderCountryWheel() {
+      const pack = availableForCurrentTeam();
+      renderWheel(el.countryWheel, pack, country => country.short || country.name.slice(0, 3).toUpperCase());
+    }
+
+    function renderOverview() {
+      const drawn = state.teams.reduce((sum, team) => sum + team.players.length, 0);
+      const totalPlayers = state.teams.reduce((sum, team) => sum + (team.targetPlayers ?? team.players.length), 0);
+      el.teamRevealInfo.textContent = `${drawn}/${totalPlayers}`;
+      const pool = availableCountriesBase();
+      const shownPoolSize = state.teams.length ? state.countryPool.length : pool.length;
+      el.poolInfo.textContent = `Pool: ${shownPoolSize} | Mód: ${state.majorMode === "with" ? "major" : "no major"}`;
+
+      if (!state.teams.length) {
+        el.statusRibbon.textContent = "Draft készenlét";
+        return;
+      }
+      if (countryDraftComplete()) {
+        el.statusRibbon.textContent = "Draft kész";
+      }
+    }
+
+    function renderAll() {
+      renderPlayers();
+      renderCountries();
+      renderTeams();
+      renderTeamPicker();
+      renderTeamWheel();
+      renderCountryWheel();
+      renderOverview();
+    }
+
+    function buildDiscordText() {
+      if (!state.teams.length) return "";
+      const modeText = state.majorMode === "with" ? "majorokkal" : "major nélkül";
+      const lines = [
+        "UMKGL HOI4 Sorsolás",
+        `Mód: ${modeText}`,
+        `Balance diff: ${teamDiff(state.teams)}`,
+        ""
+      ];
+
+      state.teams.forEach(team => {
+        lines.push(`${team.name} [Skill: ${teamPower(team)}]`);
+        lines.push(team.players.map(player => `${player.name} (${player.skill})`).join(", "));
+        lines.push(`Ország: ${team.countries.length ? team.countries.map(country => country.name).join(", ") : "-"}`);
+        lines.push("");
+      });
+
+      return lines.join("\n").trim();
+    }
+
+    async function copyDiscord() {
+      const text = buildDiscordText();
+      if (!text) {
+        toast("Nincs mit exportálni.");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Discord export vágólapra másolva.");
+      } catch {
+        const fallback = document.createElement("textarea");
+        fallback.value = text;
+        document.body.appendChild(fallback);
+        fallback.select();
+        document.execCommand("copy");
+        fallback.remove();
+        toast("Discord export másolva.");
+      }
+    }
+
+    el.addPlayerBtn.addEventListener("click", addPlayer);
+    el.playerName.addEventListener("keydown", event => {
+      if (event.key === "Enter") addPlayer();
+    });
+    el.playerSkill.addEventListener("keydown", event => {
+      if (event.key === "Enter") addPlayer();
+    });
+    el.playerNote.addEventListener("keydown", event => {
+      if (event.key === "Enter") addPlayer();
+    });
+    el.resetPlayersBtn.addEventListener("click", resetPlayers);
+    el.playerList.addEventListener("input", event => {
+      const row = event.target.closest(".player-row");
+      if (!row) return;
+      const player = state.players.find(item => item.id === row.dataset.playerId);
+      if (!player) return;
+      if (event.target.classList.contains("player-skill")) {
+        player.skill = clamp(Number(event.target.value), 1, 10);
+      }
+      renderPlayers();
+      state.teams = [];
+      state.playerDraftPool = [];
+      renderTeams();
+      renderTeamWheel();
+      renderCountryWheel();
+      renderOverview();
+      persist();
+    });
+    el.playerList.addEventListener("change", event => {
+      const row = event.target.closest(".player-row");
+      if (!row) return;
+      const player = state.players.find(item => item.id === row.dataset.playerId);
+      if (!player) return;
+      if (event.target.classList.contains("player-active")) {
+        player.active = event.target.checked;
+        state.teams = [];
+        state.playerDraftPool = [];
+        renderAll();
+        persist();
+      }
+    });
+    el.playerList.addEventListener("click", event => {
+      const row = event.target.closest(".player-row");
+      if (!row) return;
+      if (event.target.classList.contains("remove-player")) {
+        state.players = state.players.filter(player => player.id !== row.dataset.playerId);
+        state.teams = [];
+        state.playerDraftPool = [];
+        renderAll();
+        persist();
+      }
+    });
+
+    el.withMajorsBtn.addEventListener("click", () => {
+      state.majorMode = "with";
+      resetDraftAfterPoolChange();
+      renderCountries();
+      persist();
+    });
+    el.withoutMajorsBtn.addEventListener("click", () => {
+      state.majorMode = "without";
+      resetDraftAfterPoolChange();
+      renderCountries();
+      persist();
+    });
+    el.addCountryBtn.addEventListener("click", addCountry);
+    el.countryName.addEventListener("keydown", event => {
+      if (event.key === "Enter") addCountry();
+    });
+    el.countryShort.addEventListener("keydown", event => {
+      if (event.key === "Enter") addCountry();
+    });
+    el.resetCountriesBtn.addEventListener("click", resetCountries);
+    el.countryList.addEventListener("input", event => {
+      const row = event.target.closest(".country-row");
+      if (!row) return;
+      const country = state.countries.find(item => item.id === row.dataset.countryId);
+      if (!country) return;
+      if (event.target.classList.contains("country-short")) {
+        country.short = event.target.value.slice(0, 5).toUpperCase();
+      }
+      resetDraftAfterPoolChange();
+      renderCountries();
+      persist();
+    });
+    el.countryList.addEventListener("change", event => {
+      const row = event.target.closest(".country-row");
+      if (!row) return;
+      const country = state.countries.find(item => item.id === row.dataset.countryId);
+      if (!country) return;
+      if (event.target.classList.contains("country-major")) {
+        country.major = event.target.checked;
+      }
+      resetDraftAfterPoolChange();
+      renderCountries();
+      persist();
+    });
+    el.countryList.addEventListener("click", event => {
+      const row = event.target.closest(".country-row");
+      if (!row) return;
+      if (event.target.classList.contains("remove-country")) {
+        state.countries = state.countries.filter(country => country.id !== row.dataset.countryId);
+        resetDraftAfterPoolChange();
+        renderCountries();
+        persist();
+      }
+    });
+
+    el.generateTeamsBtn.addEventListener("click", generateTeams);
+    el.copyDiscordBtn.addEventListener("click", copyDiscord);
+    el.spinTeamBtn.addEventListener("click", spinTeam);
+    el.spinCountryBtn.addEventListener("click", spinCountry);
+    el.teamPicker.addEventListener("change", () => {
+      const index = Number(el.teamPicker.value);
+      if (state.teams[index]) {
+        state.currentTeamIndex = index;
+        renderTeams();
+        renderCountryWheel();
+        renderOverview();
+      }
+    });
+    [el.teamCount, el.countriesPerTeam, el.chaosLevel].forEach(input => {
+      input.addEventListener("change", () => {
+        persist();
+      });
+    });
+
+    restore();
+    renderAll();
+  </script>
+</body>
+</html>

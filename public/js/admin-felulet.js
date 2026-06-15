@@ -474,6 +474,8 @@
 
         const timeMeta = document.createElement("p");
         timeMeta.className = "process-window__meta";
+
+
         timeMeta.textContent = `Feltöltve: ${formatHungarianDate(item.uploaded_at)}`;
         container.appendChild(timeMeta);
 
@@ -507,6 +509,7 @@
       }
 
       document.addEventListener("DOMContentLoaded", () => {
+        console.log("Admin JS loaded: metadata verzió");
         const statusEl = document.getElementById("clipWindowStatus");
         const tableContainer = document.getElementById("clipWindowTable");
         const variantSelect = document.getElementById("clipWindowVariant");
@@ -538,6 +541,10 @@
         let radnaiMonitorEnabled = true;
         let radnaiTogglePending = false;
         const sortableKeys = new Set(["id", "original_name", "sizeBytes", "uploaded_at", "content_created_at"]);
+
+        let archiveCurrentFolder = null;
+        let archiveFolders = [];
+        let archiveVideos = [];
 
         function handleSortChange(key) {
           if (!sortableKeys.has(key)) {
@@ -985,6 +992,247 @@
           }
         };
 
+        function formatToDatetimeLocal(isoString) {
+          if (!isoString) return "";
+          const d = new Date(isoString);
+          if (Number.isNaN(d.getTime())) return "";
+          
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const hours = String(d.getHours()).padStart(2, '0');
+          const minutes = String(d.getMinutes()).padStart(2, '0');
+          
+          return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+
+        function renderArchiveMetaTable() {
+          const tableBody = document.getElementById("archiveMetaBody");
+          const currentPathEl = document.getElementById("archiveMetaCurrentPath");
+          const backBtn = document.getElementById("archiveMetaBackBtn");
+          
+          if (!tableBody) return;
+          tableBody.innerHTML = "";
+          
+          if (archiveCurrentFolder === null) {
+            if (currentPathEl) currentPathEl.innerHTML = "📁 Gyökér (Mappák)";
+            if (backBtn) backBtn.style.display = "none";
+            
+            if (archiveFolders.length === 0) {
+              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Nincs elérhető mappa az archívumban.</td></tr>`;
+              return;
+            }
+            
+            archiveFolders.forEach(folder => {
+              const row = document.createElement("tr");
+              row.className = "archive-folder-row";
+              
+              const nameCell = document.createElement("td");
+              nameCell.innerHTML = `📁 <strong>${folder}</strong>`;
+              row.appendChild(nameCell);
+              
+              const typeCell = document.createElement("td");
+              typeCell.textContent = "Mappa";
+              row.appendChild(typeCell);
+              
+              const dateCell = document.createElement("td");
+              dateCell.textContent = "-";
+              row.appendChild(dateCell);
+              
+              const actionCell = document.createElement("td");
+              const openBtn = document.createElement("button");
+              openBtn.type = "button";
+              openBtn.className = "archive-meta-btn";
+              openBtn.textContent = "Megnyitás";
+              openBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                openFolder(folder);
+              });
+              actionCell.appendChild(openBtn);
+              row.appendChild(actionCell);
+              
+              row.addEventListener("dblclick", () => {
+                openFolder(folder);
+              });
+              
+              tableBody.appendChild(row);
+            });
+          } else {
+            if (currentPathEl) currentPathEl.innerHTML = `📁 Gyökér / <span style="color: #5865F2;">${archiveCurrentFolder}</span>`;
+            if (backBtn) backBtn.style.display = "inline-block";
+            
+            if (archiveVideos.length === 0) {
+              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Nincsenek videók ebben a mappában.</td></tr>`;
+              return;
+            }
+            
+            archiveVideos.forEach(video => {
+              const row = document.createElement("tr");
+              
+              const nameCell = document.createElement("td");
+              nameCell.textContent = video.original_name || video.filename || "Ismeretlen";
+              row.appendChild(nameCell);
+              
+              const typeCell = document.createElement("td");
+              typeCell.textContent = "Videó";
+              row.appendChild(typeCell);
+              
+              const dateCell = document.createElement("td");
+              const dateSpan = document.createElement("span");
+              dateSpan.textContent = formatDateTime(video.content_created_at);
+              dateCell.appendChild(dateSpan);
+              row.appendChild(dateCell);
+              
+              const actionCell = document.createElement("td");
+              const editBtn = document.createElement("button");
+              editBtn.type = "button";
+              editBtn.className = "archive-meta-btn";
+              editBtn.textContent = "✏️ Szerkesztés";
+              actionCell.appendChild(editBtn);
+              row.appendChild(actionCell);
+              
+              editBtn.addEventListener("click", () => {
+                dateSpan.style.display = "none";
+                editBtn.style.display = "none";
+                
+                const dateInput = document.createElement("input");
+                dateInput.type = "datetime-local";
+                dateInput.className = "archive-meta-date-input";
+                dateInput.value = formatToDatetimeLocal(video.content_created_at);
+                dateCell.appendChild(dateInput);
+                
+                const saveBtn = document.createElement("button");
+                saveBtn.type = "button";
+                saveBtn.className = "archive-meta-btn archive-meta-btn--save";
+                saveBtn.textContent = "Mentés";
+                
+                const cancelBtn = document.createElement("button");
+                cancelBtn.type = "button";
+                cancelBtn.className = "archive-meta-btn archive-meta-btn--cancel";
+                cancelBtn.textContent = "Mégse";
+                
+                actionCell.appendChild(saveBtn);
+                actionCell.appendChild(cancelBtn);
+                
+                cancelBtn.addEventListener("click", () => {
+                  dateInput.remove();
+                  saveBtn.remove();
+                  cancelBtn.remove();
+                  dateSpan.style.display = "inline";
+                  editBtn.style.display = "inline";
+                });
+                
+                saveBtn.addEventListener("click", async () => {
+                  const selectedDate = dateInput.value;
+                  if (!selectedDate) {
+                    alert("Kérlek adj meg egy érvényes dátumot!");
+                    return;
+                  }
+                  
+                  dateInput.disabled = true;
+                  saveBtn.disabled = true;
+                  cancelBtn.disabled = true;
+                  saveBtn.textContent = "Mentés...";
+                  
+                  try {
+                    const response = await fetch(`/api/archive/videos/${video.id}/metadata-date`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                        ...buildAuthHeaders()
+                      },
+                      body: JSON.stringify({ date: selectedDate })
+                    });
+                    
+                    const result = await response.json().catch(() => null);
+                    if (!response.ok) {
+                      throw new Error(result?.message || "Nem sikerült frissíteni a dátumot.");
+                    }
+                    
+                    alert(result.message || "Sikeres mentés!");
+                    await loadArchiveVideos(archiveCurrentFolder);
+                  } catch (error) {
+                    alert(error.message || "Hiba történt a mentés során.");
+                    dateInput.disabled = false;
+                    saveBtn.disabled = false;
+                    cancelBtn.disabled = false;
+                    saveBtn.textContent = "Mentés";
+                  }
+                });
+              });
+              
+              tableBody.appendChild(row);
+            });
+          }
+        }
+
+        async function loadArchiveFolders() {
+          console.log("loadArchiveFolders meghívva");
+          const tableBody = document.getElementById("archiveMetaBody");
+          if (tableBody) {
+            tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Mappák betöltése folyamatban...</td></tr>`;
+          }
+          
+          try {
+            const response = await fetch("/api/archive/videok/folders", {
+              headers: buildAuthHeaders(),
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+              throw new Error(data?.message || "Nem sikerült lekérdezni a mappákat.");
+            }
+            archiveFolders = Array.isArray(data?.folders) ? data.folders : [];
+            renderArchiveMetaTable();
+          } catch (error) {
+            console.error("Archívum mappák betöltési hiba:", error);
+            if (tableBody) {
+              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status" style="color: #ffc9c9;">Hiba: ${error.message}</td></tr>`;
+            }
+          }
+        }
+
+        async function loadArchiveVideos(folder) {
+          const tableBody = document.getElementById("archiveMetaBody");
+          if (tableBody) {
+            tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Videók betöltése folyamatban...</td></tr>`;
+          }
+          
+          try {
+            const response = await fetch(`/api/archive/videos/folders/${encodeURIComponent(folder)}?limit=80&sort=newest`, {
+              headers: buildAuthHeaders(),
+            });
+            const result = await response.json().catch(() => null);
+            if (!response.ok) {
+              throw new Error(result?.message || "Nem sikerült lekérdezni a videókat.");
+            }
+            archiveVideos = Array.isArray(result?.data) ? result.data : [];
+            renderArchiveMetaTable();
+          } catch (error) {
+            console.error("Archívum videók betöltési hiba:", error);
+            if (tableBody) {
+              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status" style="color: #ffc9c9;">Hiba: ${error.message}</td></tr>`;
+            }
+          }
+        }
+
+        function openFolder(folder) {
+          archiveCurrentFolder = folder;
+          loadArchiveVideos(folder);
+        }
+
+        function goBackToFolders() {
+          archiveCurrentFolder = null;
+          loadArchiveFolders();
+        }
+
+        async function loadArchiveMetadata() {
+          if (archiveCurrentFolder === null) {
+            await loadArchiveFolders();
+          } else {
+            await loadArchiveVideos(archiveCurrentFolder);
+          }
+        }
+
         const getInitialVariant = () => {
           const stored = localStorage.getItem(VARIANT_STORAGE_KEY);
           if (stored && VALID_VARIANTS.includes(stored)) {
@@ -994,6 +1242,8 @@
         };
 
         const switchSection = (targetId) => {
+          localStorage.setItem("adminActiveTab", targetId);
+
           sections.forEach((section) => {
             section.classList.toggle("manager__section--active", section.id === targetId);
           });
@@ -1013,6 +1263,10 @@
 
           if (targetId === "radnaiSection") {
             loadRadnaiStatus();
+          }
+
+          if (targetId === "archiveMetadataSection") {
+            loadArchiveMetadata();
           }
         };
 
@@ -1055,6 +1309,21 @@
           });
         }
 
+        const archiveMetaBackBtn = document.getElementById("archiveMetaBackBtn");
+        const archiveMetaRefreshBtn = document.getElementById("archiveMetaRefreshBtn");
+
+        if (archiveMetaBackBtn) {
+          archiveMetaBackBtn.addEventListener("click", () => {
+            goBackToFolders();
+          });
+        }
+
+        if (archiveMetaRefreshBtn) {
+          archiveMetaRefreshBtn.addEventListener("click", () => {
+            loadArchiveMetadata();
+          });
+        }
+
         tabs.forEach((tab) => {
           tab.addEventListener("click", () => {
             const targetId = tab.dataset.target;
@@ -1062,6 +1331,12 @@
           });
         });
 
-        loadVariant(initialVariant);
+        const savedTab = localStorage.getItem("adminActiveTab");
+        const validTabs = ["clipsSection", "processingSection", "movieSection", "radnaiSection", "archiveMetadataSection"];
+        if (savedTab && validTabs.includes(savedTab)) {
+          switchSection(savedTab);
+        } else {
+          switchSection("clipsSection");
+        }
       });
     

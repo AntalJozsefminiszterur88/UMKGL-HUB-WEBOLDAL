@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="hu">
   <head>
     <meta charset="UTF-8" />
@@ -104,6 +104,53 @@
         flex-wrap: wrap;
         justify-content: flex-end;
       }
+
+      .archive-folder-row {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+      .archive-folder-row:hover {
+        background-color: #3e4249 !important;
+      }
+      .archive-meta-date-input {
+        background: #1b1d21;
+        border: 1px solid #4f545c;
+        border-radius: 4px;
+        color: #fff;
+        padding: 4px 8px;
+        font-family: inherit;
+        font-size: 0.9rem;
+      }
+      .archive-meta-btn {
+        background: #4f545c;
+        border: none;
+        border-radius: 4px;
+        color: #fff;
+        cursor: pointer;
+        padding: 4px 8px;
+        margin-left: 5px;
+        font-size: 0.85rem;
+        transition: background-color 0.2s;
+      }
+      .archive-meta-btn:hover {
+        background: #686d73;
+      }
+      .archive-meta-btn--save {
+        background: #2b8a57;
+      }
+      .archive-meta-btn--save:hover {
+        background: #34a86a;
+      }
+      .archive-meta-btn--cancel {
+        background: #a44343;
+      }
+      .archive-meta-btn--cancel:hover {
+        background: #c25252;
+      }
+      .archive-meta-controls {
+        display: flex;
+        gap: 10px;
+      }
     </style>
   </head>
   <body>
@@ -117,6 +164,7 @@
           <button class="manager__tab" data-target="processingSection" type="button">Feldolgozási állapot</button>
           <button class="manager__tab" data-target="movieSection" type="button">Mozi Teszt</button>
           <button class="manager__tab" data-target="radnaiSection" type="button">Radnai Figyelő</button>
+          <button class="manager__tab" data-target="archiveMetadataSection" type="button">Archívum Metadata Szerkesztő</button>
         </div>
       </div>
 
@@ -195,9 +243,46 @@
             </div>
           </div>
         </section>
+
+        <section id="archiveMetadataSection" class="manager__section">
+          <div class="process-window">
+            <div class="process-window__header">
+              <div>
+                <h2>Archívum Metadata Szerkesztő</h2>
+                <p class="process-window__subtitle">Navigálj a mappákban (dupla kattintással), és módosítsd a videók metaadat dátumát.</p>
+              </div>
+              <div class="archive-meta-controls">
+                <button id="archiveMetaBackBtn" class="process-window__refresh" style="display: none;" type="button">Vissza a mappákhoz</button>
+                <button id="archiveMetaRefreshBtn" class="process-window__refresh" type="button">Frissítés</button>
+              </div>
+            </div>
+            
+            <div class="process-window__card">
+              <h3 id="archiveMetaCurrentPath" style="margin-bottom: 10px;">📁 Gyökér (Mappák)</h3>
+              
+              <div id="archiveMetaTableContainer" style="margin-top: 15px; overflow-x: auto;">
+                <table class="clip-window__table" id="archiveMetaTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 50%;">Név</th>
+                      <th style="width: 15%;">Típus</th>
+                      <th style="width: 20%;">Metadata dátum</th>
+                      <th style="width: 15%;">Művelet</th>
+                    </tr>
+                  </thead>
+                  <tbody id="archiveMetaBody">
+                    <tr>
+                      <td colspan="4" class="clip-window__status">Mappák betöltése folyamatban...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
-    <script src="js/admin-felulet.js?v=2026-02-11-radnai-toggle"></script>
+    <script src="js/admin-felulet.js?v=2026-06-15-archive-metadata-persist"></script>
   </body>
 </html>

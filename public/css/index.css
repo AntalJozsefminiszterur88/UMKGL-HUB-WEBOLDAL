@@ -893,6 +893,19 @@
         color: #fff;
       }
 
+      .hoi4-sorsolo-section {
+        padding: 0;
+        background: #10130f;
+      }
+
+      .hoi4-sorsolo-frame {
+        display: block;
+        width: 100%;
+        min-height: calc(100vh - 180px);
+        border: 0;
+        background: #10130f;
+      }
+
       main {
         flex: 1;
         padding: 2rem;
@@ -908,6 +921,11 @@
 
       section.active {
         display: block;
+      }
+
+      section.hoi4-sorsolo-section {
+        max-width: none;
+        width: 100%;
       }
 
       .hero {
@@ -2219,6 +2237,35 @@
       .tag-chip:focus-visible {
         outline: 2px solid #ffffff;
         outline-offset: 2px;
+      }
+
+      .clip-tag-replace-menu {
+        position: fixed;
+        z-index: 3200;
+        display: grid;
+        gap: 0.45rem;
+        min-width: 220px;
+        padding: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 10px;
+        background: rgba(18, 24, 38, 0.98);
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.34);
+      }
+
+      .clip-tag-replace-menu__label {
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      .clip-tag-replace-menu__select {
+        width: 100%;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 8px;
+        background: rgba(8, 12, 22, 0.96);
+        color: #ffffff;
+        padding: 0.55rem 0.65rem;
+        font: inherit;
       }
 
       @media (max-width: 1200px) {

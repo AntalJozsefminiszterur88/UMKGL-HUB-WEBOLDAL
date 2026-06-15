@@ -1,12 +1,12 @@
 
-    const CLIENT_BUILD_VERSION = "20260508-4";
+    const CLIENT_BUILD_VERSION = "20260530-hoi4-1";
     console.info(`[UMKGL] client build ${CLIENT_BUILD_VERSION}`);
 
 
 
     const ADMIN_SESSION_KEY = "isAdmin";
     const ADMIN_PREVIEW_KEY = "adminPreviewRole";
-    const ADMIN_ONLY_SECTIONS = new Set(["admin"]);
+    const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
@@ -2563,6 +2563,10 @@
           adminNavBtn.style.display = isAdmin ? "inline-block" : "none";
         }
 
+        if (programNavBtn) {
+          programNavBtn.style.display = isAdmin ? "inline-block" : "none";
+        }
+
         updateProgramAdminControls();
         updateAcademyAdminControls();
 
@@ -4210,6 +4214,7 @@
       let videoSearchTimeout = null;
       let currentVideoList = [];
       let currentVideoIndex = 0;
+      let activeClipTagReplaceMenu = null;
       let activeVideoModalContext = "clips";
       let modalVideoPlaybackToken = 0;
       let modalVideoErrorHandlerAttached = false;
@@ -5309,13 +5314,13 @@
         const nameWithoutExt = dotIndex !== -1 ? baseFilename.slice(0, dotIndex) : baseFilename;
         const extension = dotIndex !== -1 ? baseFilename.slice(dotIndex) : "";
 
-        return `/uploads/archivum/videok/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}`;
+        return `/uploads/archivum/videok/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}?cb=20260522`;
       }
 
       function getPreferredArchiveVideoSource(video, qualityPreference) {
         const requestedQuality = qualityPreference || "original";
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
-        const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
+        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522` : "";
         const availability = getArchiveVideoQualityAvailability(video);
 
         if (normalizedQuality === "original") {
@@ -6338,7 +6343,7 @@
         if (!archiveVideoGridContainer || archiveVideoTagHandlersAttached) return;
 
         archiveVideoGridContainer.addEventListener("click", (event) => {
-          const chip = event.target.closest(".tag-chip");
+          const chip = getClosestElement(event.target, ".tag-chip");
           if (!chip || !archiveVideoGridContainer.contains(chip)) return;
           event.stopPropagation();
           const tagId = getArchiveTagIdFromChip(chip);
@@ -6348,7 +6353,7 @@
 
         archiveVideoGridContainer.addEventListener("keydown", (event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
-          const chip = event.target.closest(".tag-chip");
+          const chip = getClosestElement(event.target, ".tag-chip");
           if (!chip || !archiveVideoGridContainer.contains(chip)) return;
           event.preventDefault();
           const tagId = getArchiveTagIdFromChip(chip);
@@ -6659,7 +6664,7 @@
             video,
             currentVideoQuality
           );
-          videoElement.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}` : "";
+          videoElement.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}?cb=20260522` : "";
           videoElement.dataset.src = archiveOriginalSrc || `/uploads/${video.filename}`;
           videoElement.src = previewSrc || archiveOriginalSrc || `/uploads/${video.filename}`;
           videoElement.controls = false;
@@ -10024,8 +10029,18 @@
         }
       }
 
+      function getClosestElement(target, selector) {
+        if (target instanceof Element) {
+          return target.closest(selector);
+        }
+        if (target?.parentElement instanceof Element) {
+          return target.parentElement.closest(selector);
+        }
+        return null;
+      }
+
       function handleClipTagClick(event) {
-        const chip = event.target.closest(".tag-chip");
+        const chip = getClosestElement(event.target, ".tag-chip");
         if (!chip || !videoGridContainer?.contains(chip)) return;
         event.stopPropagation();
         const tagId = getTagIdFromChip(chip);
@@ -10035,7 +10050,7 @@
 
       function handleClipTagKeydown(event) {
         if (event.key !== "Enter" && event.key !== " ") return;
-        const chip = event.target.closest(".tag-chip");
+        const chip = getClosestElement(event.target, ".tag-chip");
         if (!chip || !videoGridContainer?.contains(chip)) return;
         event.preventDefault();
         const tagId = getTagIdFromChip(chip);
@@ -10043,19 +10058,79 @@
         selectClipTag(tagId);
       }
 
+      function handleClipTagContextmenu(event) {
+        const chip = getClosestElement(event.target, ".tag-chip");
+        if (!chip || !videoGridContainer?.contains(chip)) return;
+
+        if (!isAdminUser()) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        const card = chip.closest(".video-card");
+        const videoId = Number.parseInt(card?.dataset?.videoId || "", 10);
+        const video = currentVideoList.find((item) => Number(item.id) === videoId);
+
+        if (chip.dataset.addSecondTag === "true") {
+          if (!video) {
+            showClipToast("A klip nem elérhető.");
+            return;
+          }
+
+          openClipTagReplaceMenu(event, video, null, "add");
+          return;
+        }
+
+        const tagId = Number.parseInt(getTagIdFromChip(chip), 10);
+        if (!Number.isFinite(videoId) || !Number.isFinite(tagId)) {
+          showClipToast("A klip vagy a címke nem elérhető.");
+          return;
+        }
+
+        const tag =
+          video?.tags?.find((item) => Number(item.id) === tagId) ||
+          availableTags.find((item) => Number(item.id) === tagId) ||
+          { id: tagId, name: chip.textContent?.trim() || "címke" };
+
+        openClipTagReplaceMenu(event, video, tag);
+      }
+
+      function handleClipTagRightMouseDown(event) {
+        if (event.button !== 2) return;
+        handleClipTagContextmenu(event);
+      }
+
       function attachClipTagHandlers() {
         if (!videoGridContainer || clipTagHandlersAttached) return;
         videoGridContainer.addEventListener("click", handleClipThumbnailButtonClick, true);
+        videoGridContainer.addEventListener("mousedown", handleClipTagRightMouseDown, true);
+        videoGridContainer.addEventListener("contextmenu", handleClipTagContextmenu, true);
         videoGridContainer.addEventListener("click", handleClipTagClick);
         videoGridContainer.addEventListener("keydown", handleClipTagKeydown);
         clipTagHandlersAttached = true;
+      }
+
+      function compareTagsByUsage(first, second) {
+        const firstUsage = Number(first?.usage_count) || 0;
+        const secondUsage = Number(second?.usage_count) || 0;
+        if (firstUsage !== secondUsage) {
+          return secondUsage - firstUsage;
+        }
+        return String(first?.name || "").localeCompare(String(second?.name || ""), "hu");
+      }
+
+      function getUploadMenuTagsOrderedByUsage() {
+        return [...availableTags].sort(compareTagsByUsage);
       }
 
       function renderGlobalTagSelect() {
         if (!globalTagSelect) return;
         const currentSelection = getSelectValues(globalTagSelect);
         globalTagSelect.innerHTML = "";
-        availableTags.forEach((tag) => {
+        getUploadMenuTagsOrderedByUsage().forEach((tag) => {
           const option = document.createElement("option");
           option.value = String(tag.id);
           option.textContent = tag.name;
@@ -10090,7 +10165,7 @@
           }
         };
 
-        availableTags.forEach((tag) => {
+        getUploadMenuTagsOrderedByUsage().forEach((tag) => {
           const pill = document.createElement("button");
           pill.type = "button";
           pill.className = "tag-pill";
@@ -10430,7 +10505,7 @@
         const nameWithoutExt = dotIndex !== -1 ? baseFilename.slice(0, dotIndex) : baseFilename;
         const extension = dotIndex !== -1 ? baseFilename.slice(dotIndex) : "";
 
-        return `/uploads/klippek/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}`;
+        return `/uploads/klippek/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}?cb=20260522`;
       }
 
       function getQualityAvailability(video) {
@@ -10444,7 +10519,7 @@
       function getPreferredVideoSource(video, qualityPreference) {
         const requestedQuality = qualityPreference || "original";
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
-        const originalSource = video?.filename ? `/uploads/${video.filename}` : "";
+        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522` : "";
         const availability = getQualityAvailability(video);
         const fallbackChain =
           normalizedQuality === "1440p"
@@ -10697,6 +10772,235 @@
         });
       }
 
+      function closeClipTagReplaceMenu() {
+        if (!activeClipTagReplaceMenu) {
+          return;
+        }
+
+        activeClipTagReplaceMenu.cleanup();
+        activeClipTagReplaceMenu.element.remove();
+        activeClipTagReplaceMenu = null;
+      }
+
+      function applyUpdatedClipTags(video, tags) {
+        video.tags = Array.isArray(tags)
+          ? tags.map((tag) => ({ ...tag, color: normalizeColor(tag.color) }))
+          : video.tags;
+        currentVideoList = currentVideoList.map((item) =>
+          Number(item.id) === Number(video.id) ? { ...item, tags: video.tags } : item
+        );
+        renderVideoGrid(currentVideoList);
+      }
+
+      async function addClipTag(video, newTagId) {
+        if (!video || !Number.isFinite(Number(video.id))) {
+          showClipToast("A klip vagy a címke nem elérhető.");
+          return;
+        }
+
+        const normalizedNewTagId = Number.parseInt(newTagId, 10);
+        if (!Number.isFinite(normalizedNewTagId)) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/videos/${video.id}/tags`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...buildAuthHeaders(),
+            },
+            body: JSON.stringify({ tagId: normalizedNewTagId }),
+          });
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error(data?.message || "Nem sikerült hozzáadni a címkét.");
+          }
+
+          applyUpdatedClipTags(video, data?.tags);
+          showClipToast(data?.message || "A klip címkéje hozzáadva.");
+          await fetchTags();
+        } catch (error) {
+          console.error("Klip címke hozzáadási hiba:", error);
+          showClipToast(error.message || "Nem sikerült hozzáadni a címkét.");
+        }
+      }
+
+      async function replaceClipTag(video, oldTag, newTagId) {
+        if (!video || !Number.isFinite(Number(video.id)) || !Number.isFinite(Number(oldTag?.id))) {
+          showClipToast("A klip vagy a címke nem elérhető.");
+          return;
+        }
+
+        const normalizedNewTagId = Number.parseInt(newTagId, 10);
+        if (!Number.isFinite(normalizedNewTagId) || normalizedNewTagId === Number(oldTag.id)) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/videos/${video.id}/tags/${oldTag.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...buildAuthHeaders(),
+            },
+            body: JSON.stringify({ newTagId: normalizedNewTagId }),
+          });
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error(data?.message || "Nem sikerült frissíteni a címkét.");
+          }
+
+          applyUpdatedClipTags(video, data?.tags);
+          showClipToast(data?.message || "A klip címkéje frissült.");
+          await fetchTags();
+        } catch (error) {
+          console.error("Klip címke módosítási hiba:", error);
+          showClipToast(error.message || "Nem sikerült frissíteni a címkét.");
+        }
+      }
+
+      function openClipTagReplaceMenu(event, video, tag, mode = "replace") {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const isAddMode = mode === "add";
+        if (!video || !Number.isFinite(Number(video.id))) {
+          showClipToast("A klip nem elérhető.");
+          return;
+        }
+
+        if (!isAddMode && (!tag || !Number.isFinite(Number(tag.id)))) {
+          return;
+        }
+
+        if (!isAdminUser()) {
+          showClipToast("A címke cseréjéhez admin jogosultság kell.");
+          return;
+        }
+
+        closeClipTagReplaceMenu();
+
+        const menu = document.createElement("div");
+        menu.className = "clip-tag-replace-menu";
+        menu.addEventListener("pointerdown", (pointerEvent) => {
+          pointerEvent.stopPropagation();
+        });
+        menu.addEventListener("click", (clickEvent) => {
+          clickEvent.stopPropagation();
+        });
+        menu.addEventListener("contextmenu", (contextMenuEvent) => {
+          contextMenuEvent.preventDefault();
+          contextMenuEvent.stopPropagation();
+        });
+        Object.assign(menu.style, {
+          position: "fixed",
+          zIndex: "99999",
+          display: "grid",
+          gap: "6px",
+          minWidth: "240px",
+          maxWidth: "320px",
+          maxHeight: "360px",
+          overflowY: "auto",
+          padding: "10px",
+          border: "1px solid rgba(255,255,255,0.18)",
+          borderRadius: "10px",
+          background: "rgba(18, 24, 38, 0.98)",
+          boxShadow: "0 18px 45px rgba(0,0,0,0.34)",
+        });
+
+        const label = document.createElement("label");
+        label.className = "clip-tag-replace-menu__label";
+        label.textContent = isAddMode ? "Második címke hozzáadása:" : `"${tag.name}" csere erre:`;
+        Object.assign(label.style, {
+          color: "rgba(255,255,255,0.78)",
+          fontSize: "12px",
+          fontWeight: "700",
+        });
+
+        const replacementTags = [...availableTags]
+          .filter((candidate) => {
+            if (!isAddMode) {
+              return Number(candidate.id) !== Number(tag.id);
+            }
+            return !(video.tags || []).some((existingTag) => Number(existingTag.id) === Number(candidate.id));
+          })
+          .sort(compareTagsByUsage);
+
+        menu.appendChild(label);
+
+        replacementTags.forEach((candidate) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = candidate.name;
+          button.style.setProperty("--tag-color", normalizeColor(candidate.color));
+          Object.assign(button.style, {
+            width: "100%",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderLeft: `5px solid ${normalizeColor(candidate.color)}`,
+            borderRadius: "8px",
+            background: "rgba(255,255,255,0.07)",
+            color: "#fff",
+            cursor: "pointer",
+            font: "inherit",
+            fontSize: "14px",
+            padding: "8px 10px",
+            textAlign: "left",
+          });
+          const chooseTag = async (chooseEvent) => {
+            chooseEvent.preventDefault();
+            chooseEvent.stopPropagation();
+            closeClipTagReplaceMenu();
+            if (isAddMode) {
+              await addClipTag(video, candidate.id);
+            } else {
+              await replaceClipTag(video, tag, candidate.id);
+            }
+          };
+          button.addEventListener("pointerdown", chooseTag);
+          button.addEventListener("click", chooseTag);
+          menu.appendChild(button);
+        });
+
+        document.body.appendChild(menu);
+
+        const left = Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 12);
+        const top = Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 12);
+        menu.style.left = `${Math.max(12, left)}px`;
+        menu.style.top = `${Math.max(12, top)}px`;
+
+        const handlePointerDown = (pointerEvent) => {
+          if (!menu.contains(pointerEvent.target)) {
+            closeClipTagReplaceMenu();
+          }
+        };
+        const handleDocumentContextMenu = (contextMenuEvent) => {
+          if (menu.contains(contextMenuEvent.target) || activeClipTagReplaceMenu?.element === menu) {
+            contextMenuEvent.preventDefault();
+            contextMenuEvent.stopPropagation();
+          }
+        };
+        const handleKeyDown = (keyEvent) => {
+          if (keyEvent.key === "Escape") {
+            closeClipTagReplaceMenu();
+          }
+        };
+        const cleanup = () => {
+          document.removeEventListener("pointerdown", handlePointerDown);
+          document.removeEventListener("contextmenu", handleDocumentContextMenu, true);
+          document.removeEventListener("keydown", handleKeyDown);
+          window.removeEventListener("resize", closeClipTagReplaceMenu);
+          window.removeEventListener("scroll", closeClipTagReplaceMenu, true);
+        };
+
+        setTimeout(() => document.addEventListener("pointerdown", handlePointerDown), 0);
+        document.addEventListener("contextmenu", handleDocumentContextMenu, true);
+        document.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("resize", closeClipTagReplaceMenu);
+        window.addEventListener("scroll", closeClipTagReplaceMenu, true);
+        activeClipTagReplaceMenu = { element: menu, cleanup };
+      }
+
       async function handleClipTitleEdit(video, titleElement) {
         if (!video || !Number.isFinite(video.id)) {
           return;
@@ -10756,6 +11060,7 @@
         videos.forEach((video, index) => {
           const card = document.createElement("div");
           card.className = "video-card";
+          card.dataset.videoId = String(video.id);
 
           const header = document.createElement("div");
           header.className = "video-card__header";
@@ -10807,7 +11112,7 @@
           const videoElement = document.createElement("video");
           const { src: previewSrc, originalSource } = getPreferredVideoSource(video, currentVideoQuality);
           videoElement.poster = video.thumbnail_filename
-            ? `/uploads/${video.thumbnail_filename}`
+            ? `/uploads/${video.thumbnail_filename}?cb=20260522`
             : "";
           videoElement.dataset.src = originalSource || `/uploads/${video.filename}`;
           videoElement.src = previewSrc || originalSource || `/uploads/${video.filename}`;
@@ -10877,6 +11182,9 @@
                 event.stopPropagation();
                 selectClipTag(tag.id);
               });
+              chip.addEventListener("contextmenu", (event) => {
+                openClipTagReplaceMenu(event, video, tag);
+              });
             } else if (tag?.name) {
               chip.dataset.tagName = String(tag.name);
               chip.addEventListener("click", (event) => {
@@ -10889,6 +11197,25 @@
             }
             tagList.appendChild(chip);
           });
+
+          if (isAdminUser() && Array.isArray(video.tags) && video.tags.length === 1) {
+            const addChip = document.createElement("button");
+            addChip.type = "button";
+            addChip.className = "tag-chip tag-chip--add";
+            addChip.dataset.addSecondTag = "true";
+            addChip.textContent = "+";
+            addChip.title = "Második címke hozzáadása";
+            addChip.setAttribute("aria-label", "Második címke hozzáadása");
+            addChip.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openClipTagReplaceMenu(event, video, null, "add");
+            });
+            addChip.addEventListener("contextmenu", (event) => {
+              openClipTagReplaceMenu(event, video, null, "add");
+            });
+            tagList.appendChild(addChip);
+          }
 
           
           card.appendChild(videoElement);
