@@ -273,17 +273,21 @@ async function resolveAcademyTagIds(client, tagIds) {
     return rows.map((row) => row.id);
 }
 
-function getVideoCreationDate(filePath) {
+function getVideoCreationDate(filePath, clientLastModified) {
     return new Promise((resolve) => {
         ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
             if (err) {
-                return resolve(new Date());
+                const fallback = clientLastModified ? new Date(Number(clientLastModified)) : new Date();
+                return resolve(Number.isNaN(fallback.getTime()) ? new Date() : fallback);
             }
 
             const creationTime = metadata.format?.tags?.creation_time
                 || (metadata.streams || []).map((stream) => stream.tags?.creation_time).find(Boolean);
 
-            const parsedDate = creationTime ? new Date(creationTime) : new Date();
+            let parsedDate = creationTime ? new Date(creationTime) : null;
+            if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+                parsedDate = clientLastModified ? new Date(Number(clientLastModified)) : new Date();
+            }
 
             if (Number.isNaN(parsedDate.getTime())) {
                 return resolve(new Date());
@@ -1459,8 +1463,8 @@ async function ensureArchiveChunkCleanup(maxAgeMs = 24 * 60 * 60 * 1000) {
         }
     }
 }
-async function createArchiveVideoRecord({ folderName, storedFilename, originalName, uploaderId, filePath, tagIds }) {
-    const contentCreatedAt = await getVideoCreationDate(filePath);
+async function createArchiveVideoRecord({ folderName, storedFilename, originalName, uploaderId, filePath, tagIds, lastModified }) {
+    const contentCreatedAt = await getVideoCreationDate(filePath, lastModified);
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
@@ -3379,6 +3383,7 @@ app.post('/api/archive/videos/folders/:folder/upload-chunk', authenticateToken, 
                 totalSize: Number.isFinite(reportedTotalSize) && reportedTotalSize > 0 ? reportedTotalSize : 0,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
+                lastModified: req.body?.lastModified ? Number(req.body.lastModified) : null,
             };
         }
 
@@ -3453,6 +3458,7 @@ app.post('/api/archive/videos/folders/:folder/upload-chunk', authenticateToken, 
                 uploaderId: req.user ? req.user.id : 1,
                 filePath: finalPath,
                 tagIds: validTagIds,
+                lastModified: state.lastModified,
             });
         } catch (dbErr) {
             await safeUnlink(finalPath);
@@ -3578,7 +3584,7 @@ app.post('/api/archive/videos/folders/:folder/upload', authenticateToken, ensure
             const normalizedDisplayName = stripKnownVideoExtension(normalizedOriginalName);
             const sanitizedOriginalName = (normalizedCustomName || normalizedDisplayName || normalizedOriginalName || file.filename).slice(0, 255);
             const filePath = path.join(archiveVideosOriginalDirectory, folderName, file.filename);
-            const contentCreatedAt = await getVideoCreationDate(filePath);
+            const contentCreatedAt = await getVideoCreationDate(filePath, metadata.lastModified);
             const tagsFromMeta = normalizeSelectedTags(parseTagIds(metadata.tags));
             const tags = tagsFromMeta.length ? tagsFromMeta : normalizeSelectedTags(fallbackTagIds);
             const storedFilename = path.posix.join('archivum', 'videok', 'eredeti', folderName, file.filename);
@@ -5584,7 +5590,8 @@ app.post('/upload',  (req, res, next) => next(), (req, res, next) => next(), (re
                 file,
                 sanitizedOriginalName,
                 tags: tagsForFile.length ? tagsForFile : fallbackTagIds,
-                fileHash: embeddedHash
+                fileHash: embeddedHash,
+                lastModified: metadata.lastModified
             };
         }));
     } catch (err) {
@@ -5630,7 +5637,7 @@ app.post('/upload',  (req, res, next) => next(), (req, res, next) => next(), (re
     const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
-        for (const { file, sanitizedOriginalName, tags, fileHash } of filesToProcess) {
+        for (const { file, sanitizedOriginalName, tags, fileHash, lastModified } of filesToProcess) {
             const { filename } = file;
             const currentFilePath = path.join(clipsOriginalDirectory, filename);
             const folderName = resolveFolderName(tags);
@@ -5640,7 +5647,7 @@ app.post('/upload',  (req, res, next) => next(), (req, res, next) => next(), (re
             await fs.promises.rename(currentFilePath, targetFilePath);
 
             const storedFilename = path.posix.join('klippek', 'eredeti', folderName, filename);
-            const contentCreatedAt = await getVideoCreationDate(targetFilePath);
+            const contentCreatedAt = await getVideoCreationDate(targetFilePath, lastModified);
             const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at, file_hash, processing_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`;
             let insertResult;
             try {

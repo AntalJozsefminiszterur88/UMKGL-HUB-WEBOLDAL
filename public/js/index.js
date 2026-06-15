@@ -8434,6 +8434,7 @@
                   name: item.displayName || item.file.name,
                   tags: item.tags || [],
                   signature: item.signature,
+                  lastModified: item.file.lastModified,
                 },
               ];
 
@@ -8517,6 +8518,7 @@
                 formData.append("originalName", file.name || "video.mp4");
                 formData.append("name", item.displayName || file.name || "video");
                 formData.append("tags", JSON.stringify(item.tags || []));
+                formData.append("lastModified", String(file.lastModified || ""));
 
                 const xhr = new XMLHttpRequest();
                 xhr.open(
@@ -11906,6 +11908,7 @@
                   name: item.displayName || item.file.name,
                   tags: item.tags || [],
                   signature: item.signature,
+                  lastModified: item.file.lastModified,
                 },
               ];
 
