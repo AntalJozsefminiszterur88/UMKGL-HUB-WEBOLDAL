@@ -992,18 +992,19 @@
           }
         };
 
-        function formatToDatetimeLocal(isoString) {
-          if (!isoString) return "";
-          const d = new Date(isoString);
-          if (Number.isNaN(d.getTime())) return "";
+        function parseHungarianDate(str) {
+          if (!str) return null;
+          const parts = str.match(/\d+/g);
+          if (!parts || parts.length < 5) return null;
           
-          const year = d.getFullYear();
-          const month = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          const hours = String(d.getHours()).padStart(2, '0');
-          const minutes = String(d.getMinutes()).padStart(2, '0');
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          const hour = parseInt(parts[3], 10);
+          const minute = parseInt(parts[4], 10);
           
-          return `${year}-${month}-${day}T${hours}:${minutes}`;
+          const d = new Date(year, month, day, hour, minute);
+          return Number.isNaN(d.getTime()) ? null : d;
         }
 
         function renderArchiveMetaTable() {
@@ -1096,9 +1097,10 @@
                 editBtn.style.display = "none";
                 
                 const dateInput = document.createElement("input");
-                dateInput.type = "datetime-local";
+                dateInput.type = "text";
                 dateInput.className = "archive-meta-date-input";
-                dateInput.value = formatToDatetimeLocal(video.content_created_at);
+                dateInput.style.width = "180px";
+                dateInput.value = formatDateTime(video.content_created_at);
                 dateCell.appendChild(dateInput);
                 
                 const saveBtn = document.createElement("button");
@@ -1123,9 +1125,10 @@
                 });
                 
                 saveBtn.addEventListener("click", async () => {
-                  const selectedDate = dateInput.value;
-                  if (!selectedDate) {
-                    alert("Kérlek adj meg egy érvényes dátumot!");
+                  const selectedDateStr = dateInput.value.trim();
+                  const parsedDate = parseHungarianDate(selectedDateStr);
+                  if (!parsedDate) {
+                    alert("Kérlek adj meg egy érvényes dátumot ebben a formátumban: ÉÉÉÉ. HH. NN. ÓÓ:PP (pl. 2018. 12. 17. 03:02)");
                     return;
                   }
                   
@@ -1141,7 +1144,7 @@
                         "Content-Type": "application/json",
                         ...buildAuthHeaders()
                       },
-                      body: JSON.stringify({ date: selectedDate })
+                      body: JSON.stringify({ date: parsedDate.toISOString() })
                     });
                     
                     const result = await response.json().catch(() => null);
