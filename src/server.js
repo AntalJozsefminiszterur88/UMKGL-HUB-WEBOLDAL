@@ -317,6 +317,18 @@ function getVideoHeight(filePath) {
     });
 }
 
+function getVideoCodec(filePath) {
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
+            if (err) {
+                return resolve(null);
+            }
+            const videoStream = (metadata.streams || []).find((stream) => stream.codec_type === 'video');
+            return resolve(videoStream?.codec_name || null);
+        });
+    });
+}
+
 function getVideoDimensions(filePath) {
     return new Promise((resolve) => {
         ffmpeg.ffprobe(filePath, (err, metadata = {}) => {
@@ -4797,6 +4809,54 @@ async function optimizeVideoForFaststart(filePath) {
     });
 }
 
+async function convertHevcToH264(filePath) {
+    const parsed = path.parse(filePath);
+    const tempOutputPath = path.join(parsed.dir, `${parsed.name}_temp_h264${parsed.ext || '.mp4'}`);
+
+    return new Promise((resolve) => {
+        const ffmpegStderr = [];
+        ffmpeg(filePath)
+            .videoCodec('libx264')
+            .audioCodec('aac')
+            .outputOptions(['-movflags +faststart', '-pix_fmt yuv420p', '-preset medium', '-crf 23', '-threads 2'])
+            .output(tempOutputPath)
+            .on('stderr', (line) => {
+                if (typeof line === 'string') {
+                    ffmpegStderr.push(line);
+                    if (ffmpegStderr.length > 40) ffmpegStderr.shift();
+                }
+            })
+            .on('end', async () => {
+                try {
+                    await fs.promises.rename(tempOutputPath, filePath);
+                    resolve(true);
+                } catch (renameErr) {
+                    console.error(`Hiba a konvertált fájl átnevezésekor (${filePath}):`, renameErr);
+                    try {
+                        await fs.promises.rm(tempOutputPath, { force: true });
+                    } catch (cleanupErr) {
+                        if (cleanupErr.code !== 'ENOENT') {
+                            console.error('Hiba az ideiglenes fájl törlésekor:', cleanupErr);
+                        }
+                    }
+                    resolve(false);
+                }
+            })
+            .on('error', async (err) => {
+                console.error(`Hiba a videó H.264-re konvertálása során (${filePath}):`, buildFfmpegErrorMessage(err, ffmpegStderr));
+                try {
+                    await fs.promises.rm(tempOutputPath, { force: true });
+                } catch (cleanupErr) {
+                    if (cleanupErr.code !== 'ENOENT') {
+                        console.error('Hiba az ideiglenes fájl törlésekor:', cleanupErr);
+                    }
+                }
+                resolve(false);
+            })
+            .run();
+    });
+}
+
 app.post('/api/admin/optimize-all-videos', authenticateToken, isAdmin, (_req, res) => {
     res.json({
         message: 'Az optimalizálás elindult a háttérben. Figyeld a szerver konzolt a részletekért.',
@@ -5291,9 +5351,15 @@ async function processVideoQueue() {
             }
 
             try {
-                await optimizeVideoForFaststart(videoPath);
+                const codec = await getVideoCodec(videoPath);
+                if (codec === 'hevc') {
+                    console.log(`[CONVERSION] HEVC videó észlelve (ID: ${currentVideo.id}), H.264-re konvertálás...`);
+                    await convertHevcToH264(videoPath);
+                } else {
+                    await optimizeVideoForFaststart(videoPath);
+                }
             } catch (optErr) {
-                console.error(`Hiba a(z) ${currentVideo.id} videó faststart optimalizálása során:`, optErr);
+                console.error(`Hiba a(z) ${currentVideo.id} videó optimalizálása/konvertálása során:`, optErr);
             }
 
             const videoHeight = await getVideoHeight(videoPath);
@@ -5425,9 +5491,15 @@ async function processArchiveVideoQueue() {
             }
 
             try {
-                await optimizeVideoForFaststart(videoPath);
+                const codec = await getVideoCodec(videoPath);
+                if (codec === 'hevc') {
+                    console.log(`[CONVERSION] HEVC archív videó észlelve (ID: ${currentVideo.id}), H.264-re konvertálás...`);
+                    await convertHevcToH264(videoPath);
+                } else {
+                    await optimizeVideoForFaststart(videoPath);
+                }
             } catch (optErr) {
-                console.error(`Hiba a(z) ${currentVideo.id} archív videó faststart optimalizálása során:`, optErr);
+                console.error(`Hiba a(z) ${currentVideo.id} archív videó optimalizálása/konvertálása során:`, optErr);
             }
 
             const videoHeight = await getVideoHeight(videoPath);
