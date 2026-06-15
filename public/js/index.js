@@ -5320,7 +5320,8 @@
       function getPreferredArchiveVideoSource(video, qualityPreference) {
         const requestedQuality = qualityPreference || "original";
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
-        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522` : "";
+        const statusBuster = video?.processing_status ? `&status=${video.processing_status}` : "";
+        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522${statusBuster}` : "";
         const availability = getArchiveVideoQualityAvailability(video);
 
         if (normalizedQuality === "original") {
@@ -10521,7 +10522,8 @@
       function getPreferredVideoSource(video, qualityPreference) {
         const requestedQuality = qualityPreference || "original";
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
-        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522` : "";
+        const statusBuster = video?.processing_status ? `&status=${video.processing_status}` : "";
+        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522${statusBuster}` : "";
         const availability = getQualityAvailability(video);
         const fallbackChain =
           normalizedQuality === "1440p"
