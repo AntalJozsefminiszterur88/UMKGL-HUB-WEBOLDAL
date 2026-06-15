@@ -5298,7 +5298,7 @@
         return { kind: "done", label: "Kesz", error: "" };
       }
 
-      function buildArchiveVideoPath(originalFilename, targetResolution) {
+      function buildArchiveVideoPath(originalFilename, targetResolution, video) {
         if (!originalFilename || !targetResolution) return "";
         const normalizedPath = String(originalFilename).replace(/^\/+/, "");
         const segments = normalizedPath.split("/");
@@ -5314,14 +5314,13 @@
         const nameWithoutExt = dotIndex !== -1 ? baseFilename.slice(0, dotIndex) : baseFilename;
         const extension = dotIndex !== -1 ? baseFilename.slice(dotIndex) : "";
 
-        return `/uploads/archivum/videok/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}?cb=20260522`;
+        return `/uploads/archivum/videok/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}?${getVideoCacheBuster(video)}`;
       }
 
       function getPreferredArchiveVideoSource(video, qualityPreference) {
         const requestedQuality = qualityPreference || "original";
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
-        const statusBuster = video?.processing_status ? `&status=${video.processing_status}` : "";
-        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522${statusBuster}` : "";
+        const originalSource = video?.filename ? `/uploads/${video.filename}?${getVideoCacheBuster(video)}` : "";
         const availability = getArchiveVideoQualityAvailability(video);
 
         if (normalizedQuality === "original") {
@@ -5336,7 +5335,7 @@
 
         if (normalizedQuality === "720p" && availability["720p"]) {
           return {
-            src: buildArchiveVideoPath(video?.filename, "720p"),
+            src: buildArchiveVideoPath(video?.filename, "720p", video),
             originalSource,
             resolvedQuality: "720p",
             requestedQuality: normalizedQuality,
@@ -6665,7 +6664,7 @@
             video,
             currentVideoQuality
           );
-          videoElement.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}?cb=20260522` : "";
+          videoElement.poster = video.thumbnail_filename ? `/uploads/${video.thumbnail_filename}?${getVideoCacheBuster(video)}` : "";
           videoElement.dataset.src = archiveOriginalSrc || `/uploads/${video.filename}`;
           videoElement.src = previewSrc || archiveOriginalSrc || `/uploads/${video.filename}`;
           videoElement.controls = false;
@@ -10468,6 +10467,19 @@
         });
       }
 
+      function getVideoCacheBuster(video) {
+        const base = "20260615_v2";
+        const status = video?.processing_status ? `&status=${video.processing_status}` : "";
+        let uploaded = "";
+        if (video?.uploaded_at) {
+          const t = new Date(video.uploaded_at).getTime();
+          if (Number.isFinite(t)) {
+            uploaded = `&up=${t}`;
+          }
+        }
+        return `cb=${base}${status}${uploaded}`;
+      }
+
       function normalizeQualityPreference(quality) {
         if (quality === "original") return "original";
         if (!quality) return DEFAULT_VIDEO_QUALITY;
@@ -10492,7 +10504,7 @@
         return normalizedQuality;
       }
 
-      function buildVideoPath(originalFilename, targetResolution) {
+      function buildVideoPath(originalFilename, targetResolution, video) {
         if (!originalFilename || !targetResolution) return "";
         const normalizedPath = String(originalFilename).replace(/^\/+/, "");
         const segments = normalizedPath.split("/");
@@ -10508,7 +10520,7 @@
         const nameWithoutExt = dotIndex !== -1 ? baseFilename.slice(0, dotIndex) : baseFilename;
         const extension = dotIndex !== -1 ? baseFilename.slice(dotIndex) : "";
 
-        return `/uploads/klippek/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}?cb=20260522`;
+        return `/uploads/klippek/${targetResolution}/${folderName}/${nameWithoutExt}_${targetResolution}${extension}?${getVideoCacheBuster(video)}`;
       }
 
       function getQualityAvailability(video) {
@@ -10522,8 +10534,7 @@
       function getPreferredVideoSource(video, qualityPreference) {
         const requestedQuality = qualityPreference || "original";
         const normalizedQuality = normalizeQualityPreference(requestedQuality);
-        const statusBuster = video?.processing_status ? `&status=${video.processing_status}` : "";
-        const originalSource = video?.filename ? `/uploads/${video.filename}?cb=20260522${statusBuster}` : "";
+        const originalSource = video?.filename ? `/uploads/${video.filename}?${getVideoCacheBuster(video)}` : "";
         const availability = getQualityAvailability(video);
         const fallbackChain =
           normalizedQuality === "1440p"
@@ -10550,7 +10561,7 @@
           }
 
           return {
-            src: buildVideoPath(video?.filename, fallbackQuality),
+            src: buildVideoPath(video?.filename, fallbackQuality, video),
             originalSource,
             resolvedQuality: fallbackQuality,
             requestedQuality: normalizedQuality,
@@ -11116,7 +11127,7 @@
           const videoElement = document.createElement("video");
           const { src: previewSrc, originalSource } = getPreferredVideoSource(video, currentVideoQuality);
           videoElement.poster = video.thumbnail_filename
-            ? `/uploads/${video.thumbnail_filename}?cb=20260522`
+            ? `/uploads/${video.thumbnail_filename}?${getVideoCacheBuster(video)}`
             : "";
           videoElement.dataset.src = originalSource || `/uploads/${video.filename}`;
           videoElement.src = previewSrc || originalSource || `/uploads/${video.filename}`;
