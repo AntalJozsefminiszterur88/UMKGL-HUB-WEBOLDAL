@@ -3758,6 +3758,42 @@ function writeVideoMetadataDate(filePath, dateString) {
     });
 }
 
+const activeMetadataWrites = new Set();
+const pendingMetadataWrites = new Map();
+
+async function runBackgroundMetadataWrite(videoId, video) {
+    if (activeMetadataWrites.has(videoId)) {
+        return;
+    }
+    activeMetadataWrites.add(videoId);
+    try {
+        while (pendingMetadataWrites.has(videoId)) {
+            const targetDate = pendingMetadataWrites.get(videoId);
+            pendingMetadataWrites.delete(videoId);
+            
+            const originalPath = path.join(uploadsRootDirectory, video.filename);
+            try {
+                await writeVideoMetadataDate(originalPath, targetDate);
+            } catch (err) {
+                console.error(`[BG-METADATA] Failed original video metadata write for ID ${videoId}:`, err);
+            }
+            
+            if (video.has_720p === 1) {
+                const { outputPath } = buildArchiveVideoResolutionOutputPaths(video, 720);
+                if (fs.existsSync(outputPath)) {
+                    try {
+                        await writeVideoMetadataDate(outputPath, targetDate);
+                    } catch (err) {
+                        console.error(`[BG-METADATA] Failed 720p video metadata write for ID ${videoId}:`, err);
+                    }
+                }
+            }
+        }
+    } finally {
+        activeMetadataWrites.delete(videoId);
+    }
+}
+
 app.patch('/api/archive/videos/:id/metadata-date', authenticateToken, isAdmin, async (req, res) => {
     const videoId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(videoId)) {
@@ -3786,40 +3822,22 @@ app.patch('/api/archive/videos/:id/metadata-date', authenticateToken, isAdmin, a
             return res.status(404).json({ message: 'A videó nem található.' });
         }
 
-        const originalPath = path.join(uploadsRootDirectory, video.filename);
-        let updatedOriginal = false;
-        try {
-            await writeVideoMetadataDate(originalPath, isoDate);
-            updatedOriginal = true;
-        } catch (err) {
-            console.error(`Failed to update metadata for original video:`, err);
-            return res.status(500).json({ message: `Nem sikerült módosítani az eredeti videó fájl metaadatát: ${err.message}` });
-        }
-
-        let updated720p = false;
-        if (video.has_720p === 1) {
-            const { outputPath } = buildArchiveVideoResolutionOutputPaths(video, 720);
-            if (fs.existsSync(outputPath)) {
-                try {
-                    await writeVideoMetadataDate(outputPath, isoDate);
-                    updated720p = true;
-                } catch (err) {
-                    console.error(`Failed to update metadata for 720p video:`, err);
-                }
-            }
-        }
-
+        // Adatbázis azonnali frissítése
         await db.query(
             'UPDATE archive_videos SET content_created_at = $1 WHERE id = $2',
             [isoDate, videoId]
         );
 
+        // Háttérben futó metaadat írás ütemezése
+        pendingMetadataWrites.set(videoId, isoDate);
+        runBackgroundMetadataWrite(videoId, video).catch(err => {
+            console.error(`[BG-METADATA] Worker crash for ID ${videoId}:`, err);
+        });
+
         return res.status(200).json({
-            message: 'Archív videó metadata dátum sikeresen frissítve.',
+            message: 'A dátum az adatbázisban módosult, az archívum átrendeződött. A videofájlok fejlécének átírása folyamatban van a háttérben.',
             id: videoId,
-            content_created_at: isoDate,
-            updatedOriginal,
-            updated720p
+            content_created_at: isoDate
         });
     } catch (err) {
         console.error('Hiba az archív videó metadata dátum frissítésekor:', err);
