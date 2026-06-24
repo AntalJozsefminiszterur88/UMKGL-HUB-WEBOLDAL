@@ -30,6 +30,252 @@
         };
       }
 
+      function setUsersStatus(statusEl, message, isError = false) {
+        if (!statusEl) {
+          return;
+        }
+        statusEl.textContent = message;
+        statusEl.classList.toggle("users-window__status--error", isError);
+      }
+
+      function createPermissionToggle(name, checked, labelText) {
+        const label = document.createElement("label");
+        label.className = "permission-toggle";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = name;
+        checkbox.checked = checked;
+
+        label.appendChild(checkbox);
+        label.append(` ${labelText}`);
+
+        return { label, checkbox };
+      }
+
+      function renderUserList(users, container, saveButton) {
+        if (!container) {
+          return;
+        }
+
+        container.innerHTML = "";
+
+        if (!Array.isArray(users) || users.length === 0) {
+          container.textContent = "Nincs megjeleníthető felhasználó.";
+          if (saveButton) {
+            saveButton.disabled = true;
+          }
+          return;
+        }
+
+        const table = document.createElement("table");
+        table.className = "user-table";
+
+        const thead = document.createElement("thead");
+        thead.innerHTML = `
+          <tr>
+            <th>Felhasználónév</th>
+            <th>Feltöltési jog</th>
+            <th>P2P jog</th>
+            <th>Klipnézési jog</th>
+            <th>Archívum megtekintés</th>
+            <th>Archívum szerkesztés</th>
+            <th>Discord 2 jog</th>
+            <th>Max fájlméret (MB)</th>
+            <th>Videólimit</th>
+            <th>Feltöltött videók</th>
+          </tr>
+        `;
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+
+        users.forEach((user) => {
+          const row = document.createElement("tr");
+          row.dataset.userId = user.id;
+
+          const usernameCell = document.createElement("td");
+          usernameCell.textContent = user.username;
+          row.appendChild(usernameCell);
+
+          const uploadPermission = createPermissionToggle("canUpload", Number(user.can_upload) === 1, "Feltölthet");
+          const uploadCell = document.createElement("td");
+          uploadCell.appendChild(uploadPermission.label);
+          row.appendChild(uploadCell);
+
+          const transferPermission = createPermissionToggle("canTransfer", Number(user.can_transfer) === 1, "P2P");
+          const transferCell = document.createElement("td");
+          transferCell.appendChild(transferPermission.label);
+          row.appendChild(transferCell);
+
+          const clipPermission = createPermissionToggle("canViewClips", Number(user.can_view_clips) === 1, "Klipek");
+          const clipCell = document.createElement("td");
+          clipCell.appendChild(clipPermission.label);
+          row.appendChild(clipCell);
+
+          const canEditArchive = Number(user.can_edit_archive) === 1;
+          const archiveViewPermission = createPermissionToggle(
+            "canViewArchive",
+            Number(user.can_view_archive) === 1 || canEditArchive,
+            "Archívum"
+          );
+          const archiveViewCell = document.createElement("td");
+          archiveViewCell.appendChild(archiveViewPermission.label);
+          row.appendChild(archiveViewCell);
+
+          const archiveEditPermission = createPermissionToggle("canEditArchive", canEditArchive, "Szerkesztés");
+          const archiveEditCell = document.createElement("td");
+          archiveEditCell.appendChild(archiveEditPermission.label);
+          row.appendChild(archiveEditCell);
+
+          const discordPermission = createPermissionToggle(
+            "canUseDiscord",
+            Number(user.can_use_discord) === 1,
+            "Discord 2"
+          );
+          const discordCell = document.createElement("td");
+          discordCell.appendChild(discordPermission.label);
+          row.appendChild(discordCell);
+
+          archiveViewPermission.checkbox.addEventListener("change", () => {
+            if (!archiveViewPermission.checkbox.checked) {
+              archiveEditPermission.checkbox.checked = false;
+            }
+          });
+
+          archiveEditPermission.checkbox.addEventListener("change", () => {
+            if (archiveEditPermission.checkbox.checked) {
+              archiveViewPermission.checkbox.checked = true;
+            }
+          });
+
+          const maxFileSizeCell = document.createElement("td");
+          const maxFileSizeInput = document.createElement("input");
+          maxFileSizeInput.type = "number";
+          maxFileSizeInput.min = "1";
+          maxFileSizeInput.required = true;
+          maxFileSizeInput.name = "maxFileSizeMb";
+          maxFileSizeInput.value = Number.parseInt(user.max_file_size_mb, 10) || "";
+          maxFileSizeCell.appendChild(maxFileSizeInput);
+          row.appendChild(maxFileSizeCell);
+
+          const maxVideosCell = document.createElement("td");
+          const maxVideosInput = document.createElement("input");
+          maxVideosInput.type = "number";
+          maxVideosInput.min = "1";
+          maxVideosInput.required = true;
+          maxVideosInput.name = "maxVideos";
+          maxVideosInput.value = Number.parseInt(user.max_videos, 10) || "";
+          maxVideosCell.appendChild(maxVideosInput);
+          row.appendChild(maxVideosCell);
+
+          const uploadCountCell = document.createElement("td");
+          uploadCountCell.textContent = Number.parseInt(user.upload_count, 10) || 0;
+          row.appendChild(uploadCountCell);
+
+          tbody.appendChild(row);
+        });
+
+        table.appendChild(tbody);
+        container.appendChild(table);
+
+        if (saveButton) {
+          saveButton.disabled = false;
+        }
+      }
+
+      async function fetchUsers() {
+        const response = await fetch("/api/users", {
+          method: "GET",
+          headers: buildAuthHeaders(),
+        });
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(data?.message || "Nem sikerült betölteni a felhasználókat.");
+        }
+
+        return Array.isArray(data) ? data : [];
+      }
+
+      function collectPermissionUpdates(container) {
+        const tableBody = container?.querySelector("tbody");
+        if (!tableBody) {
+          return { updates: [], invalidEntries: [] };
+        }
+
+        const invalidEntries = [];
+        const updates = Array.from(tableBody.querySelectorAll("tr"))
+          .map((row) => {
+            const uploadCheckbox = row.querySelector('input[name="canUpload"]');
+            const transferCheckbox = row.querySelector('input[name="canTransfer"]');
+            const viewClipsCheckbox = row.querySelector('input[name="canViewClips"]');
+            const viewArchiveCheckbox = row.querySelector('input[name="canViewArchive"]');
+            const editArchiveCheckbox = row.querySelector('input[name="canEditArchive"]');
+            const discordCheckbox = row.querySelector('input[name="canUseDiscord"]');
+            const maxFileSizeInput = row.querySelector('input[name="maxFileSizeMb"]');
+            const maxVideosInput = row.querySelector('input[name="maxVideos"]');
+            const userId = Number.parseInt(row.dataset.userId, 10);
+
+            if (
+              !uploadCheckbox ||
+              !transferCheckbox ||
+              !viewClipsCheckbox ||
+              !viewArchiveCheckbox ||
+              !editArchiveCheckbox ||
+              !discordCheckbox ||
+              !maxFileSizeInput ||
+              !maxVideosInput ||
+              !Number.isFinite(userId)
+            ) {
+              return null;
+            }
+
+            const maxFileSizeMb = Number.parseInt(maxFileSizeInput.value, 10);
+            const maxVideos = Number.parseInt(maxVideosInput.value, 10);
+
+            if (maxFileSizeMb <= 0 || maxVideos <= 0 || !Number.isFinite(maxFileSizeMb) || !Number.isFinite(maxVideos)) {
+              invalidEntries.push(row.querySelector("td")?.textContent.trim() || `ID ${userId}`);
+              return null;
+            }
+
+            const canEditArchive = editArchiveCheckbox.checked;
+
+            return {
+              userId,
+              canUpload: uploadCheckbox.checked,
+              canTransfer: transferCheckbox.checked,
+              canViewClips: viewClipsCheckbox.checked,
+              canViewArchive: viewArchiveCheckbox.checked || canEditArchive,
+              canEditArchive,
+              canUseDiscord: discordCheckbox.checked,
+              maxFileSizeMb,
+              maxVideos,
+            };
+          })
+          .filter(Boolean);
+
+        return { updates, invalidEntries };
+      }
+
+      async function updateUserPermissions(updates) {
+        const response = await fetch("/api/users/permissions/batch-update", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...buildAuthHeaders(),
+          },
+          body: JSON.stringify(updates),
+        });
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(data?.message || "Nem sikerült menteni a jogosultságokat.");
+        }
+
+        return data;
+      }
+
       function formatFileSize(size) {
         if (!Number.isFinite(size)) {
           return "Ismeretlen";
@@ -399,6 +645,7 @@
           isProcessing: Boolean(data?.isProcessing),
           currentTask: data?.currentTask || null,
           pending: Array.isArray(data?.pending) ? data.pending : [],
+          queues: data?.queues || null,
         };
       }
 
@@ -467,6 +714,18 @@
         title.textContent = `${titlePrefix || "Fájl"}: ${item.original_name || item.filename || "Ismeretlen"}`;
         container.appendChild(title);
 
+        const sourceMeta = document.createElement("p");
+        sourceMeta.className = "process-window__meta";
+        sourceMeta.textContent = `Típus: ${item.source_type === "archive" ? "Archív videó" : "Klip"}`;
+        container.appendChild(sourceMeta);
+
+        if (item.folder_name) {
+          const folderMeta = document.createElement("p");
+          folderMeta.className = "process-window__meta";
+          folderMeta.textContent = `Mappa: ${item.folder_name}`;
+          container.appendChild(folderMeta);
+        }
+
         const fileMeta = document.createElement("p");
         fileMeta.className = "process-window__meta";
         fileMeta.textContent = `Elérési út: ${item.filename || "-"}`;
@@ -483,6 +742,19 @@
         statusMeta.className = "process-window__meta";
         statusMeta.textContent = `Státusz: ${item.processing_status || "ismeretlen"}`;
         container.appendChild(statusMeta);
+      }
+
+      function formatProcessingSummary(data) {
+        const queues = data?.queues || {};
+        const clipPending = Array.isArray(queues.clips?.pending) ? queues.clips.pending.length : 0;
+        const archivePending = Array.isArray(queues.archive?.pending) ? queues.archive.pending.length : 0;
+
+        if (data?.currentTask) {
+          const sourceLabel = data.currentTask.source_type === "archive" ? "archív videó" : "klip";
+          return `Aktív feldolgozás: ${sourceLabel}. Várakozik: ${clipPending} klip, ${archivePending} archív videó.`;
+        }
+
+        return `Jelenleg nincs aktív feldolgozás. Várakozik: ${clipPending} klip, ${archivePending} archív videó.`;
       }
 
       function renderQueue(doc, queueListEl, items) {
@@ -529,12 +801,17 @@
         const radnaiHashDisplay = document.getElementById("radnaiHashDisplay");
         const radnaiAlertMessage = document.getElementById("radnaiAlertMessage");
         const radnaiDebugLog = document.getElementById("radnaiDebugLog");
-        const tabs = document.querySelectorAll(".manager__tab");
+        const userListContainer = document.getElementById("userListContainer");
+        const usersStatus = document.getElementById("usersStatus");
+        const refreshUsersBtn = document.getElementById("refreshUsersBtn");
+        const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+        const tabs = document.querySelectorAll(".manager__tab[data-target]");
         const sections = document.querySelectorAll(".manager__section");
         const VARIANT_STORAGE_KEY = "clipWindowVariant";
         const VALID_VARIANTS = ["original", "720p", "other"];
         const adminUser = isAdminUser();
         let clipsLoaded = false;
+        let usersLoaded = false;
         let currentClips = [];
         let currentSort = { key: "uploaded_at", direction: "desc" };
         let radnaiDebugHistory = [];
@@ -729,11 +1006,67 @@
           }
         };
 
-        if (!isUserLoggedIn()) {
-          alert("Nincs érvényes hitelesítés. Jelentkezz be, hogy lásd a klipeket és a feldolgozást.");
+        if (!isUserLoggedIn() || !adminUser) {
+          alert("Az admin felület megnyitásához admin jogosultság szükséges.");
           window.location.href = "/";
           return;
         }
+
+        const loadUsers = async () => {
+          setUsersStatus(usersStatus, "Felhasználók betöltése folyamatban...");
+          if (savePermissionsBtn) {
+            savePermissionsBtn.disabled = true;
+          }
+
+          try {
+            const users = await fetchUsers();
+            renderUserList(users, userListContainer, savePermissionsBtn);
+            usersLoaded = true;
+            setUsersStatus(usersStatus, `${users.length} felhasználó betöltve.`);
+          } catch (error) {
+            console.error("Felhasználók betöltési hiba:", error);
+            setUsersStatus(usersStatus, error.message || "Nem sikerült betölteni a felhasználókat.", true);
+          }
+        };
+
+        const savePermissions = async () => {
+          const { updates, invalidEntries } = collectPermissionUpdates(userListContainer);
+
+          if (invalidEntries.length > 0) {
+            setUsersStatus(
+              usersStatus,
+              `Adj meg pozitív limiteket a következő felhasználóknál: ${invalidEntries.join(", ")}.`,
+              true
+            );
+            return;
+          }
+
+          if (updates.length === 0) {
+            setUsersStatus(usersStatus, "Nincs mentésre váró felhasználói adat.", true);
+            return;
+          }
+
+          const originalText = savePermissionsBtn?.textContent || "Változtatások mentése";
+          if (savePermissionsBtn) {
+            savePermissionsBtn.disabled = true;
+            savePermissionsBtn.textContent = "Mentés folyamatban...";
+          }
+          setUsersStatus(usersStatus, "Jogosultságok mentése folyamatban...");
+
+          try {
+            const result = await updateUserPermissions(updates);
+            setUsersStatus(usersStatus, result?.message || "Jogosultságok sikeresen frissítve.");
+            await loadUsers();
+          } catch (error) {
+            console.error("Jogosultságok mentési hiba:", error);
+            setUsersStatus(usersStatus, error.message || "Nem sikerült menteni a jogosultságokat.", true);
+          } finally {
+            if (savePermissionsBtn) {
+              savePermissionsBtn.disabled = false;
+              savePermissionsBtn.textContent = originalText;
+            }
+          }
+        };
 
         const loadVariant = async (variant) => {
           if (statusEl) {
@@ -772,9 +1105,7 @@
           try {
             const data = await fetchProcessingStatus();
             if (processingStatusText) {
-              processingStatusText.textContent = data.isProcessing
-                ? "Egy fájl feldolgozása folyamatban."
-                : "Jelenleg nincs aktív feldolgozás.";
+              processingStatusText.textContent = formatProcessingSummary(data);
             }
 
             if (queueCountEl) {
@@ -1260,6 +1591,10 @@
             loadVariant(variantSelect?.value || "original");
           }
 
+          if (targetId === "usersSection" && !usersLoaded) {
+            loadUsers();
+          }
+
           if (targetId === "processingSection") {
             loadProcessingStatus();
           }
@@ -1327,6 +1662,14 @@
           });
         }
 
+        if (refreshUsersBtn) {
+          refreshUsersBtn.addEventListener("click", loadUsers);
+        }
+
+        if (savePermissionsBtn) {
+          savePermissionsBtn.addEventListener("click", savePermissions);
+        }
+
         tabs.forEach((tab) => {
           tab.addEventListener("click", () => {
             const targetId = tab.dataset.target;
@@ -1335,7 +1678,7 @@
         });
 
         const savedTab = localStorage.getItem("adminActiveTab");
-        const validTabs = ["clipsSection", "processingSection", "movieSection", "radnaiSection", "archiveMetadataSection"];
+        const validTabs = ["clipsSection", "usersSection", "processingSection", "movieSection", "radnaiSection", "archiveMetadataSection"];
         if (savedTab && validTabs.includes(savedTab)) {
           switchSection(savedTab);
         } else {

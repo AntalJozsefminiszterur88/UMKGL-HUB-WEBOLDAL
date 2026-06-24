@@ -29,7 +29,7 @@
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
       referrerpolicy="no-referrer"
     ></script>
-    <link rel="stylesheet" href="css/index.css?v=20260530-hoi4-1">
+    <link rel="stylesheet" href="css/index.css?v=20260624-admin-link">
   </head>
   <body>
     <header>
@@ -45,6 +45,16 @@
           >
             Nézet: Admin
           </button>
+          <a
+            id="adminSurfaceLink"
+            class="admin-surface-link"
+            href="/admin-felulet.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display: none;"
+          >
+            Admin felület
+          </a>
         </div>
       </div>
       <nav>
@@ -81,14 +91,6 @@
           data-requires-admin="true"
           style="display: none;"
           >Programok</a
-        >
-        <a
-          href="#admin"
-          data-section="admin"
-          id="adminNavBtn"
-          data-requires-admin="true"
-          style="display: none;"
-          >Admin Panel</a
         >
       </nav>
       <div class="auth-buttons">
@@ -1259,25 +1261,6 @@
         <div id="programsContainer" class="program-grid"></div>
       </section>
 
-      <section id="admin">
-        <div class="admin-header">
-          <div>
-            <h2>Admin Panel</h2>
-            <p class="admin-description">
-              Állítsd be felhasználónként, hogy ki tölthet fel, valamint a feltöltésekhez tartozó méret- és darabkorlátokat.
-            </p>
-          </div>
-
-          <div class="admin-actions">
-            <button id="videoManagementBtn" class="secondary-btn" type="button">Admin felület</button>
-            <button id="discordPanelBtn" class="secondary-btn" type="button">Discord Panel</button>
-          </div>
-        </div>
-
-        <div id="userListContainer"></div>
-        <button id="savePermissionsBtn">Változtatások Mentése</button>
-      </section>
-
       <section id="profile">
         <h2>Profil Beállítások</h2>
         <div class="profile-grid">
@@ -1481,7 +1464,7 @@
     window.vad = window.vad || window.import_vad;
   </script>
   <script src="js/discord2.js?v=20260509-1" charset="UTF-8"></script>
-  <script src="js/index.js?v=20260615-hevc-transcode-fix-2" charset="UTF-8"></script>
+  <script src="js/index.js?v=20260624-admin-users-moved" charset="UTF-8"></script>
 
 
 

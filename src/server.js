@@ -4329,17 +4329,82 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
 app.get('/api/admin/processing-status', authenticateToken, isAdmin, async (_req, res) => {
     try {
         const { rows: processingRows } = await db.query(
-            "SELECT id, filename, original_name, uploaded_at, processing_status FROM videos WHERE processing_status = 'processing' ORDER BY uploaded_at ASC LIMIT 1"
+            `SELECT id,
+                    filename,
+                    original_name,
+                    uploaded_at,
+                    processing_status,
+                    NULL::text AS folder_name,
+                    'clip' AS source_type
+             FROM videos
+             WHERE processing_status = 'processing'
+             ORDER BY uploaded_at ASC
+             LIMIT 1`
         );
 
         const { rows: pendingRows } = await db.query(
-            "SELECT id, filename, original_name, uploaded_at, processing_status FROM videos WHERE processing_status = 'pending' ORDER BY uploaded_at ASC"
+            `SELECT id,
+                    filename,
+                    original_name,
+                    uploaded_at,
+                    processing_status,
+                    NULL::text AS folder_name,
+                    'clip' AS source_type
+             FROM videos
+             WHERE processing_status = 'pending'
+             ORDER BY uploaded_at ASC`
         );
 
+        const { rows: archiveProcessingRows } = await db.query(
+            `SELECT id,
+                    filename,
+                    original_name,
+                    uploaded_at,
+                    processing_status,
+                    folder_name,
+                    'archive' AS source_type
+             FROM archive_videos
+             WHERE processing_status = 'processing'
+             ORDER BY uploaded_at ASC
+             LIMIT 1`
+        );
+
+        const { rows: archivePendingRows } = await db.query(
+            `SELECT id,
+                    filename,
+                    original_name,
+                    uploaded_at,
+                    processing_status,
+                    folder_name,
+                    'archive' AS source_type
+             FROM archive_videos
+             WHERE processing_status = 'pending'
+             ORDER BY uploaded_at ASC`
+        );
+
+        const activeTask = processingRows[0] || archiveProcessingRows[0] || null;
+        const pending = [...pendingRows, ...archivePendingRows].sort((a, b) => {
+            const left = new Date(a.uploaded_at || 0).getTime();
+            const right = new Date(b.uploaded_at || 0).getTime();
+            return left - right;
+        });
+
         res.status(200).json({
-            isProcessing,
-            currentTask: processingRows[0] || null,
-            pending: pendingRows,
+            isProcessing: isProcessing || isArchiveProcessing || Boolean(activeTask),
+            currentTask: activeTask,
+            pending,
+            queues: {
+                clips: {
+                    isProcessing,
+                    currentTask: processingRows[0] || null,
+                    pending: pendingRows,
+                },
+                archive: {
+                    isProcessing: isArchiveProcessing || Boolean(archiveProcessingRows[0]),
+                    currentTask: archiveProcessingRows[0] || null,
+                    pending: archivePendingRows,
+                },
+            },
         });
     } catch (err) {
         console.error('Hiba a feldolgozási állapot lekérdezésekor:', err);

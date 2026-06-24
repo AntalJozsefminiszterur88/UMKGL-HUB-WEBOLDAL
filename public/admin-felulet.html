@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin felület</title>
     <link rel="icon" type="image/png" href="program_icons/oldal_logo.png" />
-    <link rel="stylesheet" href="css/video-kezeles-felulet.css" />
+    <link rel="stylesheet" href="css/video-kezeles-felulet.css?v=20260624-users" />
     <style>
       .console-output,
       .json-output {
@@ -158,13 +158,15 @@
     <div class="manager">
       <div class="manager__header">
         <h1 class="manager__title">Admin felület</h1>
-        <p class="manager__subtitle">Klipek áttekintése és a feldolgozás követése egyetlen oldalon.</p>
+        <p class="manager__subtitle">Felhasználók, jogosultságok, klipek és háttérfolyamatok kezelése egyetlen oldalon.</p>
         <div class="manager__tabs">
           <button class="manager__tab manager__tab--active" data-target="clipsSection" type="button">Klip lista</button>
+          <button class="manager__tab" data-target="usersSection" type="button">Felhasználók</button>
           <button class="manager__tab" data-target="processingSection" type="button">Feldolgozási állapot</button>
           <button class="manager__tab" data-target="movieSection" type="button">Mozi Teszt</button>
           <button class="manager__tab" data-target="radnaiSection" type="button">Radnai Figyelő</button>
           <button class="manager__tab" data-target="archiveMetadataSection" type="button">Archívum Metadata Szerkesztő</button>
+          <a class="manager__tab manager__tab--link" href="/discord-panel.html" target="_blank" rel="noopener noreferrer">Discord Panel</a>
         </div>
       </div>
 
@@ -184,6 +186,25 @@
             </div>
             <div id="clipWindowStatus" class="clip-window__status">Klipek betöltése folyamatban...</div>
             <div id="clipWindowTable"></div>
+          </div>
+        </section>
+
+        <section id="usersSection" class="manager__section">
+          <div class="users-window">
+            <div class="users-window__header">
+              <div>
+                <h2>Felhasználók és jogosultságok</h2>
+                <p class="users-window__subtitle">
+                  Itt állíthatók a feltöltési, fájlküldési, klip-, archívum- és Discord 2 jogosultságok, valamint a feltöltési limitek.
+                </p>
+              </div>
+              <button id="refreshUsersBtn" class="process-window__refresh" type="button">Frissítés</button>
+            </div>
+            <p id="usersStatus" class="users-window__status" role="status">Felhasználók betöltése folyamatban...</p>
+            <div id="userListContainer" class="users-window__table-wrap"></div>
+            <div class="users-window__actions">
+              <button id="savePermissionsBtn" class="users-window__save" type="button" disabled>Változtatások mentése</button>
+            </div>
           </div>
         </section>
 
@@ -283,6 +304,6 @@
       </div>
     </div>
 
-    <script src="js/admin-felulet.js?v=2026-06-15-archive-metadata-hu-date"></script>
+    <script src="js/admin-felulet.js?v=20260624-users"></script>
   </body>
 </html>

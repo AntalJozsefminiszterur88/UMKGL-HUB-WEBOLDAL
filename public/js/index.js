@@ -6,7 +6,7 @@
 
     const ADMIN_SESSION_KEY = "isAdmin";
     const ADMIN_PREVIEW_KEY = "adminPreviewRole";
-    const ADMIN_ONLY_SECTIONS = new Set(["admin", "programok"]);
+    const ADMIN_ONLY_SECTIONS = new Set(["programok"]);
     const loginModal = document.getElementById("loginModal");
     const closeLogin = document.getElementById("closeLogin");
     const loginForm = document.getElementById("loginForm");
@@ -18,6 +18,7 @@
     const userGreeting = document.getElementById("userGreeting");
     const adminPreviewBar = document.getElementById("adminPreviewBar");
     const adminPreviewToggleBtn = document.getElementById("adminPreviewToggleBtn");
+    const adminSurfaceLink = document.getElementById("adminSurfaceLink");
     const adminNavBtn = document.getElementById("adminNavBtn");
     const programNavBtn = document.getElementById("programNavBtn");
     const fileTransferNavBtn = document.getElementById("fileTransferNavBtn");
@@ -4358,6 +4359,9 @@
             adminPreviewBar.style.display = "none";
           }
           adminPreviewToggleBtn.style.display = "none";
+          if (adminSurfaceLink) {
+            adminSurfaceLink.style.display = "none";
+          }
           adminPreviewToggleBtn.setAttribute("aria-pressed", "false");
           adminPreviewToggleBtn.classList.remove("is-active");
           return;
@@ -4368,6 +4372,9 @@
           adminPreviewBar.style.display = "flex";
         }
         adminPreviewToggleBtn.style.display = "inline-flex";
+        if (adminSurfaceLink) {
+          adminSurfaceLink.style.display = "inline-flex";
+        }
         adminPreviewToggleBtn.setAttribute("aria-pressed", previewEnabled ? "true" : "false");
         adminPreviewToggleBtn.classList.toggle("is-active", previewEnabled);
         adminPreviewToggleBtn.textContent = previewEnabled ? "Nézet: felhasználó" : "Nézet: Admin";
