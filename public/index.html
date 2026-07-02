@@ -29,7 +29,8 @@
       src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"
       referrerpolicy="no-referrer"
     ></script>
-    <link rel="stylesheet" href="css/index.css?v=20260624-admin-link">
+    <link rel="stylesheet" href="css/index.css?v=20260701-modal-like-1">
+    <link rel="stylesheet" href="css/discord2.css?v=20260624-refactor-1">
   </head>
   <body>
     <header>
@@ -725,6 +726,8 @@
               <select id="sortOrderSelect" class="uniform-control">
                 <option value="newest">Legújabb elöl</option>
                 <option value="oldest">Legrégebbi elöl</option>
+                <option value="views">Legtöbb megtekintés</option>
+                <option value="likes">Legtöbb like</option>
               </select>
             </div>
             <div class="filter-group">
@@ -1057,8 +1060,10 @@
 
               <div class="archive-upload-bar" data-archive-edit>
                 <input id="archiveUploadInput" type="file" style="display: none;" multiple />
+                <input id="archiveFolderUploadInput" type="file" style="display: none;" multiple webkitdirectory directory />
                 <button id="archiveUploadBtn" class="primary-button" type="button">Fájlok feltöltése</button>
                 <button id="archiveRenameFolderBtn" class="secondary-btn" type="button" style="display: none;">Mappa átnevezése</button>
+                <button id="archiveLockFolderBtn" class="secondary-btn" type="button" style="display: none;">Mappa lezárása</button>
                 <span id="archiveUploadStatus" class="archive-status"></span>
               </div>
 
@@ -1130,6 +1135,20 @@
               <div id="archiveFileEmpty" class="programs-empty" style="display: none;">
                 Nincs megjeleníthető fájl ebben a mappában.
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="archivePasswordModal" class="archive-password-modal" aria-hidden="true" style="display: none;">
+          <div class="archive-password-card">
+            <button id="archivePasswordClose" class="archive-password-close" type="button" aria-label="Bezárás">&times;</button>
+            <div class="archive-password-icon"><i class="fas fa-lock"></i></div>
+            <h3 id="archivePasswordTitle">Add meg a jelszót pupák</h3>
+            <input id="archivePasswordInput" class="uniform-control archive-password-input" type="password" autocomplete="current-password" />
+            <p id="archivePasswordStatus" class="archive-password-status"></p>
+            <div class="archive-password-actions">
+              <button id="archivePasswordCancel" class="secondary-btn" type="button">Mégse</button>
+              <button id="archivePasswordSubmit" class="primary-button" type="button">Belépés</button>
             </div>
           </div>
         </div>
@@ -1434,7 +1453,21 @@
         <div class="video-modal__content">
           <video id="modalVideoPlayer" class="video-modal__video" controls autoplay></video>
           <p id="modalVideoTitle" class="video-modal__title"></p>
-          <button id="copyVideoLinkBtn" class="primary-button link-button" type="button">Link másolása</button>
+          <div class="video-modal__actions">
+            <button id="copyVideoLinkBtn" class="primary-button link-button" type="button">Link másolása</button>
+            <button id="modalLikeBtn" class="video-modal__stat video-modal__like-btn" type="button" aria-pressed="false" aria-label="Klip kedvelése">
+              <svg class="video-modal__stat-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M12 21.2 10.7 20C5.9 15.7 3 13.1 3 9.8 3 7.1 5.1 5 7.8 5c1.5 0 3 .7 4 1.9A5.3 5.3 0 0 1 15.8 5C18.5 5 21 7.1 21 9.8c0 3.3-2.9 5.9-7.7 10.2L12 21.2Z"/>
+              </svg>
+              <span id="modalLikeCount">0</span>
+            </button>
+            <span class="video-modal__stat video-modal__views" title="Megtekintések">
+              <svg class="video-modal__stat-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M12 5c5.5 0 9.6 5 10 6.6.1.3.1.5 0 .8C21.6 14 17.5 19 12 19S2.4 14 2 12.4a1.3 1.3 0 0 1 0-.8C2.4 10 6.5 5 12 5Zm0 2c-4 0-7.2 3.2-8 5 .8 1.8 4 5 8 5s7.2-3.2 8-5c-.8-1.8-4-5-8-5Zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z"/>
+              </svg>
+              <span id="modalViewCount">0</span>
+            </span>
+          </div>
         </div>
         <div class="video-modal__nav-wrapper">
           <button
@@ -1463,8 +1496,16 @@
   <script>
     window.vad = window.vad || window.import_vad;
   </script>
-  <script src="js/discord2.js?v=20260509-1" charset="UTF-8"></script>
-  <script src="js/index.js?v=20260624-admin-users-moved" charset="UTF-8"></script>
+  <script src="js/discord2/core.js?v=20260624-refactor-1" charset="UTF-8"></script>
+  <script src="js/discord2/audio-manager.js?v=20260624-refactor-1" charset="UTF-8"></script>
+  <script src="js/discord2/settings.js?v=20260624-refactor-1" charset="UTF-8"></script>
+  <script src="js/discord2/ui.js?v=20260624-refactor-1" charset="UTF-8"></script>
+  <script src="js/discord2/voice.js?v=20260624-refactor-1" charset="UTF-8"></script>
+  <script src="js/discord2/runtime.js?v=20260624-refactor-1" charset="UTF-8"></script>
+  <script src="js/index.js?v=20260701-modal-like-1" charset="UTF-8"></script>
+  <script src="js/features/archive.js?v=20260630-admin-protect-1" charset="UTF-8"></script>
+  <script src="js/features/content-management.js?v=20260624-refactor-1" charset="UTF-8"></script>
+  <script src="js/features/file-transfer.js?v=20260624-refactor-1" charset="UTF-8"></script>
 
 
 

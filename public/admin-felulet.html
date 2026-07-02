@@ -5,153 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin felület</title>
     <link rel="icon" type="image/png" href="program_icons/oldal_logo.png" />
-    <link rel="stylesheet" href="css/video-kezeles-felulet.css?v=20260624-users" />
-    <style>
-      .console-output,
-      .json-output {
-        background: #12151f;
-        border: 1px solid #2c3246;
-        border-radius: 8px;
-        color: #e6e8ee;
-        font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
-        font-size: 0.9rem;
-        line-height: 1.5;
-        margin: 0;
-        max-height: 260px;
-        min-height: 120px;
-        overflow: auto;
-        padding: 0.9rem;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-
-      .movie-results-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 1.5rem;
-        margin-top: 1rem;
-      }
-
-      .movie-card {
-        background-color: #2f3136;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        border: 1px solid #202225;
-      }
-
-      .movie-card__poster {
-        width: 100%;
-        aspect-ratio: 2 / 3;
-        object-fit: cover;
-        display: block;
-        background-color: #202225;
-      }
-
-      .movie-card__details {
-        padding: 0.75rem;
-      }
-
-      .movie-card__title {
-        font-size: 1rem;
-        font-weight: 600;
-        margin: 0 0 0.3rem 0;
-        color: #fff;
-      }
-
-      .movie-card__category,
-      .movie-card__times {
-        font-size: 0.85rem;
-        color: #b9bbbe;
-        margin: 0.2rem 0;
-      }
-
-      .movie-card__times strong {
-        color: #dcddde;
-      }
-
-      .radnai-alert {
-        margin-top: 0.75rem;
-        padding: 0.65rem 0.8rem;
-        border-radius: 8px;
-        border: 1px solid #3d475f;
-        background: #1b2130;
-        color: #d9e1f3;
-        font-size: 0.9rem;
-      }
-
-      .radnai-alert--success {
-        border-color: #2b8a57;
-        background: #13291f;
-        color: #b6f2cf;
-      }
-
-      .radnai-alert--error {
-        border-color: #a44343;
-        background: #301919;
-        color: #ffc9c9;
-      }
-
-      .radnai-alert--info {
-        border-color: #3d475f;
-        background: #1b2130;
-        color: #d9e1f3;
-      }
-
-      .radnai-actions {
-        display: flex;
-        gap: 0.6rem;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-
-      .archive-folder-row {
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-      }
-      .archive-folder-row:hover {
-        background-color: #3e4249 !important;
-      }
-      .archive-meta-date-input {
-        background: #1b1d21;
-        border: 1px solid #4f545c;
-        border-radius: 4px;
-        color: #fff;
-        padding: 4px 8px;
-        font-family: inherit;
-        font-size: 0.9rem;
-      }
-      .archive-meta-btn {
-        background: #4f545c;
-        border: none;
-        border-radius: 4px;
-        color: #fff;
-        cursor: pointer;
-        padding: 4px 8px;
-        margin-left: 5px;
-        font-size: 0.85rem;
-        transition: background-color 0.2s;
-      }
-      .archive-meta-btn:hover {
-        background: #686d73;
-      }
-      .archive-meta-btn--save {
-        background: #2b8a57;
-      }
-      .archive-meta-btn--save:hover {
-        background: #34a86a;
-      }
-      .archive-meta-btn--cancel {
-        background: #a44343;
-      }
-      .archive-meta-btn--cancel:hover {
-        background: #c25252;
-      }
-      .archive-meta-controls {
-        display: flex;
-        gap: 10px;
-      }
-    </style>
+    <link rel="stylesheet" href="css/video-kezeles-felulet.css?v=20260701-clip-analytics-1" />
   </head>
   <body>
     <a href="/" class="back-link"><span>←</span> Vissza a főoldalra</a>
@@ -161,6 +15,7 @@
         <p class="manager__subtitle">Felhasználók, jogosultságok, klipek és háttérfolyamatok kezelése egyetlen oldalon.</p>
         <div class="manager__tabs">
           <button class="manager__tab manager__tab--active" data-target="clipsSection" type="button">Klip lista</button>
+          <button class="manager__tab" data-target="clipAnalyticsSection" type="button">Klip statisztika</button>
           <button class="manager__tab" data-target="usersSection" type="button">Felhasználók</button>
           <button class="manager__tab" data-target="processingSection" type="button">Feldolgozási állapot</button>
           <button class="manager__tab" data-target="movieSection" type="button">Mozi Teszt</button>
@@ -186,6 +41,80 @@
             </div>
             <div id="clipWindowStatus" class="clip-window__status">Klipek betöltése folyamatban...</div>
             <div id="clipWindowTable"></div>
+          </div>
+        </section>
+
+        <section id="clipAnalyticsSection" class="manager__section">
+          <div class="analytics-window">
+            <div class="process-window__header">
+              <div>
+                <h2>Klip nézettségi statisztika</h2>
+                <p class="process-window__subtitle">Megtekintések időrendben, felhasználók és klipek szerinti bontásban.</p>
+              </div>
+              <button id="clipAnalyticsRefreshBtn" class="process-window__refresh" type="button">Frissítés</button>
+            </div>
+
+            <div class="analytics-controls">
+              <label>
+                Bontás
+                <select id="clipAnalyticsPeriod" class="clip-window__select">
+                  <option value="monthly">Havi</option>
+                  <option value="yearly">Éves</option>
+                </select>
+              </label>
+              <label>
+                Év
+                <input id="clipAnalyticsYear" class="analytics-input" type="number" min="2000" max="2100" />
+              </label>
+              <label id="clipAnalyticsMonthWrap">
+                Hónap
+                <select id="clipAnalyticsMonth" class="clip-window__select">
+                  <option value="1">Január</option>
+                  <option value="2">Február</option>
+                  <option value="3">Március</option>
+                  <option value="4">Április</option>
+                  <option value="5">Május</option>
+                  <option value="6">Június</option>
+                  <option value="7">Július</option>
+                  <option value="8">Augusztus</option>
+                  <option value="9">Szeptember</option>
+                  <option value="10">Október</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+                </select>
+              </label>
+            </div>
+
+            <p id="clipAnalyticsStatus" class="clip-window__status">Statisztika betöltése folyamatban...</p>
+
+            <div class="analytics-summary">
+              <div class="analytics-summary__card"><span>Megtekintések</span><strong id="analyticsTotalViews">0</strong></div>
+              <div class="analytics-summary__card"><span>Nézők</span><strong id="analyticsTotalUsers">0</strong></div>
+              <div class="analytics-summary__card"><span>Megnézett klipek</span><strong id="analyticsTotalClips">0</strong></div>
+            </div>
+
+            <div class="analytics-chart-card">
+              <canvas id="clipAnalyticsChart" width="1100" height="320"></canvas>
+            </div>
+
+            <div class="analytics-grid">
+              <div class="analytics-table-card">
+                <h3>Legaktívabb felhasználók</h3>
+                <div id="analyticsTopUsers"></div>
+              </div>
+              <div class="analytics-table-card">
+                <h3>Legnézettebb klipek</h3>
+                <div id="analyticsTopVideos"></div>
+              </div>
+              <div class="analytics-table-card analytics-table-card--wide">
+                <h3>Ki milyen klipeket nézett</h3>
+                <div id="analyticsUserVideos"></div>
+              </div>
+              <div class="analytics-table-card analytics-table-card--wide">
+                <h3>Legutóbbi megtekintések</h3>
+                <div id="analyticsRecentViews"></div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -304,6 +233,8 @@
       </div>
     </div>
 
-    <script src="js/admin-felulet.js?v=20260624-users"></script>
+    <script src="js/admin/core.js?v=20260701-clip-analytics-1"></script>
+    <script src="js/admin/users.js?v=20260624-refactor-1"></script>
+    <script src="js/admin-felulet.js?v=20260701-clip-analytics-1"></script>
   </body>
 </html>

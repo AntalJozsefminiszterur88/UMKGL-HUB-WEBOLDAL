@@ -13,12 +13,79 @@ const { Server } = require('socket.io');
 const db = require('./database');
 const cinemaScraper = require('../cinema-scraper');
 const { createDiscord2Module } = require('./discord2');
+const { createAuthMiddleware } = require('./middleware/auth');
+const { createAuthRouter } = require('./routes/auth.routes');
+const { createUsersRouter } = require('./routes/users.routes');
 
 const JWT_SECRET = 'a_very_secret_and_secure_key_for_jwt';
 const DEFAULT_TAG_COLOR = '#5865F2';
+const { authenticateToken, requireAdmin: isAdmin } = createAuthMiddleware({
+    db,
+    jwtSecret: JWT_SECRET,
+});
 
 function generateAuthToken(payload) {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+}
+
+const ADMIN_PAGE_COOKIE_NAME = 'umkgl_admin_page';
+const ADMIN_PAGE_TOKEN_MAX_AGE_MS = 15 * 60 * 1000;
+
+function signAdminPageToken(user) {
+    return jwt.sign({
+        id: user.id,
+        username: user.username,
+        isAdmin: true,
+        adminPage: true,
+    }, JWT_SECRET, { expiresIn: '15m' });
+}
+
+function parseCookieHeader(cookieHeader = '') {
+    return String(cookieHeader || '')
+        .split(';')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .reduce((cookies, part) => {
+            const separatorIndex = part.indexOf('=');
+            if (separatorIndex < 0) {
+                return cookies;
+            }
+            const key = part.slice(0, separatorIndex).trim();
+            const value = part.slice(separatorIndex + 1).trim();
+            if (key) {
+                cookies[key] = decodeURIComponent(value);
+            }
+            return cookies;
+        }, {});
+}
+
+function clearAdminPageCookie(res) {
+    res.clearCookie(ADMIN_PAGE_COOKIE_NAME, {
+        httpOnly: true,
+        sameSite: 'strict',
+        path: '/',
+    });
+}
+
+async function verifyAdminPageCookie(req) {
+    const cookies = parseCookieHeader(req.headers.cookie);
+    const token = cookies[ADMIN_PAGE_COOKIE_NAME];
+    if (!token) {
+        return null;
+    }
+
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!payload?.adminPage || !payload?.id || payload.isAdmin !== true) {
+        return null;
+    }
+
+    const { rows } = await db.query('SELECT id, username, is_admin FROM users WHERE id = $1', [payload.id]);
+    const user = rows[0];
+    if (!user || Number(user.is_admin) !== 1) {
+        return null;
+    }
+
+    return user;
 }
 
 // 2. Az Express alkalmazás létrehozása
@@ -127,6 +194,8 @@ const archiveVideosDirectory = path.join(archiveDirectory, 'videok');
 const archiveVideosOriginalDirectory = path.join(archiveVideosDirectory, 'eredeti');
 const archiveVideos720pDirectory = path.join(archiveVideosDirectory, '720p');
 const archiveVideoChunkTempDirectory = path.join(archiveVideosDirectory, '_chunk_uploads');
+const archiveFileChunkTempDirectory = path.join(archiveDirectory, '_file_chunk_uploads');
+const archiveFolderLocksFile = path.join(archiveDirectory, '_folder_locks.json');
 const archiveCategoryMap = {
     kepek: {
         key: 'kepek',
@@ -150,7 +219,7 @@ const archiveCategoryMap = {
         key: 'dokumentumok',
         label: 'Dokumentumok',
         dir: path.join(archiveDirectory, 'dokumentumok'),
-        allowedExtensions: ['.pdf'],
+        allowedExtensions: null,
     },
 };
 const archiveVideoAllowedExtensions = new Set(
@@ -166,6 +235,7 @@ ensureDirectoryExists(archiveVideosDirectory);
 ensureDirectoryExists(archiveVideosOriginalDirectory);
 ensureDirectoryExists(archiveVideos720pDirectory);
 ensureDirectoryExists(archiveVideoChunkTempDirectory);
+ensureDirectoryExists(archiveFileChunkTempDirectory);
 Object.values(archiveCategoryMap).forEach((category) => {
     ensureDirectoryExists(category.dir);
 });
@@ -1060,14 +1130,13 @@ const archiveStorage = multer.diskStorage({
         if (!categoryInfo || !folderPath) {
             return cb(new Error('Érvénytelen archívum kategória vagy mappa.'));
         }
-        ensureDirectoryExists(folderPath);
+        ensureDirectoryExists(archiveFileChunkTempDirectory);
         req.archiveTargetDir = folderPath;
-        cb(null, folderPath);
+        cb(null, archiveFileChunkTempDirectory);
     },
-    filename: (req, file, cb) => {
-        const targetDir = req.archiveTargetDir;
-        const safeName = buildArchiveFilename(targetDir, file.originalname);
-        cb(null, safeName);
+    filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '').toLowerCase();
+        cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
     }
 });
 
@@ -1076,8 +1145,7 @@ const archiveFileFilter = (req, file, cb) => {
     if (!categoryInfo) {
         return cb(new Error('Ismeretlen archívum kategória.'));
     }
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    if (categoryInfo.allowedExtensions.includes(ext)) {
+    if (isArchiveFileExtensionAllowed(categoryInfo, file.originalname)) {
         return cb(null, true);
     }
     return cb(new Error('Nem engedélyezett fájltípus.'));
@@ -1131,6 +1199,26 @@ const uploadArchiveVideoChunks = multer({
     },
 });
 
+const archiveFileChunkStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+        ensureDirectoryExists(archiveFileChunkTempDirectory);
+        cb(null, archiveFileChunkTempDirectory);
+    },
+    filename: (req, _file, cb) => {
+        const uploadId = String(req.body?.uploadId || 'upload').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+        const chunkIndex = Number.parseInt(req.body?.chunkIndex, 10);
+        cb(null, `${uploadId}-${Number.isInteger(chunkIndex) ? chunkIndex : 'x'}-${Math.round(Math.random() * 1e9)}.part`);
+    }
+});
+
+const uploadArchiveFileChunk = multer({
+    storage: archiveFileChunkStorage,
+    limits: {
+        files: 1,
+        fileSize: 1024 * 1024,
+    },
+});
+
 const archiveThumbnailMemoryStorage = multer.memoryStorage();
 const uploadArchiveThumbnailImage = multer({
     storage: archiveThumbnailMemoryStorage,
@@ -1169,55 +1257,6 @@ async function loadAppSettings() {
     } catch (err) {
         console.error('Hiba a beállítások betöltésekor:', err);
         throw err;
-    }
-}
-
-// Hitelesítési middleware a védett végpontokhoz
-function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({ message: 'Hiányzó hitelesítési token.' });
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).json({ message: 'Érvénytelen vagy lejárt token.' });
-        }
-
-        req.user = {
-            id: user.id,
-            username: user.username,
-            isAdmin: !!user.isAdmin
-        };
-        next();
-    });
-}
-
-async function isAdmin(req, res, next) {
-    const userId = req.user && req.user.id;
-    if (!userId) {
-        return res.status(401).json({ message: 'Authentication required.' });
-    }
-
-    try {
-        const { rows } = await db.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
-        const user = rows[0];
-
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-
-        if (Number(user.is_admin) !== 1) {
-            return res.status(403).json({ message: 'Admin access required.' });
-        }
-
-        req.user.isAdmin = true;
-        return next();
-    } catch (err) {
-        console.error('Error checking admin permission:', err);
-        return res.status(500).json({ message: 'Failed to verify admin permission.' });
     }
 }
 
@@ -1274,6 +1313,99 @@ function resolveArchiveCategory(category) {
 function getArchiveVideoExtension(filename) {
     const ext = path.extname(String(filename || '')).toLowerCase();
     return archiveVideoAllowedExtensions.has(ext) ? ext : null;
+}
+
+function isArchiveFileExtensionAllowed(categoryInfo, filename) {
+    if (!categoryInfo) {
+        return false;
+    }
+    if (!Array.isArray(categoryInfo.allowedExtensions) || categoryInfo.allowedExtensions.length === 0) {
+        return true;
+    }
+    const ext = path.extname(filename || '').toLowerCase();
+    return categoryInfo.allowedExtensions.includes(ext);
+}
+
+function buildArchiveLockKey(categoryKey, folderName) {
+    return `${categoryKey}:${folderName}`;
+}
+
+async function readArchiveFolderLocks() {
+    try {
+        const raw = await fs.promises.readFile(archiveFolderLocksFile, 'utf8');
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return {};
+        }
+        throw err;
+    }
+}
+
+async function writeArchiveFolderLocks(locks) {
+    ensureDirectoryExists(archiveDirectory);
+    await fs.promises.writeFile(archiveFolderLocksFile, JSON.stringify(locks, null, 2), 'utf8');
+}
+
+async function getArchiveFolderLock(categoryInfo, folderName) {
+    if (!categoryInfo || !folderName) {
+        return null;
+    }
+    const locks = await readArchiveFolderLocks();
+    return locks[buildArchiveLockKey(categoryInfo.key, folderName)] || null;
+}
+
+function signArchiveUnlockToken(categoryInfo, folderName, userId) {
+    return jwt.sign(
+        {
+            scope: 'archive-folder',
+            category: categoryInfo.key,
+            folder: folderName,
+            userId,
+        },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+    );
+}
+
+async function ensureArchiveFolderUnlocked(req, res, next) {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    if (!categoryInfo || !folderName) {
+        return res.status(400).json({ message: 'Érvénytelen archívum mappa.' });
+    }
+
+    try {
+        const lock = await getArchiveFolderLock(categoryInfo, folderName);
+        if (!lock) {
+            return next();
+        }
+
+        const token = req.headers['x-archive-unlock'];
+        if (!token) {
+            return res.status(423).json({ message: 'A mappa jelszóval védett.', locked: true });
+        }
+
+        try {
+            const payload = jwt.verify(token, JWT_SECRET);
+            if (
+                payload?.scope !== 'archive-folder' ||
+                payload?.category !== categoryInfo.key ||
+                payload?.folder !== folderName ||
+                Number(payload?.userId) !== Number(req.user?.id)
+            ) {
+                return res.status(423).json({ message: 'A mappa jelszóval védett.', locked: true });
+            }
+        } catch (_err) {
+            return res.status(423).json({ message: 'A mappa jelszóval védett.', locked: true });
+        }
+
+        return next();
+    } catch (err) {
+        console.error('Hiba az archív mappazár ellenőrzésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a mappazárat.' });
+    }
 }
 
 function normalizeArchiveFolderName(value) {
@@ -1335,11 +1467,89 @@ function resolveArchive720pFolderPath(folderName) {
 }
 
 function buildArchiveFileUrl(categoryKey, folderName, filename) {
+    const filenameParts = String(filename || '')
+        .split(/[\\/]+/)
+        .filter(Boolean);
     const parts = categoryKey === 'videok'
-        ? ['uploads', 'archivum', categoryKey, 'eredeti', folderName, filename]
-        : ['uploads', 'archivum', categoryKey, folderName, filename];
+        ? ['uploads', 'archivum', categoryKey, 'eredeti', folderName, ...filenameParts]
+        : ['uploads', 'archivum', categoryKey, folderName, ...filenameParts];
     const encoded = parts.map((part) => encodeURIComponent(part));
     return `/${encoded.join('/')}`;
+}
+
+function normalizeArchiveRelativeFilePath(value, fallbackName) {
+    const source = typeof value === 'string' && value.trim()
+        ? value
+        : fallbackName;
+    if (typeof source !== 'string' || !source.trim()) {
+        return null;
+    }
+
+    const parts = source
+        .replace(/\\/g, '/')
+        .split('/')
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+    if (!parts.length || parts.length > 20) {
+        return null;
+    }
+
+    const safeParts = [];
+    for (const part of parts) {
+        if (part === '.' || part === '..') {
+            return null;
+        }
+
+        const cleaned = part
+            .replace(/[<>:"\\|?*\x00-\x1F]/g, '_')
+            .replace(/[.\s]+$/g, '')
+            .trim();
+
+        if (!cleaned) {
+            return null;
+        }
+
+        if (cleaned.length <= 120) {
+            safeParts.push(cleaned);
+            continue;
+        }
+
+        const parsed = path.parse(cleaned);
+        const ext = parsed.ext || '';
+        const baseLimit = Math.max(1, 120 - ext.length);
+        safeParts.push(`${parsed.name.slice(0, baseLimit)}${ext}`);
+    }
+
+    return safeParts.join('/');
+}
+
+function resolveArchiveNestedFileTarget(categoryInfo, folderName, relativePath) {
+    const folderPath = resolveArchiveFolderPath(categoryInfo, folderName);
+    const safeRelativePath = normalizeArchiveRelativeFilePath(relativePath, relativePath);
+    if (!folderPath || !safeRelativePath) {
+        return null;
+    }
+
+    const relativeParts = safeRelativePath.split('/');
+    const rawFilename = relativeParts.pop();
+    const nestedDir = path.normalize(path.join(folderPath, ...relativeParts));
+    if (!nestedDir.startsWith(folderPath)) {
+        return null;
+    }
+
+    const targetFilename = buildArchiveFilename(nestedDir, rawFilename);
+    const targetPath = path.normalize(path.join(nestedDir, targetFilename));
+    if (!targetPath.startsWith(folderPath)) {
+        return null;
+    }
+
+    return {
+        targetDir: nestedDir,
+        targetPath,
+        filename: targetFilename,
+        relativePath: [...relativeParts, targetFilename].join('/'),
+    };
 }
 
 function buildArchiveFilename(targetDir, originalName) {
@@ -1719,6 +1929,24 @@ if (express.static?.mime?.define) {
     express.static.mime.define({ 'application/wasm': ['wasm'] });
     express.static.mime.define({ 'application/octet-stream': ['onnx'] });
 }
+app.get(['/admin-felulet', '/admin-felulet.html'], async (req, res) => {
+    try {
+        const user = await verifyAdminPageCookie(req);
+        if (!user) {
+            clearAdminPageCookie(res);
+            return res.status(403).type('html').send('<!doctype html><html lang="hu"><head><meta charset="utf-8"><title>Admin felület</title></head><body><h1>Admin jogosultság szükséges.</h1></body></html>');
+        }
+
+        return res.sendFile(path.join(__dirname, '..', 'public', 'admin-felulet.html'));
+    } catch (err) {
+        clearAdminPageCookie(res);
+        if (err?.name === 'TokenExpiredError' || err?.name === 'JsonWebTokenError') {
+            return res.status(403).type('html').send('<!doctype html><html lang="hu"><head><meta charset="utf-8"><title>Admin felület</title></head><body><h1>Admin jogosultság szükséges.</h1></body></html>');
+        }
+        console.error('Hiba az admin felület jogosultság ellenőrzésekor:', err);
+        return res.status(500).type('html').send('<!doctype html><html lang="hu"><head><meta charset="utf-8"><title>Admin felület</title></head><body><h1>Nem sikerült megnyitni az admin felületet.</h1></body></html>');
+    }
+});
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Serve uploads from D: drive
@@ -1891,78 +2119,7 @@ io.on('connection', (socket) => {
     });
 });
 
-app.post('/register', async (req, res) => {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
-    }
-
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const insertQuery = 'INSERT INTO users (username, password) VALUES ($1, $2)';
-        await db.query(insertQuery, [username, hashedPassword]);
-        res.status(201).json({ message: 'Sikeres regisztráció.' });
-    } catch (err) {
-        if (err.code === '23505') { // unique_violation for PostgreSQL
-            return res.status(409).json({ message: 'A felhasználónév már létezik.' });
-        }
-        console.error('Hiba a felhasználó mentésekor:', err);
-        res.status(500).json({ message: 'Váratlan hiba történt. Próbáld meg később.' });
-    }
-});
-
-app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
-    }
-
-    try {
-        const { rows } = await db.query('SELECT id, username, password, is_admin, can_transfer, can_view_clips, can_view_archive, can_edit_archive, can_use_discord, profile_picture_filename, preferred_quality FROM users WHERE username = $1', [username]);
-        const user = rows[0];
-
-        if (!user) {
-            return res.status(401).json({ message: 'Hibás felhasználónév vagy jelszó.' });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({ message: 'Hibás felhasználónév vagy jelszó.' });
-        }
-
-        const isAdmin = user.is_admin === 1;
-        const payload = { id: user.id, username: user.username, isAdmin };
-        const token = generateAuthToken(payload);
-
-        const canViewClips = isAdmin || Number(user.can_view_clips) === 1;
-        const canEditArchive = isAdmin || Number(user.can_edit_archive) === 1;
-        const canViewArchive = isAdmin || Number(user.can_view_archive) === 1 || canEditArchive;
-        const canUseDiscord = isAdmin || Number(user.can_use_discord) === 1;
-
-        res.status(200).json({
-            message: 'Sikeres bejelentkezés.',
-            token,
-            username: user.username,
-            isAdmin,
-            canTransfer: Number(user.can_transfer) === 1,
-            canViewClips,
-            canViewArchive,
-            canEditArchive,
-            canUseDiscord,
-            profile_picture_filename: user.profile_picture_filename,
-            preferred_quality: user.preferred_quality || '1080p'
-        });
-    } catch (err) {
-        console.error('Hiba a bejelentkezés során:', err);
-        res.status(500).json({ message: 'Váratlan hiba történt. Próbáld meg később.' });
-    }
-});
-
-app.post('/logout', (req, res) => {
-    res.status(200).json({ message: 'Sikeres kijelentkezés.' });
-});
+app.use(createAuthRouter({ db, generateAuthToken }));
 
 app.post('/api/pico/refresh-movies', async (_req, res) => {
     try {
@@ -1995,6 +2152,22 @@ app.get('/api/admin/fetch-movies', authenticateToken, isAdmin, async (_req, res)
             logs: ['Hiba tortent a Cinema City adatok lekerdezese kozben.'],
         });
     }
+});
+
+app.post('/api/admin/page-session', authenticateToken, isAdmin, (req, res) => {
+    const token = signAdminPageToken(req.user);
+    res.cookie(ADMIN_PAGE_COOKIE_NAME, token, {
+        httpOnly: true,
+        sameSite: 'strict',
+        maxAge: ADMIN_PAGE_TOKEN_MAX_AGE_MS,
+        path: '/',
+    });
+    return res.status(200).json({ url: '/admin-felulet.html' });
+});
+
+app.delete('/api/admin/page-session', (_req, res) => {
+    clearAdminPageCookie(res);
+    return res.status(204).end();
 });
 
 app.get('/api/profile', authenticateToken, async (req, res) => {
@@ -2045,80 +2218,7 @@ app.post('/api/profile/update-quality', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/users', authenticateToken, isAdmin, async (req, res) => {
-    try {
-        const query = 'SELECT id, username, can_upload, can_transfer, can_view_clips, can_view_archive, can_edit_archive, can_use_discord, max_file_size_mb, max_videos, upload_count FROM users';
-        const { rows } = await db.query(query);
-        res.status(200).json(rows);
-    } catch (err) {
-        console.error('Hiba a felhasználók lekérdezésekor:', err);
-        res.status(500).json({ message: 'Nem sikerült lekérdezni a felhasználókat.' });
-    }
-});
-
-app.post('/api/users/permissions/batch-update', authenticateToken, isAdmin, async (req, res) => {
-    if (!Array.isArray(req.body)) {
-        return res.status(400).json({ message: 'A kérés törzsében egy tömbnek kell szerepelnie.' });
-    }
-    if (req.body.length === 0) {
-        return res.status(200).json({ message: 'Nincs frissítendő jogosultság.' });
-    }
-
-    const updates = req.body.map(item => {
-        const canEditArchive = item.canEditArchive ? 1 : 0;
-        const canViewArchive = (item.canViewArchive ? 1 : 0) || canEditArchive;
-
-        return ({
-            userId: Number.parseInt(item.userId, 10),
-            canUpload: item.canUpload ? 1 : 0,
-            canTransfer: item.canTransfer ? 1 : 0,
-            canViewClips: item.canViewClips ? 1 : 0,
-            canViewArchive,
-            canEditArchive,
-            canUseDiscord: item.canUseDiscord ? 1 : 0,
-            maxFileSizeMb: Number(item.maxFileSizeMb),
-            maxVideos: Number(item.maxVideos)
-        });
-    });
-
-    // Simple validation (can be improved)
-    if (updates.some(u => isNaN(u.userId) || isNaN(u.maxFileSizeMb) || isNaN(u.maxVideos))) {
-        return res.status(400).json({ message: 'Érvénytelen adatok a kérésben.' });
-    }
-
-    const client = await db.pool.connect();
-    try {
-        await client.query('BEGIN');
-        for (const update of updates) {
-            const result = await client.query(
-                'UPDATE users SET can_upload = $1, can_transfer = $2, can_view_clips = $3, can_view_archive = $4, can_edit_archive = $5, can_use_discord = $6, max_file_size_mb = $7, max_videos = $8 WHERE id = $9',
-                [
-                    update.canUpload,
-                    update.canTransfer,
-                    update.canViewClips,
-                    update.canViewArchive,
-                    update.canEditArchive,
-                    update.canUseDiscord,
-                    Math.round(update.maxFileSizeMb),
-                    Math.round(update.maxVideos),
-                    update.userId
-                ]
-            );
-            if (result.rowCount === 0) {
-                throw new Error(`A ${update.userId} azonosítójú felhasználó nem található.`);
-            }
-        }
-        await client.query('COMMIT');
-        res.status(200).json({ message: 'Jogosultságok sikeresen frissítve.' });
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error('Hiba a jogosultságok frissítésekor:', err);
-        const userNotFound = err.message.includes('felhasználó nem található');
-        res.status(userNotFound ? 404 : 500).json({ message: userNotFound ? err.message : 'Nem sikerült frissíteni a jogosultságokat.' });
-    } finally {
-        client.release();
-    }
-});
+app.use('/api/users', createUsersRouter({ db, authenticateToken, requireAdmin: isAdmin }));
 
 app.get('/api/settings', authenticateToken, isAdmin, async (req, res) => {
     try {
@@ -2913,7 +3013,9 @@ app.get('/api/archive/:category/folders', authenticateToken, ensureArchiveViewPe
             .filter((entry) => entry.isDirectory())
             .map((entry) => entry.name)
             .sort((a, b) => a.localeCompare(b, 'hu'));
-        return res.status(200).json({ folders });
+        const locks = await readArchiveFolderLocks();
+        const lockedFolders = folders.filter((folderName) => locks[buildArchiveLockKey(categoryInfo.key, folderName)]);
+        return res.status(200).json({ folders, lockedFolders });
     } catch (err) {
         console.error('Hiba az archívum mappák lekérdezésekor:', err);
         return res.status(500).json({ message: 'Nem sikerült betölteni a mappákat.' });
@@ -2950,6 +3052,83 @@ app.post('/api/archive/:category/folders', authenticateToken, ensureArchiveEditP
         }
         console.error('Hiba az archívum mappa létrehozásakor:', err);
         return res.status(500).json({ message: 'Nem sikerült létrehozni a mappát.' });
+    }
+});
+
+app.post('/api/archive/:category/folders/:folder/lock', authenticateToken, isAdmin, ensureArchiveEditPermission, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!categoryInfo || !folderName) {
+        return res.status(400).json({ message: 'Érvénytelen archívum mappa.' });
+    }
+    if (password.length < 1) {
+        return res.status(400).json({ message: 'Adj meg jelszót.' });
+    }
+
+    const folderPath = resolveArchiveFolderPath(categoryInfo, folderName);
+    if (!folderPath) {
+        return res.status(400).json({ message: 'Érvénytelen mappanév.' });
+    }
+
+    try {
+        const stat = await fs.promises.stat(folderPath);
+        if (!stat.isDirectory()) {
+            return res.status(404).json({ message: 'A mappa nem található.' });
+        }
+
+        const locks = await readArchiveFolderLocks();
+        locks[buildArchiveLockKey(categoryInfo.key, folderName)] = {
+            category: categoryInfo.key,
+            folder: folderName,
+            passwordHash: await bcrypt.hash(password, 10),
+            updatedAt: new Date().toISOString(),
+            updatedBy: req.user?.id || null,
+        };
+        await writeArchiveFolderLocks(locks);
+        return res.status(200).json({ message: 'Mappa lezárva.', locked: true });
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return res.status(404).json({ message: 'A mappa nem található.' });
+        }
+        console.error('Hiba az archív mappa lezárásakor:', err);
+        return res.status(500).json({ message: 'Nem sikerült lezárni a mappát.' });
+    }
+});
+
+app.post('/api/archive/:category/folders/:folder/unlock', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!categoryInfo || !folderName) {
+        return res.status(400).json({ message: 'Érvénytelen archívum mappa.' });
+    }
+
+    try {
+        const lock = await getArchiveFolderLock(categoryInfo, folderName);
+        if (!lock) {
+            return res.status(200).json({
+                message: 'A mappa nincs lezárva.',
+                locked: false,
+                token: signArchiveUnlockToken(categoryInfo, folderName, req.user.id),
+            });
+        }
+
+        const ok = await bcrypt.compare(password, lock.passwordHash || '');
+        if (!ok) {
+            return res.status(403).json({ message: 'Nem jól válaszolték Mcfly', locked: true });
+        }
+
+        return res.status(200).json({
+            message: 'Sikeres belépés',
+            locked: true,
+            token: signArchiveUnlockToken(categoryInfo, folderName, req.user.id),
+        });
+    } catch (err) {
+        console.error('Hiba az archív mappa feloldásakor:', err);
+        return res.status(500).json({ message: 'Nem sikerült ellenőrizni a jelszót.' });
     }
 });
 
@@ -3096,7 +3275,7 @@ app.delete('/api/archive/:category/folders', authenticateToken, isAdmin, ensureA
     }
 });
 
-app.get('/api/archive/:category/folders/:folder/files', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
+app.get('/api/archive/:category/folders/:folder/files', authenticateToken, ensureArchiveViewPermission, ensureArchiveFolderUnlocked, async (req, res) => {
     const categoryInfo = resolveArchiveCategory(req.params.category);
     if (!categoryInfo) {
         return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
@@ -3108,26 +3287,148 @@ app.get('/api/archive/:category/folders/:folder/files', authenticateToken, ensur
     }
 
     try {
-        const entries = await fs.promises.readdir(folderPath, { withFileTypes: true });
         const files = [];
-        for (const entry of entries) {
-            if (!entry.isFile()) {
-                continue;
+        const walkFolder = async (currentPath, relativeDir = '') => {
+            const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
+            for (const entry of entries) {
+                const entryRelativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+                const entryPath = path.join(currentPath, entry.name);
+                if (entry.isDirectory()) {
+                    await walkFolder(entryPath, entryRelativePath);
+                    continue;
+                }
+                if (!entry.isFile()) {
+                    continue;
+                }
+                if (!isArchiveFileExtensionAllowed(categoryInfo, entry.name)) {
+                    continue;
+                }
+                const stats = await fs.promises.stat(entryPath);
+                files.push({
+                    name: entry.name,
+                    path: entryRelativePath,
+                    directory: relativeDir,
+                    url: buildArchiveFileUrl(categoryInfo.key, req.params.folder, entryRelativePath),
+                    size: stats.size,
+                    updated_at: stats.mtime,
+                });
             }
-            const filePath = path.join(folderPath, entry.name);
-            const stats = await fs.promises.stat(filePath);
-            files.push({
-                name: entry.name,
-                url: buildArchiveFileUrl(categoryInfo.key, req.params.folder, entry.name),
-                size: stats.size,
-                updated_at: stats.mtime,
-            });
-        }
-        files.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+        };
+        await walkFolder(folderPath);
+        files.sort((a, b) => (a.path || a.name).localeCompare(b.path || b.name, 'hu'));
         return res.status(200).json({ files });
     } catch (err) {
         console.error('Hiba az archívum fájlok lekérdezésekor:', err);
         return res.status(500).json({ message: 'Nem sikerült betölteni a fájlokat.' });
+    }
+});
+
+app.post('/api/archive/:category/folders/:folder/files/chunk', authenticateToken, ensureArchiveEditPermission, (req, res, next) => {
+    const uploader = uploadArchiveFileChunk.single('chunk');
+    uploader(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ message: err.message || 'Feltöltési hiba.' });
+        }
+        return next();
+    });
+}, async (req, res) => {
+    const categoryInfo = resolveArchiveCategory(req.params.category);
+    if (!categoryInfo) {
+        if (req.file?.path) await safeUnlink(req.file.path);
+        return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
+    }
+    if (categoryInfo.key === 'videok') {
+        if (req.file?.path) await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Videók feltöltéséhez használd az archív videó feltöltő felületet.' });
+    }
+
+    const folderName = normalizeArchiveFolderName(req.params.folder);
+    const uploadId = String(req.body?.uploadId || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+    const chunkIndex = Number.parseInt(req.body?.chunkIndex, 10);
+    const totalChunks = Number.parseInt(req.body?.totalChunks, 10);
+    const totalSize = Number.parseInt(req.body?.totalSize, 10);
+    const relativePath = normalizeArchiveRelativeFilePath(req.body?.relativePath, req.body?.filename);
+
+    if (!req.file || !folderName || !uploadId || !relativePath || !Number.isInteger(chunkIndex) || !Number.isInteger(totalChunks) || totalChunks < 1) {
+        if (req.file?.path) await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Érvénytelen fájldarab feltöltés.' });
+    }
+    if (!isArchiveFileExtensionAllowed(categoryInfo, relativePath)) {
+        await safeUnlink(req.file.path);
+        return res.status(400).json({ message: 'Nem engedélyezett fájltípus.' });
+    }
+
+    const stagingPath = path.join(archiveFileChunkTempDirectory, `${uploadId}.part`);
+    const statePath = path.join(archiveFileChunkTempDirectory, `${uploadId}.json`);
+
+    try {
+        let state = null;
+        try {
+            state = JSON.parse(await fs.promises.readFile(statePath, 'utf8'));
+        } catch (err) {
+            if (err.code !== 'ENOENT') {
+                throw err;
+            }
+        }
+
+        if (!state) {
+            if (chunkIndex !== 0) {
+                await safeUnlink(req.file.path);
+                return res.status(400).json({ message: 'Hiányzik az első fájldarab.' });
+            }
+            state = {
+                uploadId,
+                relativePath,
+                totalChunks,
+                totalSize: Number.isFinite(totalSize) ? totalSize : null,
+                receivedChunks: 0,
+                bytes: 0,
+            };
+            await safeUnlink(stagingPath);
+        }
+
+        if (state.relativePath !== relativePath || state.totalChunks !== totalChunks || state.receivedChunks !== chunkIndex) {
+            await safeUnlink(req.file.path);
+            return res.status(409).json({ message: 'A fájldarabok sorrendje hibás.' });
+        }
+
+        await fs.promises.appendFile(stagingPath, await fs.promises.readFile(req.file.path));
+        state.receivedChunks += 1;
+        state.bytes += req.file.size || 0;
+        await safeUnlink(req.file.path);
+
+        if (state.receivedChunks < totalChunks) {
+            await fs.promises.writeFile(statePath, JSON.stringify(state), 'utf8');
+            return res.status(200).json({ complete: false, receivedChunks: state.receivedChunks });
+        }
+
+        const target = resolveArchiveNestedFileTarget(categoryInfo, folderName, relativePath);
+        if (!target) {
+            await safeUnlink(stagingPath);
+            await safeUnlink(statePath);
+            return res.status(400).json({ message: 'Érvénytelen mappaszerkezet vagy fájlnév.' });
+        }
+
+        await fs.promises.mkdir(target.targetDir, { recursive: true });
+        await fs.promises.rename(stagingPath, target.targetPath);
+        await safeUnlink(statePath);
+
+        return res.status(201).json({
+            complete: true,
+            item: {
+                name: target.filename,
+                path: target.relativePath,
+                directory: path.dirname(target.relativePath) === '.' ? '' : path.dirname(target.relativePath),
+                url: buildArchiveFileUrl(categoryInfo.key, folderName, target.relativePath),
+                size: state.bytes,
+            },
+        });
+    } catch (err) {
+        if (req.file?.path) {
+            await safeUnlink(req.file.path);
+        }
+        console.error('Hiba az archív fájldarab mentésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült feltölteni a fájldarabot.' });
     }
 });
 
@@ -3139,14 +3440,14 @@ app.post('/api/archive/:category/folders/:folder/files', authenticateToken, ensu
     if (categoryInfo.key === 'videok') {
         return res.status(400).json({ message: 'Videók feltöltéséhez használd az archív videó feltöltő felületet.' });
     }
-    const uploader = uploadArchiveFiles.array('files', 20);
+    const uploader = uploadArchiveFiles.array('files', 200);
     uploader(req, res, (err) => {
         if (err) {
             return res.status(400).json({ message: err.message || 'Feltöltési hiba.' });
         }
         return next();
     });
-}, (req, res) => {
+}, async (req, res) => {
     const categoryInfo = resolveArchiveCategory(req.params.category);
     if (!categoryInfo) {
         return res.status(404).json({ message: 'Ismeretlen archívum kategória.' });
@@ -3158,13 +3459,57 @@ app.post('/api/archive/:category/folders/:folder/files', authenticateToken, ensu
     }
 
     const files = Array.isArray(req.files) ? req.files : [];
-    const items = files.map((file) => ({
-        name: file.filename,
-        url: buildArchiveFileUrl(categoryInfo.key, folderName, file.filename),
-        size: file.size,
-    }));
+    const relativePathsRaw = req.body?.relativePaths;
+    const relativePaths = Array.isArray(relativePathsRaw)
+        ? relativePathsRaw
+        : (relativePathsRaw ? [relativePathsRaw] : []);
+    const items = [];
 
-    return res.status(201).json({ message: 'Fájlok feltöltve.', items });
+    try {
+        for (const [index, file] of files.entries()) {
+            const requestedRelativePath = relativePaths[index] || file.originalname || file.filename;
+            const safeRelativePath = normalizeArchiveRelativeFilePath(requestedRelativePath, file.originalname || file.filename);
+            if (!safeRelativePath) {
+                await safeUnlink(file.path);
+                return res.status(400).json({ message: 'Érvénytelen mappaszerkezet vagy fájlnév.' });
+            }
+
+            if (!isArchiveFileExtensionAllowed(categoryInfo, safeRelativePath)) {
+                await safeUnlink(file.path);
+                return res.status(400).json({ message: 'Nem engedélyezett fájltípus.' });
+            }
+
+            const target = resolveArchiveNestedFileTarget(categoryInfo, folderName, safeRelativePath);
+            if (!target) {
+                await safeUnlink(file.path);
+                return res.status(400).json({ message: 'Érvénytelen mappaszerkezet vagy fájlnév.' });
+            }
+
+            await fs.promises.mkdir(target.targetDir, { recursive: true });
+            const currentPath = path.normalize(file.path);
+            if (currentPath !== target.targetPath) {
+                await fs.promises.rename(currentPath, target.targetPath);
+            }
+
+            items.push({
+                name: target.filename,
+                path: target.relativePath,
+                directory: path.dirname(target.relativePath) === '.' ? '' : path.dirname(target.relativePath),
+                url: buildArchiveFileUrl(categoryInfo.key, folderName, target.relativePath),
+                size: file.size,
+            });
+        }
+
+        return res.status(201).json({ message: 'Fájlok feltöltve.', items });
+    } catch (err) {
+        for (const file of files) {
+            if (file?.path) {
+                await safeUnlink(file.path);
+            }
+        }
+        console.error('Hiba az archívum fájlok mentésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült feltölteni a fájlokat.' });
+    }
 });
 
 app.get('/api/archive/videos/tags', authenticateToken, ensureArchiveViewPermission, async (_req, res) => {
@@ -3288,7 +3633,7 @@ app.get('/api/archive/videos/folders/:folder', authenticateToken, ensureArchiveV
             )
             SELECT fv.id, fv.folder_name, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at,
                    fv.thumbnail_filename, fv.has_720p, fv.original_quality, fv.processing_status, fv.processing_error,
-                   COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
+                   COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::jsonb) AS tags
             FROM filtered_videos fv
             LEFT JOIN archive_video_tags avt ON avt.video_id = fv.id
             LEFT JOIN archive_tags t ON avt.tag_id = t.id
@@ -4058,6 +4403,102 @@ app.post('/api/archive/videos/:id/thumbnail/regenerate', authenticateToken, isAd
     }
 });
 
+app.post('/api/videos/:id/view', authenticateToken, ensureClipViewPermission, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videóazonosító.' });
+    }
+
+    const userId = Number.parseInt(req.user?.id, 10);
+
+    try {
+        const client = await db.pool.connect();
+        try {
+            await client.query('BEGIN');
+            const { rows } = await client.query(
+                `UPDATE videos
+                 SET view_count = COALESCE(view_count, 0) + 1
+                 WHERE id = $1
+                 RETURNING COALESCE(view_count, 0)::int AS view_count`,
+                [videoId]
+            );
+
+            if (!rows[0]) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ message: 'A videó nem található.' });
+            }
+
+            await client.query(
+                'INSERT INTO clip_views (video_id, user_id) VALUES ($1, $2)',
+                [videoId, Number.isFinite(userId) ? userId : null]
+            );
+            await client.query('COMMIT');
+            return res.status(200).json({ view_count: rows[0].view_count });
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        console.error('Hiba a klip megtekintés rögzítésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült rögzíteni a megtekintést.' });
+    }
+});
+
+app.post('/api/videos/:id/like', authenticateToken, ensureClipViewPermission, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    const userId = Number.parseInt(req.user?.id, 10);
+
+    if (!Number.isFinite(videoId) || !Number.isFinite(userId)) {
+        return res.status(400).json({ message: 'Érvénytelen videó vagy felhasználó.' });
+    }
+
+    const client = await db.pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { rows: videoRows } = await client.query('SELECT id FROM videos WHERE id = $1', [videoId]);
+        if (!videoRows[0]) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'A videó nem található.' });
+        }
+
+        const { rowCount: deletedCount } = await client.query(
+            'DELETE FROM clip_likes WHERE video_id = $1 AND user_id = $2',
+            [videoId, userId]
+        );
+
+        let liked = false;
+        if (deletedCount === 0) {
+            await client.query(
+                'INSERT INTO clip_likes (video_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                [videoId, userId]
+            );
+            liked = true;
+        }
+
+        const { rows: countRows } = await client.query(
+            'SELECT COUNT(*)::int AS like_count FROM clip_likes WHERE video_id = $1',
+            [videoId]
+        );
+
+        await client.query('COMMIT');
+
+        return res.status(200).json({
+            liked,
+            like_count: countRows[0]?.like_count || 0,
+        });
+    } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error('Hiba a klip like rögzítésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült frissíteni a like-ot.' });
+    } finally {
+        client.release();
+    }
+});
+
 app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, res) => {
     try {
         const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
@@ -4073,7 +4514,23 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
         const tagIds = Array.from(new Set(tagFilters
             .map((value) => Number.parseInt(value, 10))
             .filter((value) => Number.isInteger(value))));
-        const sortOrder = req.query.sort === 'oldest' ? 'ASC' : 'DESC';
+        const sortMode = ['oldest', 'views', 'likes'].includes(req.query.sort) ? req.query.sort : 'newest';
+        const filteredOrderClause = sortMode === 'oldest'
+            ? 'videos.content_created_at ASC, videos.id ASC'
+            : sortMode === 'views'
+                ? 'COALESCE(videos.view_count, 0) DESC, videos.content_created_at DESC, videos.id DESC'
+                : sortMode === 'likes'
+                    ? `(SELECT COUNT(*) FROM clip_likes WHERE clip_likes.video_id = videos.id) DESC,
+                       videos.content_created_at DESC,
+                       videos.id DESC`
+                    : 'videos.content_created_at DESC, videos.id DESC';
+        const responseOrderClause = sortMode === 'oldest'
+            ? 'fv.content_created_at ASC, fv.id ASC'
+            : sortMode === 'views'
+                ? 'COALESCE(fv.view_count, 0) DESC, fv.content_created_at DESC, fv.id DESC'
+                : sortMode === 'likes'
+                    ? 'COUNT(DISTINCT cl.user_id) DESC, fv.content_created_at DESC, fv.id DESC'
+                    : 'fv.content_created_at DESC, fv.id DESC';
 
         const filters = [];
         const params = [];
@@ -4105,6 +4562,7 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
         const offset = (currentPage - 1) * limit;
 
         const dataParams = params.slice();
+        const currentUserParamIndex = dataParams.push(req.user.id);
         dataParams.push(limit, offset);
 
         const dataQuery = `
@@ -4113,18 +4571,22 @@ app.get('/api/videos', authenticateToken, ensureClipViewPermission, async (req, 
                 FROM videos
                 LEFT JOIN users ON videos.uploader_id = users.id
                 ${whereClause}
-                ORDER BY videos.content_created_at ${sortOrder}, videos.id ${sortOrder}
+                ORDER BY ${filteredOrderClause}
                 LIMIT $${dataParams.length - 1}
                 OFFSET $${dataParams.length}
             )
             SELECT fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at,
                    fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p, fv.original_quality,
-                   COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::json) AS tags
+                   COALESCE(fv.view_count, 0)::int AS view_count,
+                   COUNT(DISTINCT cl.user_id)::int AS like_count,
+                   COALESCE(BOOL_OR(cl.user_id = $${currentUserParamIndex}), false) AS liked_by_me,
+                   COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name, 'color', COALESCE(t.color, '${DEFAULT_TAG_COLOR}'))) FILTER (WHERE t.id IS NOT NULL), '[]'::jsonb) AS tags
             FROM filtered_videos fv
             LEFT JOIN video_tags vt ON vt.video_id = fv.id
             LEFT JOIN tags t ON vt.tag_id = t.id
-            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p, fv.original_quality
-            ORDER BY fv.content_created_at ${sortOrder}, fv.id ${sortOrder};
+            LEFT JOIN clip_likes cl ON cl.video_id = fv.id
+            GROUP BY fv.id, fv.filename, fv.original_name, fv.uploader_id, fv.uploaded_at, fv.username, fv.content_created_at, fv.thumbnail_filename, fv.has_720p, fv.has_1080p, fv.has_1440p, fv.original_quality, fv.view_count
+            ORDER BY ${responseOrderClause};
         `;
 
         const { rows } = await db.query(dataQuery, dataParams);
@@ -4323,6 +4785,136 @@ app.get('/api/admin/clips', authenticateToken, isAdmin, async (req, res) => {
     } catch (err) {
         console.error('Hiba az admin klip lista lekérdezésekor:', err);
         return res.status(500).json({ message: 'Nem sikerült lekérdezni a klipeket.' });
+    }
+});
+
+app.get('/api/admin/clip-analytics', authenticateToken, isAdmin, async (req, res) => {
+    const now = new Date();
+    const requestedYear = Number.parseInt(req.query.year, 10);
+    const requestedMonth = Number.parseInt(req.query.month, 10);
+    const period = req.query.period === 'yearly' ? 'yearly' : 'monthly';
+    const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
+        ? requestedYear
+        : now.getFullYear();
+    const month = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12
+        ? requestedMonth
+        : now.getMonth() + 1;
+
+    const pad = (value) => String(value).padStart(2, '0');
+    const start = period === 'yearly'
+        ? `${year}-01-01T00:00:00.000Z`
+        : `${year}-${pad(month)}-01T00:00:00.000Z`;
+    const endYear = period === 'yearly' ? year + 1 : month === 12 ? year + 1 : year;
+    const endMonth = period === 'yearly' ? 1 : month === 12 ? 1 : month + 1;
+    const end = period === 'yearly'
+        ? `${year + 1}-01-01T00:00:00.000Z`
+        : `${endYear}-${pad(endMonth)}-01T00:00:00.000Z`;
+    const bucketUnit = period === 'yearly' ? 'month' : 'day';
+    const bucketStep = period === 'yearly' ? '1 month' : '1 day';
+
+    try {
+        const [timelineResult, topUsersResult, topVideosResult, userVideosResult, recentViewsResult, totalsResult] = await Promise.all([
+            db.query(
+                `WITH buckets AS (
+                   SELECT generate_series($1::timestamptz, $2::timestamptz - $3::interval, $3::interval) AS bucket
+                 )
+                 SELECT buckets.bucket AS period_start,
+                        COUNT(clip_views.id)::int AS views
+                 FROM buckets
+                 LEFT JOIN clip_views
+                   ON date_trunc('${bucketUnit}', clip_views.viewed_at) = buckets.bucket
+                  AND clip_views.viewed_at >= $1::timestamptz
+                  AND clip_views.viewed_at < $2::timestamptz
+                 GROUP BY buckets.bucket
+                 ORDER BY buckets.bucket`,
+                [start, end, bucketStep]
+            ),
+            db.query(
+                `SELECT COALESCE(users.id, 0)::int AS user_id,
+                        COALESCE(users.username, 'Torolt felhasznalo') AS username,
+                        COUNT(*)::int AS views,
+                        COUNT(DISTINCT clip_views.video_id)::int AS unique_clips
+                 FROM clip_views
+                 LEFT JOIN users ON users.id = clip_views.user_id
+                 WHERE clip_views.viewed_at >= $1::timestamptz
+                   AND clip_views.viewed_at < $2::timestamptz
+                 GROUP BY users.id, users.username
+                 ORDER BY views DESC, unique_clips DESC, username ASC
+                 LIMIT 25`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT videos.id::int AS video_id,
+                        COALESCE(videos.original_name, videos.filename, 'Ismeretlen klip') AS title,
+                        COUNT(*)::int AS views,
+                        COUNT(DISTINCT clip_views.user_id)::int AS unique_users
+                 FROM clip_views
+                 JOIN videos ON videos.id = clip_views.video_id
+                 WHERE clip_views.viewed_at >= $1::timestamptz
+                   AND clip_views.viewed_at < $2::timestamptz
+                 GROUP BY videos.id, videos.original_name, videos.filename
+                 ORDER BY views DESC, unique_users DESC, title ASC
+                 LIMIT 25`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT COALESCE(users.id, 0)::int AS user_id,
+                        COALESCE(users.username, 'Torolt felhasznalo') AS username,
+                        videos.id::int AS video_id,
+                        COALESCE(videos.original_name, videos.filename, 'Ismeretlen klip') AS title,
+                        COUNT(*)::int AS views,
+                        MAX(clip_views.viewed_at) AS last_viewed_at
+                 FROM clip_views
+                 LEFT JOIN users ON users.id = clip_views.user_id
+                 JOIN videos ON videos.id = clip_views.video_id
+                 WHERE clip_views.viewed_at >= $1::timestamptz
+                   AND clip_views.viewed_at < $2::timestamptz
+                 GROUP BY users.id, users.username, videos.id, videos.original_name, videos.filename
+                 ORDER BY username ASC, views DESC, last_viewed_at DESC
+                 LIMIT 200`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT clip_views.id::int AS id,
+                        clip_views.viewed_at,
+                        COALESCE(users.username, 'Torolt felhasznalo') AS username,
+                        videos.id::int AS video_id,
+                        COALESCE(videos.original_name, videos.filename, 'Ismeretlen klip') AS title
+                 FROM clip_views
+                 LEFT JOIN users ON users.id = clip_views.user_id
+                 JOIN videos ON videos.id = clip_views.video_id
+                 WHERE clip_views.viewed_at >= $1::timestamptz
+                   AND clip_views.viewed_at < $2::timestamptz
+                 ORDER BY clip_views.viewed_at DESC
+                 LIMIT 100`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT COUNT(*)::int AS total_views,
+                        COUNT(DISTINCT user_id)::int AS total_users,
+                        COUNT(DISTINCT video_id)::int AS total_clips
+                 FROM clip_views
+                 WHERE viewed_at >= $1::timestamptz
+                   AND viewed_at < $2::timestamptz`,
+                [start, end]
+            ),
+        ]);
+
+        return res.status(200).json({
+            period,
+            year,
+            month,
+            range: { start, end },
+            totals: totalsResult.rows[0] || { total_views: 0, total_users: 0, total_clips: 0 },
+            timeline: timelineResult.rows || [],
+            topUsers: topUsersResult.rows || [],
+            topVideos: topVideosResult.rows || [],
+            userVideos: userVideosResult.rows || [],
+            recentViews: recentViewsResult.rows || [],
+        });
+    } catch (err) {
+        console.error('Hiba a klip statisztika lekérdezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült lekérdezni a klip statisztikát.' });
     }
 });
 
@@ -4575,7 +5167,7 @@ app.get(PUBLIC_VIDEO_HASHES_ENDPOINT, async (_req, res) => {
     }
 });
 
-app.get('/api/admin/generate-missing-thumbnails', async (_req, res) => {
+app.get('/api/admin/generate-missing-thumbnails', authenticateToken, isAdmin, async (_req, res) => {
     try {
         const { rows } = await db.query('SELECT id, filename FROM videos WHERE thumbnail_filename IS NULL');
         const results = [];

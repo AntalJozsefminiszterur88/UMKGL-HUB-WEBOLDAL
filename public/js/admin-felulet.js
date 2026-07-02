@@ -1,785 +1,3 @@
-
-      const SESSION_KEYS = {
-        token: "token",
-        username: "username",
-        isAdmin: "isAdmin",
-        canTransfer: "canTransfer",
-        canViewClips: "canViewClips",
-        profilePictureFilename: "profilePictureFilename",
-      };
-
-      function getStoredToken() {
-        return localStorage.getItem(SESSION_KEYS.token);
-      }
-
-      function isUserLoggedIn() {
-        return !!getStoredToken();
-      }
-
-      function isAdminUser() {
-        return localStorage.getItem(SESSION_KEYS.isAdmin) === "true";
-      }
-
-      function buildAuthHeaders() {
-        const token = getStoredToken();
-        if (!token) {
-          return {};
-        }
-        return {
-          Authorization: `Bearer ${token}`,
-        };
-      }
-
-      function setUsersStatus(statusEl, message, isError = false) {
-        if (!statusEl) {
-          return;
-        }
-        statusEl.textContent = message;
-        statusEl.classList.toggle("users-window__status--error", isError);
-      }
-
-      function createPermissionToggle(name, checked, labelText) {
-        const label = document.createElement("label");
-        label.className = "permission-toggle";
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.name = name;
-        checkbox.checked = checked;
-
-        label.appendChild(checkbox);
-        label.append(` ${labelText}`);
-
-        return { label, checkbox };
-      }
-
-      function renderUserList(users, container, saveButton) {
-        if (!container) {
-          return;
-        }
-
-        container.innerHTML = "";
-
-        if (!Array.isArray(users) || users.length === 0) {
-          container.textContent = "Nincs megjeleníthető felhasználó.";
-          if (saveButton) {
-            saveButton.disabled = true;
-          }
-          return;
-        }
-
-        const table = document.createElement("table");
-        table.className = "user-table";
-
-        const thead = document.createElement("thead");
-        thead.innerHTML = `
-          <tr>
-            <th>Felhasználónév</th>
-            <th>Feltöltési jog</th>
-            <th>P2P jog</th>
-            <th>Klipnézési jog</th>
-            <th>Archívum megtekintés</th>
-            <th>Archívum szerkesztés</th>
-            <th>Discord 2 jog</th>
-            <th>Max fájlméret (MB)</th>
-            <th>Videólimit</th>
-            <th>Feltöltött videók</th>
-          </tr>
-        `;
-        table.appendChild(thead);
-
-        const tbody = document.createElement("tbody");
-
-        users.forEach((user) => {
-          const row = document.createElement("tr");
-          row.dataset.userId = user.id;
-
-          const usernameCell = document.createElement("td");
-          usernameCell.textContent = user.username;
-          row.appendChild(usernameCell);
-
-          const uploadPermission = createPermissionToggle("canUpload", Number(user.can_upload) === 1, "Feltölthet");
-          const uploadCell = document.createElement("td");
-          uploadCell.appendChild(uploadPermission.label);
-          row.appendChild(uploadCell);
-
-          const transferPermission = createPermissionToggle("canTransfer", Number(user.can_transfer) === 1, "P2P");
-          const transferCell = document.createElement("td");
-          transferCell.appendChild(transferPermission.label);
-          row.appendChild(transferCell);
-
-          const clipPermission = createPermissionToggle("canViewClips", Number(user.can_view_clips) === 1, "Klipek");
-          const clipCell = document.createElement("td");
-          clipCell.appendChild(clipPermission.label);
-          row.appendChild(clipCell);
-
-          const canEditArchive = Number(user.can_edit_archive) === 1;
-          const archiveViewPermission = createPermissionToggle(
-            "canViewArchive",
-            Number(user.can_view_archive) === 1 || canEditArchive,
-            "Archívum"
-          );
-          const archiveViewCell = document.createElement("td");
-          archiveViewCell.appendChild(archiveViewPermission.label);
-          row.appendChild(archiveViewCell);
-
-          const archiveEditPermission = createPermissionToggle("canEditArchive", canEditArchive, "Szerkesztés");
-          const archiveEditCell = document.createElement("td");
-          archiveEditCell.appendChild(archiveEditPermission.label);
-          row.appendChild(archiveEditCell);
-
-          const discordPermission = createPermissionToggle(
-            "canUseDiscord",
-            Number(user.can_use_discord) === 1,
-            "Discord 2"
-          );
-          const discordCell = document.createElement("td");
-          discordCell.appendChild(discordPermission.label);
-          row.appendChild(discordCell);
-
-          archiveViewPermission.checkbox.addEventListener("change", () => {
-            if (!archiveViewPermission.checkbox.checked) {
-              archiveEditPermission.checkbox.checked = false;
-            }
-          });
-
-          archiveEditPermission.checkbox.addEventListener("change", () => {
-            if (archiveEditPermission.checkbox.checked) {
-              archiveViewPermission.checkbox.checked = true;
-            }
-          });
-
-          const maxFileSizeCell = document.createElement("td");
-          const maxFileSizeInput = document.createElement("input");
-          maxFileSizeInput.type = "number";
-          maxFileSizeInput.min = "1";
-          maxFileSizeInput.required = true;
-          maxFileSizeInput.name = "maxFileSizeMb";
-          maxFileSizeInput.value = Number.parseInt(user.max_file_size_mb, 10) || "";
-          maxFileSizeCell.appendChild(maxFileSizeInput);
-          row.appendChild(maxFileSizeCell);
-
-          const maxVideosCell = document.createElement("td");
-          const maxVideosInput = document.createElement("input");
-          maxVideosInput.type = "number";
-          maxVideosInput.min = "1";
-          maxVideosInput.required = true;
-          maxVideosInput.name = "maxVideos";
-          maxVideosInput.value = Number.parseInt(user.max_videos, 10) || "";
-          maxVideosCell.appendChild(maxVideosInput);
-          row.appendChild(maxVideosCell);
-
-          const uploadCountCell = document.createElement("td");
-          uploadCountCell.textContent = Number.parseInt(user.upload_count, 10) || 0;
-          row.appendChild(uploadCountCell);
-
-          tbody.appendChild(row);
-        });
-
-        table.appendChild(tbody);
-        container.appendChild(table);
-
-        if (saveButton) {
-          saveButton.disabled = false;
-        }
-      }
-
-      async function fetchUsers() {
-        const response = await fetch("/api/users", {
-          method: "GET",
-          headers: buildAuthHeaders(),
-        });
-        const data = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          throw new Error(data?.message || "Nem sikerült betölteni a felhasználókat.");
-        }
-
-        return Array.isArray(data) ? data : [];
-      }
-
-      function collectPermissionUpdates(container) {
-        const tableBody = container?.querySelector("tbody");
-        if (!tableBody) {
-          return { updates: [], invalidEntries: [] };
-        }
-
-        const invalidEntries = [];
-        const updates = Array.from(tableBody.querySelectorAll("tr"))
-          .map((row) => {
-            const uploadCheckbox = row.querySelector('input[name="canUpload"]');
-            const transferCheckbox = row.querySelector('input[name="canTransfer"]');
-            const viewClipsCheckbox = row.querySelector('input[name="canViewClips"]');
-            const viewArchiveCheckbox = row.querySelector('input[name="canViewArchive"]');
-            const editArchiveCheckbox = row.querySelector('input[name="canEditArchive"]');
-            const discordCheckbox = row.querySelector('input[name="canUseDiscord"]');
-            const maxFileSizeInput = row.querySelector('input[name="maxFileSizeMb"]');
-            const maxVideosInput = row.querySelector('input[name="maxVideos"]');
-            const userId = Number.parseInt(row.dataset.userId, 10);
-
-            if (
-              !uploadCheckbox ||
-              !transferCheckbox ||
-              !viewClipsCheckbox ||
-              !viewArchiveCheckbox ||
-              !editArchiveCheckbox ||
-              !discordCheckbox ||
-              !maxFileSizeInput ||
-              !maxVideosInput ||
-              !Number.isFinite(userId)
-            ) {
-              return null;
-            }
-
-            const maxFileSizeMb = Number.parseInt(maxFileSizeInput.value, 10);
-            const maxVideos = Number.parseInt(maxVideosInput.value, 10);
-
-            if (maxFileSizeMb <= 0 || maxVideos <= 0 || !Number.isFinite(maxFileSizeMb) || !Number.isFinite(maxVideos)) {
-              invalidEntries.push(row.querySelector("td")?.textContent.trim() || `ID ${userId}`);
-              return null;
-            }
-
-            const canEditArchive = editArchiveCheckbox.checked;
-
-            return {
-              userId,
-              canUpload: uploadCheckbox.checked,
-              canTransfer: transferCheckbox.checked,
-              canViewClips: viewClipsCheckbox.checked,
-              canViewArchive: viewArchiveCheckbox.checked || canEditArchive,
-              canEditArchive,
-              canUseDiscord: discordCheckbox.checked,
-              maxFileSizeMb,
-              maxVideos,
-            };
-          })
-          .filter(Boolean);
-
-        return { updates, invalidEntries };
-      }
-
-      async function updateUserPermissions(updates) {
-        const response = await fetch("/api/users/permissions/batch-update", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...buildAuthHeaders(),
-          },
-          body: JSON.stringify(updates),
-        });
-        const data = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          throw new Error(data?.message || "Nem sikerült menteni a jogosultságokat.");
-        }
-
-        return data;
-      }
-
-      function formatFileSize(size) {
-        if (!Number.isFinite(size)) {
-          return "Ismeretlen";
-        }
-        if (size >= 1024 * 1024) {
-          return `${(size / (1024 * 1024)).toFixed(2)} MB`;
-        }
-        if (size >= 1024) {
-          return `${(size / 1024).toFixed(2)} KB`;
-        }
-        return `${size} B`;
-      }
-
-      function formatDateTime(value) {
-        if (!value) {
-          return "Ismeretlen dátum";
-        }
-
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-          return "Ismeretlen dátum";
-        }
-
-        return date.toLocaleString("hu-HU", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      }
-
-      function parseDateToTimestamp(value) {
-        const date = new Date(value);
-        const timestamp = date.getTime();
-        return Number.isFinite(timestamp) ? timestamp : 0;
-      }
-
-      function getSortableValue(clip, key) {
-        switch (key) {
-          case "id":
-            return Number(clip.id) || 0;
-          case "original_name":
-            return (clip.original_name || clip.filename || "").toString().toLowerCase();
-          case "sizeBytes":
-            return Number(clip.sizeBytes) || 0;
-          case "uploaded_at":
-          case "content_created_at":
-            return parseDateToTimestamp(clip[key]);
-          default:
-            return 0;
-        }
-      }
-
-      function sortClips(items, sortState) {
-        if (!sortState?.key) {
-          return [...items];
-        }
-
-        const direction = sortState.direction === "asc" ? 1 : -1;
-
-        return [...items].sort((a, b) => {
-          const aValue = getSortableValue(a, sortState.key);
-          const bValue = getSortableValue(b, sortState.key);
-
-          if (aValue < bValue) {
-            return -1 * direction;
-          }
-          if (aValue > bValue) {
-            return 1 * direction;
-          }
-          return 0;
-        });
-      }
-
-      async function fetchAdminClips(variant) {
-        const params = new URLSearchParams();
-        if (variant) {
-          params.set("type", variant);
-        }
-
-        const url = params.toString() ? `/api/admin/clips?${params.toString()}` : "/api/admin/clips";
-        const response = await fetch(url, { headers: buildAuthHeaders() });
-        const data = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          const message = data && data.message ? data.message : "Nem sikerült lekérdezni a klipeket.";
-          throw new Error(message);
-        }
-
-        const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
-        const total = Number.isFinite(data?.total) ? data.total : items.length;
-
-        return { items, total };
-      }
-
-      async function handleClipDelete(clipId, rowElement, button, clipName, statusEl, onDelete) {
-        if (!Number.isFinite(clipId)) {
-          return;
-        }
-
-        const confirmed = window.confirm(`Biztosan törlöd a(z) "${clipName || "klip"}" elemet? A törlés végleges.`);
-        if (!confirmed) {
-          return;
-        }
-
-        if (button) {
-          button.disabled = true;
-        }
-
-        try {
-          const response = await fetch(`/api/videos/${clipId}`, {
-            method: "DELETE",
-            headers: buildAuthHeaders(),
-          });
-
-          const data = await response.json().catch(() => null);
-          if (!response.ok) {
-            const message = data && data.message ? data.message : "Nem sikerült törölni a klipet.";
-            throw new Error(message);
-          }
-
-          if (rowElement && rowElement.parentElement) {
-            rowElement.parentElement.removeChild(rowElement);
-          }
-
-          if (typeof onDelete === "function") {
-            onDelete(clipId);
-          }
-
-          if (statusEl) {
-            statusEl.textContent = data?.message || "A klip törlése sikeres volt.";
-          }
-        } catch (error) {
-          console.error("Klip törlési hiba:", error);
-          if (statusEl) {
-            statusEl.textContent = error.message || "Nem sikerült törölni a klipet.";
-          }
-        } finally {
-          if (button) {
-            button.disabled = false;
-          }
-        }
-      }
-
-      async function handleClipTitleEdit(clip, nameTextEl, statusEl) {
-        const currentTitle = clip.original_name || "Ismeretlen";
-        const updatedTitle = window.prompt("Add meg az új klipcímet:", currentTitle);
-
-        if (updatedTitle === null) {
-          return;
-        }
-
-        const normalizedTitle = updatedTitle.trim();
-        if (!normalizedTitle || normalizedTitle === currentTitle) {
-          return;
-        }
-
-        try {
-          const response = await fetch(`/api/videos/${clip.id}/title`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              ...buildAuthHeaders(),
-            },
-            body: JSON.stringify({ title: normalizedTitle }),
-          });
-
-          const data = await response.json().catch(() => null);
-          if (!response.ok) {
-            const message = data?.message || "Nem sikerült frissíteni a klip címét.";
-            throw new Error(message);
-          }
-
-          const newTitle = data?.original_name || normalizedTitle;
-          clip.original_name = newTitle;
-          if (nameTextEl) {
-            nameTextEl.textContent = newTitle;
-          }
-          if (statusEl) {
-            statusEl.textContent = data?.message || "A klip címe frissült.";
-          }
-        } catch (error) {
-          console.error("Klip cím módosítási hiba:", error);
-          if (statusEl) {
-            statusEl.textContent = error.message || "Nem sikerült frissíteni a klip címét.";
-          }
-        }
-      }
-
-      function renderClipTable(statusEl, tableContainer, items, countEl, isAdmin, sortState, onSortChange, onDelete) {
-        if (!tableContainer) {
-          return;
-        }
-
-        tableContainer.innerHTML = "";
-
-        const sortedItems = Array.isArray(items) ? sortClips(items, sortState) : [];
-
-        if (!sortedItems.length) {
-          const empty = document.createElement("p");
-          empty.className = "clip-window__status";
-          empty.textContent = "Nincs megjeleníthető klip.";
-          tableContainer.appendChild(empty);
-          if (statusEl) {
-            statusEl.textContent = "Nincs megjeleníthető klip.";
-          }
-          if (countEl) {
-            countEl.textContent = "(0 találat)";
-          }
-          return;
-        }
-
-        if (statusEl) {
-          statusEl.textContent = "";
-        }
-
-        const table = document.createElement("table");
-        table.className = "clip-window__table";
-
-        const sortableColumns = new Set(["id", "original_name", "sizeBytes", "uploaded_at", "content_created_at"]);
-
-        const thead = document.createElement("thead");
-        const headRow = document.createElement("tr");
-        const columns = [
-          { key: "id", label: "Azonosító" },
-          { key: "original_name", label: "Fájlnév" },
-          { key: "sizeBytes", label: "Méret" },
-          { key: "uploaded_at", label: "Feltöltve" },
-          { key: "content_created_at", label: "Létrehozva" },
-          { key: "extra", label: "Egyéb" },
-          { key: "actions", label: "Művelet" },
-        ];
-
-        columns.forEach((column) => {
-          const th = document.createElement("th");
-          th.textContent = column.label;
-
-          if (sortableColumns.has(column.key) && typeof onSortChange === "function") {
-            th.classList.add("clip-window__sortable");
-            th.dataset.sortKey = column.key;
-
-            const indicator = document.createElement("span");
-            indicator.className = "clip-window__sort-indicator";
-            const isActive = sortState?.key === column.key;
-            indicator.textContent = isActive ? (sortState.direction === "asc" ? "▲" : "▼") : "↕";
-
-            th.appendChild(indicator);
-            th.addEventListener("click", () => onSortChange(column.key));
-          }
-
-          headRow.appendChild(th);
-        });
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-
-        const tbody = document.createElement("tbody");
-        sortedItems.forEach((clip) => {
-          const row = document.createElement("tr");
-
-          const idCell = document.createElement("td");
-          idCell.textContent = clip.id ?? "-";
-          row.appendChild(idCell);
-
-          const nameCell = document.createElement("td");
-          nameCell.className = "clip-window__name";
-
-          const nameText = document.createElement("span");
-          nameText.className = "clip-window__name-text";
-          nameText.textContent = clip.original_name || "Ismeretlen";
-          nameCell.appendChild(nameText);
-
-          if (isAdmin) {
-            const editBtn = document.createElement("button");
-            editBtn.type = "button";
-            editBtn.className = "clip-window__edit";
-            editBtn.title = "Klip címének szerkesztése";
-            editBtn.textContent = "✏️";
-            editBtn.addEventListener("click", () => {
-              handleClipTitleEdit(clip, nameText, statusEl);
-            });
-            nameCell.appendChild(editBtn);
-          }
-
-          row.appendChild(nameCell);
-
-          const sizeCell = document.createElement("td");
-          sizeCell.textContent = formatFileSize(Number(clip.sizeBytes));
-          row.appendChild(sizeCell);
-
-          const uploadedCell = document.createElement("td");
-          uploadedCell.textContent = formatDateTime(clip.uploaded_at);
-          row.appendChild(uploadedCell);
-
-          const createdCell = document.createElement("td");
-          createdCell.textContent = formatDateTime(clip.content_created_at);
-          row.appendChild(createdCell);
-
-          const extraCell = document.createElement("td");
-          const extraParts = [];
-          if (clip.uploader) {
-            extraParts.push(`Feltöltő: ${clip.uploader}`);
-          }
-          if (clip.category === "720p") {
-            extraParts.push("Verzió: 720p");
-          } else if (clip.category === "other") {
-            extraParts.push("Típus: Egyéb fájl");
-          } else {
-            extraParts.push("Verzió: Eredeti");
-          }
-          extraCell.textContent = extraParts.length ? extraParts.join(" • ") : "-";
-          row.appendChild(extraCell);
-
-          const actionCell = document.createElement("td");
-          const deleteBtn = document.createElement("button");
-          deleteBtn.type = "button";
-          deleteBtn.textContent = "Törlés";
-          deleteBtn.className = "clip-window__delete";
-          deleteBtn.addEventListener("click", () => {
-            handleClipDelete(clip.id, row, deleteBtn, clip.original_name, statusEl, onDelete);
-          });
-          actionCell.appendChild(deleteBtn);
-          row.appendChild(actionCell);
-
-          tbody.appendChild(row);
-        });
-
-        table.appendChild(tbody);
-        tableContainer.appendChild(table);
-
-        if (countEl) {
-          countEl.textContent = `(${items.length} találat)`;
-        }
-      }
-
-      function formatHungarianDate(value) {
-        if (!value) {
-          return "Ismeretlen";
-        }
-
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-          return "Ismeretlen";
-        }
-
-        return date.toLocaleString("hu-HU", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      }
-
-      async function fetchProcessingStatus() {
-        const response = await fetch("/api/admin/processing-status", {
-          headers: buildAuthHeaders(),
-        });
-
-        const data = await response.json().catch(() => null);
-        if (!response.ok) {
-          const message = data?.message || "Nem sikerült lekérdezni a feldolgozási állapotot.";
-          throw new Error(message);
-        }
-
-        return {
-          isProcessing: Boolean(data?.isProcessing),
-          currentTask: data?.currentTask || null,
-          pending: Array.isArray(data?.pending) ? data.pending : [],
-          queues: data?.queues || null,
-        };
-      }
-
-      async function readApiResponse(response) {
-        const contentType = response.headers.get("content-type") || "";
-        const rawText = await response.text().catch(() => "");
-        let parsedBody = null;
-
-        if (rawText) {
-          try {
-            parsedBody = JSON.parse(rawText);
-          } catch (_err) {
-            parsedBody = null;
-          }
-        }
-
-        return {
-          contentType,
-          rawText,
-          parsedBody,
-        };
-      }
-
-      async function fetchRadnaiStatus() {
-        const response = await fetch("/api/admin/radnai-status", {
-          headers: buildAuthHeaders(),
-        });
-
-        const responseInfo = await readApiResponse(response);
-        const data = responseInfo.parsedBody || {};
-        if (!response.ok) {
-          const message = data?.message || `Nem sikerult lekerdezni a Radnai figyelo allapotat (HTTP ${response.status}).`;
-          throw new Error(message);
-        }
-
-        return {
-          httpStatus: response.status,
-          rawResponse: responseInfo.rawText,
-          monitorEnabled: data?.monitorEnabled !== false,
-          status: data?.status || "unknown",
-          lastCheck: data?.lastCheck || null,
-          hash: data?.hash || null,
-          failureReason: data?.failureReason || null,
-          consecutiveFailures: Number.isFinite(Number(data?.consecutiveFailures)) ? Number(data.consecutiveFailures) : 0,
-          outageActive: data?.outageActive === true,
-          lastOutageAlertAt: data?.lastOutageAlertAt || null,
-        };
-      }
-
-      function renderProcessingCard(container, item, titlePrefix) {
-        if (!container) {
-          return;
-        }
-
-        container.innerHTML = "";
-
-        if (!item) {
-          const empty = document.createElement("p");
-          empty.className = "process-window__empty";
-          empty.textContent = "Jelenleg nincs aktív feldolgozási feladat.";
-          container.appendChild(empty);
-          return;
-        }
-
-        const title = document.createElement("h3");
-        title.textContent = `${titlePrefix || "Fájl"}: ${item.original_name || item.filename || "Ismeretlen"}`;
-        container.appendChild(title);
-
-        const sourceMeta = document.createElement("p");
-        sourceMeta.className = "process-window__meta";
-        sourceMeta.textContent = `Típus: ${item.source_type === "archive" ? "Archív videó" : "Klip"}`;
-        container.appendChild(sourceMeta);
-
-        if (item.folder_name) {
-          const folderMeta = document.createElement("p");
-          folderMeta.className = "process-window__meta";
-          folderMeta.textContent = `Mappa: ${item.folder_name}`;
-          container.appendChild(folderMeta);
-        }
-
-        const fileMeta = document.createElement("p");
-        fileMeta.className = "process-window__meta";
-        fileMeta.textContent = `Elérési út: ${item.filename || "-"}`;
-        container.appendChild(fileMeta);
-
-        const timeMeta = document.createElement("p");
-        timeMeta.className = "process-window__meta";
-
-
-        timeMeta.textContent = `Feltöltve: ${formatHungarianDate(item.uploaded_at)}`;
-        container.appendChild(timeMeta);
-
-        const statusMeta = document.createElement("p");
-        statusMeta.className = "process-window__meta";
-        statusMeta.textContent = `Státusz: ${item.processing_status || "ismeretlen"}`;
-        container.appendChild(statusMeta);
-      }
-
-      function formatProcessingSummary(data) {
-        const queues = data?.queues || {};
-        const clipPending = Array.isArray(queues.clips?.pending) ? queues.clips.pending.length : 0;
-        const archivePending = Array.isArray(queues.archive?.pending) ? queues.archive.pending.length : 0;
-
-        if (data?.currentTask) {
-          const sourceLabel = data.currentTask.source_type === "archive" ? "archív videó" : "klip";
-          return `Aktív feldolgozás: ${sourceLabel}. Várakozik: ${clipPending} klip, ${archivePending} archív videó.`;
-        }
-
-        return `Jelenleg nincs aktív feldolgozás. Várakozik: ${clipPending} klip, ${archivePending} archív videó.`;
-      }
-
-      function renderQueue(doc, queueListEl, items) {
-        if (!queueListEl) {
-          return;
-        }
-
-        queueListEl.innerHTML = "";
-
-        if (!items || !items.length) {
-          const empty = doc.createElement("li");
-          empty.className = "process-window__empty";
-          empty.textContent = "Nincs várakozó fájl a sorban.";
-          queueListEl.appendChild(empty);
-          return;
-        }
-
-        items.forEach((item, index) => {
-          const li = doc.createElement("li");
-          li.className = "process-window__card";
-          renderProcessingCard(li, item, `#${index + 1}`);
-          queueListEl.appendChild(li);
-        });
-      }
-
       document.addEventListener("DOMContentLoaded", () => {
         console.log("Admin JS loaded: metadata verzió");
         const statusEl = document.getElementById("clipWindowStatus");
@@ -801,17 +19,26 @@
         const radnaiHashDisplay = document.getElementById("radnaiHashDisplay");
         const radnaiAlertMessage = document.getElementById("radnaiAlertMessage");
         const radnaiDebugLog = document.getElementById("radnaiDebugLog");
-        const userListContainer = document.getElementById("userListContainer");
-        const usersStatus = document.getElementById("usersStatus");
-        const refreshUsersBtn = document.getElementById("refreshUsersBtn");
-        const savePermissionsBtn = document.getElementById("savePermissionsBtn");
+        const clipAnalyticsRefreshBtn = document.getElementById("clipAnalyticsRefreshBtn");
+        const clipAnalyticsPeriod = document.getElementById("clipAnalyticsPeriod");
+        const clipAnalyticsYear = document.getElementById("clipAnalyticsYear");
+        const clipAnalyticsMonth = document.getElementById("clipAnalyticsMonth");
+        const clipAnalyticsMonthWrap = document.getElementById("clipAnalyticsMonthWrap");
+        const clipAnalyticsStatus = document.getElementById("clipAnalyticsStatus");
+        const clipAnalyticsChart = document.getElementById("clipAnalyticsChart");
+        const analyticsTotalViews = document.getElementById("analyticsTotalViews");
+        const analyticsTotalUsers = document.getElementById("analyticsTotalUsers");
+        const analyticsTotalClips = document.getElementById("analyticsTotalClips");
+        const analyticsTopUsers = document.getElementById("analyticsTopUsers");
+        const analyticsTopVideos = document.getElementById("analyticsTopVideos");
+        const analyticsUserVideos = document.getElementById("analyticsUserVideos");
+        const analyticsRecentViews = document.getElementById("analyticsRecentViews");
         const tabs = document.querySelectorAll(".manager__tab[data-target]");
         const sections = document.querySelectorAll(".manager__section");
         const VARIANT_STORAGE_KEY = "clipWindowVariant";
         const VALID_VARIANTS = ["original", "720p", "other"];
         const adminUser = isAdminUser();
         let clipsLoaded = false;
-        let usersLoaded = false;
         let currentClips = [];
         let currentSort = { key: "uploaded_at", direction: "desc" };
         let radnaiDebugHistory = [];
@@ -822,6 +49,8 @@
         let archiveCurrentFolder = null;
         let archiveFolders = [];
         let archiveVideos = [];
+        let clipAnalyticsLoaded = false;
+        const analyticsNumberFormatter = new Intl.NumberFormat("hu-HU");
 
         function handleSortChange(key) {
           if (!sortableKeys.has(key)) {
@@ -1012,61 +241,7 @@
           return;
         }
 
-        const loadUsers = async () => {
-          setUsersStatus(usersStatus, "Felhasználók betöltése folyamatban...");
-          if (savePermissionsBtn) {
-            savePermissionsBtn.disabled = true;
-          }
-
-          try {
-            const users = await fetchUsers();
-            renderUserList(users, userListContainer, savePermissionsBtn);
-            usersLoaded = true;
-            setUsersStatus(usersStatus, `${users.length} felhasználó betöltve.`);
-          } catch (error) {
-            console.error("Felhasználók betöltési hiba:", error);
-            setUsersStatus(usersStatus, error.message || "Nem sikerült betölteni a felhasználókat.", true);
-          }
-        };
-
-        const savePermissions = async () => {
-          const { updates, invalidEntries } = collectPermissionUpdates(userListContainer);
-
-          if (invalidEntries.length > 0) {
-            setUsersStatus(
-              usersStatus,
-              `Adj meg pozitív limiteket a következő felhasználóknál: ${invalidEntries.join(", ")}.`,
-              true
-            );
-            return;
-          }
-
-          if (updates.length === 0) {
-            setUsersStatus(usersStatus, "Nincs mentésre váró felhasználói adat.", true);
-            return;
-          }
-
-          const originalText = savePermissionsBtn?.textContent || "Változtatások mentése";
-          if (savePermissionsBtn) {
-            savePermissionsBtn.disabled = true;
-            savePermissionsBtn.textContent = "Mentés folyamatban...";
-          }
-          setUsersStatus(usersStatus, "Jogosultságok mentése folyamatban...");
-
-          try {
-            const result = await updateUserPermissions(updates);
-            setUsersStatus(usersStatus, result?.message || "Jogosultságok sikeresen frissítve.");
-            await loadUsers();
-          } catch (error) {
-            console.error("Jogosultságok mentési hiba:", error);
-            setUsersStatus(usersStatus, error.message || "Nem sikerült menteni a jogosultságokat.", true);
-          } finally {
-            if (savePermissionsBtn) {
-              savePermissionsBtn.disabled = false;
-              savePermissionsBtn.textContent = originalText;
-            }
-          }
-        };
+        const usersController = window.AdminUsers.createController();
 
         const loadVariant = async (variant) => {
           if (statusEl) {
@@ -1091,6 +266,197 @@
             }
           }
         };
+
+        function formatAnalyticsNumber(value) {
+          const number = Number(value);
+          return analyticsNumberFormatter.format(Number.isFinite(number) ? number : 0);
+        }
+
+        function formatAnalyticsDate(value) {
+          if (!value) return "-";
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return "-";
+          return date.toLocaleString("hu-HU", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        }
+
+        function renderAnalyticsTable(container, columns, rows) {
+          if (!container) return;
+          container.innerHTML = "";
+
+          if (!Array.isArray(rows) || rows.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "analytics-empty";
+            empty.textContent = "Nincs adat a kiválasztott időszakban.";
+            container.appendChild(empty);
+            return;
+          }
+
+          const table = document.createElement("table");
+          table.className = "analytics-table";
+          const thead = document.createElement("thead");
+          const headRow = document.createElement("tr");
+          columns.forEach((column) => {
+            const th = document.createElement("th");
+            th.textContent = column.label;
+            headRow.appendChild(th);
+          });
+          thead.appendChild(headRow);
+
+          const tbody = document.createElement("tbody");
+          rows.forEach((row) => {
+            const tr = document.createElement("tr");
+            columns.forEach((column) => {
+              const td = document.createElement("td");
+              td.textContent = column.format ? column.format(row) : row[column.key] ?? "";
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+
+          table.append(thead, tbody);
+          container.appendChild(table);
+        }
+
+        function renderAnalyticsChart(timeline, period) {
+          if (!clipAnalyticsChart) return;
+          const ctx = clipAnalyticsChart.getContext("2d");
+          if (!ctx) return;
+
+          const width = clipAnalyticsChart.width;
+          const height = clipAnalyticsChart.height;
+          ctx.clearRect(0, 0, width, height);
+
+          const items = Array.isArray(timeline) ? timeline : [];
+          const values = items.map((item) => Number(item.views) || 0);
+          const maxValue = Math.max(1, ...values);
+          const padding = { top: 28, right: 22, bottom: 48, left: 54 };
+          const chartWidth = width - padding.left - padding.right;
+          const chartHeight = height - padding.top - padding.bottom;
+
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.strokeStyle = "#e5e7eb";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(padding.left, padding.top);
+          ctx.lineTo(padding.left, padding.top + chartHeight);
+          ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+          ctx.stroke();
+
+          ctx.fillStyle = "#6b7280";
+          ctx.font = "12px Inter, sans-serif";
+          for (let i = 0; i <= 4; i += 1) {
+            const value = Math.round((maxValue / 4) * i);
+            const y = padding.top + chartHeight - (chartHeight / 4) * i;
+            ctx.fillText(formatAnalyticsNumber(value), 8, y + 4);
+            ctx.strokeStyle = "#f1f5f9";
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(padding.left + chartWidth, y);
+            ctx.stroke();
+          }
+
+          const barGap = 4;
+          const barWidth = Math.max(8, (chartWidth - barGap * Math.max(0, items.length - 1)) / Math.max(1, items.length));
+          items.forEach((item, index) => {
+            const value = Number(item.views) || 0;
+            const x = padding.left + index * (barWidth + barGap);
+            const barHeight = value > 0 ? Math.max(2, (value / maxValue) * chartHeight) : 0;
+            const y = padding.top + chartHeight - barHeight;
+            ctx.fillStyle = "#2563eb";
+            ctx.fillRect(x, y, barWidth, barHeight);
+
+            const date = new Date(item.period_start);
+            const label = period === "yearly"
+              ? date.toLocaleDateString("hu-HU", { month: "short" })
+              : String(date.getDate());
+            const shouldLabel = period === "yearly" || index === 0 || index === items.length - 1 || date.getDate() % 5 === 0;
+            if (shouldLabel) {
+              ctx.fillStyle = "#6b7280";
+              ctx.save();
+              ctx.translate(x + barWidth / 2, padding.top + chartHeight + 18);
+              ctx.rotate(-Math.PI / 5);
+              ctx.fillText(label, 0, 0);
+              ctx.restore();
+            }
+          });
+
+          ctx.fillStyle = "#111827";
+          ctx.font = "600 14px Inter, sans-serif";
+          ctx.fillText(period === "yearly" ? "Havi megtekintések" : "Napi megtekintések", padding.left, 18);
+        }
+
+        function renderClipAnalytics(data) {
+          const totals = data?.totals || {};
+          if (analyticsTotalViews) analyticsTotalViews.textContent = formatAnalyticsNumber(totals.total_views);
+          if (analyticsTotalUsers) analyticsTotalUsers.textContent = formatAnalyticsNumber(totals.total_users);
+          if (analyticsTotalClips) analyticsTotalClips.textContent = formatAnalyticsNumber(totals.total_clips);
+
+          renderAnalyticsChart(data?.timeline, data?.period);
+          renderAnalyticsTable(analyticsTopUsers, [
+            { label: "Felhasználó", key: "username" },
+            { label: "Megtekintés", format: (row) => formatAnalyticsNumber(row.views) },
+            { label: "Klipek", format: (row) => formatAnalyticsNumber(row.unique_clips) },
+          ], data?.topUsers);
+          renderAnalyticsTable(analyticsTopVideos, [
+            { label: "Klip", key: "title" },
+            { label: "Megtekintés", format: (row) => formatAnalyticsNumber(row.views) },
+            { label: "Nézők", format: (row) => formatAnalyticsNumber(row.unique_users) },
+          ], data?.topVideos);
+          renderAnalyticsTable(analyticsUserVideos, [
+            { label: "Felhasználó", key: "username" },
+            { label: "Klip", key: "title" },
+            { label: "Megtekintés", format: (row) => formatAnalyticsNumber(row.views) },
+            { label: "Utolsó nézés", format: (row) => formatAnalyticsDate(row.last_viewed_at) },
+          ], data?.userVideos);
+          renderAnalyticsTable(analyticsRecentViews, [
+            { label: "Időpont", format: (row) => formatAnalyticsDate(row.viewed_at) },
+            { label: "Felhasználó", key: "username" },
+            { label: "Klip", key: "title" },
+          ], data?.recentViews);
+        }
+
+        async function loadClipAnalytics() {
+          if (!clipAnalyticsStatus) return;
+          clipAnalyticsStatus.textContent = "Statisztika betöltése folyamatban...";
+          const period = clipAnalyticsPeriod?.value === "yearly" ? "yearly" : "monthly";
+          const year = Number.parseInt(clipAnalyticsYear?.value, 10) || new Date().getFullYear();
+          const month = Number.parseInt(clipAnalyticsMonth?.value, 10) || new Date().getMonth() + 1;
+          if (clipAnalyticsMonthWrap) {
+            clipAnalyticsMonthWrap.style.display = period === "yearly" ? "none" : "flex";
+          }
+
+          const params = new URLSearchParams({ period, year: String(year), month: String(month) });
+          if (clipAnalyticsRefreshBtn) {
+            clipAnalyticsRefreshBtn.disabled = true;
+          }
+
+          try {
+            const response = await fetch(`/api/admin/clip-analytics?${params.toString()}`, {
+              headers: buildAuthHeaders(),
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+              throw new Error(data?.message || "Nem sikerült lekérdezni a klip statisztikát.");
+            }
+            renderClipAnalytics(data);
+            clipAnalyticsLoaded = true;
+            clipAnalyticsStatus.textContent = "Statisztika frissítve.";
+          } catch (error) {
+            console.error("Klip statisztika hiba:", error);
+            clipAnalyticsStatus.textContent = error.message || "Nem sikerült lekérdezni a klip statisztikát.";
+          } finally {
+            if (clipAnalyticsRefreshBtn) {
+              clipAnalyticsRefreshBtn.disabled = false;
+            }
+          }
+        }
 
         const loadProcessingStatus = async () => {
           if (processingStatusText) {
@@ -1591,8 +957,12 @@
             loadVariant(variantSelect?.value || "original");
           }
 
-          if (targetId === "usersSection" && !usersLoaded) {
-            loadUsers();
+          if (targetId === "usersSection") {
+            usersController.ensureLoaded();
+          }
+
+          if (targetId === "clipAnalyticsSection" && !clipAnalyticsLoaded) {
+            loadClipAnalytics();
           }
 
           if (targetId === "processingSection") {
@@ -1635,6 +1005,45 @@
           });
         }
 
+        const now = new Date();
+        if (clipAnalyticsYear) {
+          clipAnalyticsYear.value = String(now.getFullYear());
+          clipAnalyticsYear.addEventListener("change", () => {
+            clipAnalyticsLoaded = false;
+            if (document.getElementById("clipAnalyticsSection")?.classList.contains("manager__section--active")) {
+              loadClipAnalytics();
+            }
+          });
+        }
+
+        if (clipAnalyticsMonth) {
+          clipAnalyticsMonth.value = String(now.getMonth() + 1);
+          clipAnalyticsMonth.addEventListener("change", () => {
+            clipAnalyticsLoaded = false;
+            if (document.getElementById("clipAnalyticsSection")?.classList.contains("manager__section--active")) {
+              loadClipAnalytics();
+            }
+          });
+        }
+
+        if (clipAnalyticsPeriod) {
+          clipAnalyticsPeriod.addEventListener("change", () => {
+            clipAnalyticsLoaded = false;
+            if (clipAnalyticsMonthWrap) {
+              clipAnalyticsMonthWrap.style.display = clipAnalyticsPeriod.value === "yearly" ? "none" : "flex";
+            }
+            if (document.getElementById("clipAnalyticsSection")?.classList.contains("manager__section--active")) {
+              loadClipAnalytics();
+            }
+          });
+        }
+
+        if (clipAnalyticsRefreshBtn) {
+          clipAnalyticsRefreshBtn.addEventListener("click", () => {
+            loadClipAnalytics();
+          });
+        }
+
         if (radnaiTestBtn) {
           radnaiTestBtn.addEventListener("click", () => {
             triggerRadnaiTestAlert();
@@ -1662,14 +1071,6 @@
           });
         }
 
-        if (refreshUsersBtn) {
-          refreshUsersBtn.addEventListener("click", loadUsers);
-        }
-
-        if (savePermissionsBtn) {
-          savePermissionsBtn.addEventListener("click", savePermissions);
-        }
-
         tabs.forEach((tab) => {
           tab.addEventListener("click", () => {
             const targetId = tab.dataset.target;
@@ -1678,7 +1079,7 @@
         });
 
         const savedTab = localStorage.getItem("adminActiveTab");
-        const validTabs = ["clipsSection", "usersSection", "processingSection", "movieSection", "radnaiSection", "archiveMetadataSection"];
+        const validTabs = ["clipsSection", "clipAnalyticsSection", "usersSection", "processingSection", "movieSection", "radnaiSection", "archiveMetadataSection"];
         if (savedTab && validTabs.includes(savedTab)) {
           switchSection(savedTab);
         } else {

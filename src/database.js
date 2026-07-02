@@ -110,6 +110,9 @@ async function initializeDatabase() {
     await client.query(
       'ALTER TABLE videos ADD COLUMN IF NOT EXISTS original_quality TEXT'
     );
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0'
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS discord_categories (
@@ -216,6 +219,34 @@ async function initializeDatabase() {
         PRIMARY KEY (video_id, tag_id)
       )
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS clip_likes (
+        video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (video_id, user_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS clip_views (
+        id SERIAL PRIMARY KEY,
+        video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        viewed_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_clip_views_viewed_at ON clip_views(viewed_at)'
+    );
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_clip_views_video_id ON clip_views(video_id)'
+    );
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_clip_views_user_id ON clip_views(user_id)'
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS archive_videos (

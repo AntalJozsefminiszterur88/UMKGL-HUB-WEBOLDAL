@@ -1,3 +1,5 @@
+const { registerDiscord2HttpRoutes } = require("./http-routes");
+
 function createDiscord2Module({
   app,
   io,
@@ -622,7 +624,7 @@ async function emitDiscord2InitialState(socket, userId) {
     socket.on('discord2_join', async ({ token } = {}) => {
         const user = await fetchDiscord2AuthorizedUser(token);
         if (!user) {
-            socket.emit('discord2_error', { message: 'Nincs jogosultsĂˇg a Discord 2 hasznĂˇlatĂˇhoz.' });
+            socket.emit('discord2_error', { message: 'Nincs jogosultság a Discord 2 használatához.' });
             return;
         }
 
@@ -637,8 +639,8 @@ async function emitDiscord2InitialState(socket, userId) {
             await emitDiscord2InitialState(socket, user.userId);
             broadcastDiscord2Presence();
         } catch (err) {
-            console.error('Hiba a Discord 2 Ăˇllapot kĂĽldĂ©sekor:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a Discord 2 állapot küldésekor:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -651,7 +653,7 @@ async function emitDiscord2InitialState(socket, userId) {
 
         const entry = discord2OnlineUsers.get(userId);
         if (!entry) {
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
             return;
         }
 
@@ -667,7 +669,7 @@ async function emitDiscord2InitialState(socket, userId) {
                 [numericChannelId]
             );
             if (!channelResult.rows[0]) {
-                socket.emit('discord2_error', { message: 'Csak szĂ¶veges csatornĂˇba kĂĽldhetsz ĂĽzenetet.' });
+                socket.emit('discord2_error', { message: 'Csak szöveges csatornába küldhetsz üzenetet.' });
                 return;
             }
 
@@ -683,8 +685,8 @@ async function emitDiscord2InitialState(socket, userId) {
             }
             io.emit('discord2_message_created', message);
         } catch (err) {
-            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a címkék beolvasása során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -735,7 +737,7 @@ async function emitDiscord2InitialState(socket, userId) {
 
         const numericChannelId = Number(channelId);
         if (!Number.isFinite(numericChannelId) || numericChannelId <= 0) {
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
             return;
         }
 
@@ -751,7 +753,7 @@ async function emitDiscord2InitialState(socket, userId) {
 
             const entry = discord2OnlineUsers.get(userId);
             if (!entry) {
-                socket.emit('receiver_error', { message: 'Nincs jogosultsĂˇg a fĂˇjlkĂĽldĂ©sre.' });
+                socket.emit('receiver_error', { message: 'Nincs jogosultság a fájlküldésre.' });
                 return;
             }
 
@@ -814,8 +816,8 @@ async function emitDiscord2InitialState(socket, userId) {
             emitDiscord2VoiceRoomPeers(socket, numericChannelId, userId);
             broadcastDiscord2Presence();
         } catch (err) {
-            console.error('Hiba az archĂ­vum cĂ©lmappa ellenĹ‘rzĂ©sekor:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba az archívum célmappa ellenőrzésekor:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -914,21 +916,21 @@ async function emitDiscord2InitialState(socket, userId) {
         const userId = discord2SocketUsers.get(socket.id);
         const user = userId ? discord2OnlineUsers.get(userId) : null;
         if (!user || user.isAdmin !== true) {
-            socket.emit('discord2_error', { message: 'Csak admin mĂłdosĂ­thatja a szerver beĂˇllĂ­tĂˇsait.' });
+            socket.emit('discord2_error', { message: 'Csak admin módosíthatja a szerver beállításait.' });
             return;
         }
 
         const normalizedName = normalizeDiscord2ServerName(name);
         if (!normalizedName) {
-            socket.emit('discord2_error', { message: 'A szerver neve kĂ¶telezĹ‘.' });
+            socket.emit('discord2_error', { message: 'A szerver neve kötelező.' });
             return;
         }
 
         try {
             await updateDiscord2ServerSettings({ name: normalizedName });
         } catch (err) {
-            console.error('Hiba a Discord 2 szerverbeĂˇllĂ­tĂˇs mentĂ©sekor:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a Discord 2 szerverbeállítás mentésekor:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -936,13 +938,13 @@ async function emitDiscord2InitialState(socket, userId) {
         const userId = discord2SocketUsers.get(socket.id);
         const user = userId ? discord2OnlineUsers.get(userId) : null;
         if (!user || user.isAdmin !== true) {
-            socket.emit('discord2_error', { message: 'Csak admin hozhat lĂ©tre kategĂłriĂˇt.' });
+            socket.emit('discord2_error', { message: 'Csak admin hozhat létre kategóriát.' });
             return;
         }
 
         const categoryName = normalizeDiscord2Name(name, 60);
         if (!categoryName) {
-            socket.emit('discord2_error', { message: 'A kategĂłria neve kĂ¶telezĹ‘.' });
+            socket.emit('discord2_error', { message: 'A kategória neve kötelező.' });
             return;
         }
 
@@ -957,8 +959,8 @@ async function emitDiscord2InitialState(socket, userId) {
             );
             await broadcastDiscord2Structure();
         } catch (err) {
-            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a címkék beolvasása során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -966,14 +968,14 @@ async function emitDiscord2InitialState(socket, userId) {
         const userId = discord2SocketUsers.get(socket.id);
         const user = userId ? discord2OnlineUsers.get(userId) : null;
         if (!user || user.isAdmin !== true) {
-            socket.emit('discord2_error', { message: 'Csak admin nevezhet Ăˇt kategĂłriĂˇt.' });
+            socket.emit('discord2_error', { message: 'Csak admin nevezhet át kategóriát.' });
             return;
         }
 
         const numericCategoryId = Number(categoryId);
         const categoryName = normalizeDiscord2Name(name, 60);
         if (!Number.isFinite(numericCategoryId) || numericCategoryId <= 0 || !categoryName) {
-            socket.emit('discord2_error', { message: 'Ă‰rvĂ©nytelen kategĂłria adatok.' });
+            socket.emit('discord2_error', { message: 'Érvénytelen kategória adatok.' });
             return;
         }
 
@@ -984,8 +986,8 @@ async function emitDiscord2InitialState(socket, userId) {
             );
             await broadcastDiscord2Structure();
         } catch (err) {
-            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a címkék beolvasása során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -993,13 +995,13 @@ async function emitDiscord2InitialState(socket, userId) {
         const userId = discord2SocketUsers.get(socket.id);
         const user = userId ? discord2OnlineUsers.get(userId) : null;
         if (!user || user.isAdmin !== true) {
-            socket.emit('discord2_error', { message: 'Csak admin tĂ¶rĂ¶lhet kategĂłriĂˇt.' });
+            socket.emit('discord2_error', { message: 'Csak admin törölhet kategóriát.' });
             return;
         }
 
         const numericCategoryId = Number(categoryId);
         if (!Number.isFinite(numericCategoryId) || numericCategoryId <= 0) {
-            socket.emit('discord2_error', { message: 'Ă‰rvĂ©nytelen kategĂłria azonosĂ­tĂł.' });
+            socket.emit('discord2_error', { message: 'Érvénytelen kategória azonosító.' });
             return;
         }
 
@@ -1025,8 +1027,8 @@ async function emitDiscord2InitialState(socket, userId) {
             }
             await broadcastDiscord2Structure();
         } catch (err) {
-            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a címkék beolvasása során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -1034,7 +1036,7 @@ async function emitDiscord2InitialState(socket, userId) {
         const userId = discord2SocketUsers.get(socket.id);
         const user = userId ? discord2OnlineUsers.get(userId) : null;
         if (!user || user.isAdmin !== true) {
-            socket.emit('discord2_error', { message: 'Csak admin hozhat lĂ©tre csatornĂˇt.' });
+            socket.emit('discord2_error', { message: 'Csak admin hozhat létre csatornát.' });
             return;
         }
 
@@ -1042,14 +1044,14 @@ async function emitDiscord2InitialState(socket, userId) {
         const channelType = type === 'voice' ? 'voice' : 'text';
         const numericCategoryId = Number(categoryId);
         if (!channelName || !Number.isFinite(numericCategoryId) || numericCategoryId <= 0) {
-            socket.emit('discord2_error', { message: 'Ă‰rvĂ©nytelen csatorna adatok.' });
+            socket.emit('discord2_error', { message: 'Érvénytelen csatorna adatok.' });
             return;
         }
 
         try {
             const categoryResult = await db.query('SELECT id FROM discord_categories WHERE id = $1', [numericCategoryId]);
             if (!categoryResult.rows?.[0]?.id) {
-                socket.emit('discord2_error', { message: 'A kategĂłria nem talĂˇlhatĂł.' });
+                socket.emit('discord2_error', { message: 'A kategória nem található.' });
                 return;
             }
 
@@ -1065,8 +1067,8 @@ async function emitDiscord2InitialState(socket, userId) {
             );
             await broadcastDiscord2Structure();
         } catch (err) {
-            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a címkék beolvasása során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -1074,14 +1076,14 @@ async function emitDiscord2InitialState(socket, userId) {
         const userId = discord2SocketUsers.get(socket.id);
         const user = userId ? discord2OnlineUsers.get(userId) : null;
         if (!user || user.isAdmin !== true) {
-            socket.emit('discord2_error', { message: 'Csak admin nevezhet Ăˇt csatornĂˇt.' });
+            socket.emit('discord2_error', { message: 'Csak admin nevezhet át csatornát.' });
             return;
         }
 
         const numericChannelId = Number(channelId);
         const channelName = normalizeDiscord2Name(name, 60);
         if (!Number.isFinite(numericChannelId) || numericChannelId <= 0 || !channelName) {
-            socket.emit('discord2_error', { message: 'Ă‰rvĂ©nytelen csatorna adatok.' });
+            socket.emit('discord2_error', { message: 'Érvénytelen csatorna adatok.' });
             return;
         }
 
@@ -1092,8 +1094,8 @@ async function emitDiscord2InitialState(socket, userId) {
             );
             await broadcastDiscord2Structure();
         } catch (err) {
-            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a címkék beolvasása során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -1101,13 +1103,13 @@ async function emitDiscord2InitialState(socket, userId) {
         const userId = discord2SocketUsers.get(socket.id);
         const user = userId ? discord2OnlineUsers.get(userId) : null;
         if (!user || user.isAdmin !== true) {
-            socket.emit('discord2_error', { message: 'Csak admin tĂ¶rĂ¶lhet csatornĂˇt.' });
+            socket.emit('discord2_error', { message: 'Csak admin törölhet csatornát.' });
             return;
         }
 
         const numericChannelId = Number(channelId);
         if (!Number.isFinite(numericChannelId) || numericChannelId <= 0) {
-            socket.emit('discord2_error', { message: 'Ă‰rvĂ©nytelen csatorna azonosĂ­tĂł.' });
+            socket.emit('discord2_error', { message: 'Érvénytelen csatorna azonosító.' });
             return;
         }
 
@@ -1118,7 +1120,7 @@ async function emitDiscord2InitialState(socket, userId) {
             );
             const channel = channelResult.rows?.[0];
             if (!channel) {
-                socket.emit('discord2_error', { message: 'A csatorna nem talĂˇlhatĂł.' });
+                socket.emit('discord2_error', { message: 'A csatorna nem található.' });
                 return;
             }
 
@@ -1133,8 +1135,8 @@ async function emitDiscord2InitialState(socket, userId) {
 
             await broadcastDiscord2Structure();
         } catch (err) {
-            console.error('Hiba a cĂ­mkĂ©k beolvasĂˇsa sorĂˇn:', err);
-            socket.emit('receiver_error', { message: 'Nem sikerĂĽlt regisztrĂˇlni fogadĂłkĂ©nt.' });
+            console.error('Hiba a címkék beolvasása során:', err);
+            socket.emit('receiver_error', { message: 'Nem sikerült regisztrálni fogadóként.' });
         }
     });
 
@@ -1163,192 +1165,26 @@ async function emitDiscord2InitialState(socket, userId) {
     });
   }
 
-const discord2ServerLogoStorage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-        cb(null, discord2UploadsDirectory);
-    },
-    filename: (_req, file, cb) => {
-        const uniqueName = `server-logo-${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname || '.png')}`;
-        cb(null, uniqueName);
-    },
-});
 
-const uploadDiscord2ServerLogo = multer({
-    storage: discord2ServerLogoStorage,
-    limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (_req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png|gif|webp/;
-        const mimetype = allowedTypes.test(file.mimetype);
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        if (mimetype && extname) {
-            return cb(null, true);
-        }
-        cb(new Error('Csak kĂ©pfĂˇjlok tĂ¶lthetĹ‘k fel (jpeg, jpg, png, gif, webp).'));
-    },
-}).single('logo');
-
-const discord2MessageAttachmentStorage = multer.diskStorage({
-    destination: (_req, file, cb) => {
-        const attachmentKind = getDiscord2MessageAttachmentKindFromFile(file);
-        if (!attachmentKind) {
-            cb(new Error('Csak kep vagy lejatszhato video toltheto fel.'));
-            return;
-        }
-
-        cb(null, getDiscord2MessageAttachmentDirectory(attachmentKind));
-    },
-    filename: (_req, file, cb) => {
-        const attachmentKind = getDiscord2MessageAttachmentKindFromFile(file);
-        if (!attachmentKind) {
-            cb(new Error('Ervenytelen Discord 2 media fajl.'));
-            return;
-        }
-
-        const extension = path.extname(String(file.originalname || '')).toLowerCase();
-        const uniqueName = `${attachmentKind}-${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
-        cb(null, uniqueName);
-    },
-});
-
-const uploadDiscord2MessageAttachment = multer({
-    storage: discord2MessageAttachmentStorage,
-    limits: { fileSize: DISCORD2_MESSAGE_UPLOAD_MAX_BYTES },
-    fileFilter: (_req, file, cb) => {
-        if (getDiscord2MessageAttachmentKindFromFile(file)) {
-            return cb(null, true);
-        }
-        cb(new Error('Csak kep vagy lejatszhato video toltheto fel.'));
-    },
-}).single('file');
-
-app.post('/api/discord2/messages/upload', authenticateToken, (req, res) => {
-    uploadDiscord2MessageAttachment(req, res, async (uploadErr) => {
-        if (uploadErr) {
-            if (uploadErr instanceof multer.MulterError) {
-                const message = uploadErr.code === 'LIMIT_FILE_SIZE'
-                    ? 'A fajl merete nem haladhatja meg a 12MB-ot.'
-                    : 'Feltoltesi hiba.';
-                return res.status(400).json({ message });
-            }
-            return res.status(400).json({ message: uploadErr.message });
-        }
-
-        const cleanupUploadedFile = async () => {
-            if (!req.file?.path) {
-                return;
-            }
-            try {
-                await fs.promises.unlink(req.file.path);
-            } catch (error) {
-                if (error?.code !== 'ENOENT') {
-                    console.error('Hiba a Discord 2 media rollback kozben:', error);
-                }
-            }
-        };
-
-        try {
-            const user = await fetchDiscord2AuthorizedUserById(req.user?.id);
-            if (!user) {
-                await cleanupUploadedFile();
-                return res.status(403).json({ message: 'Nincs jogosultsag a Discord 2 hasznalatahoz.' });
-            }
-
-            const numericChannelId = Number(req.body?.channelId);
-            const normalizedContent = String(req.body?.content || '').trim().slice(0, 4000);
-            if (!Number.isFinite(numericChannelId) || numericChannelId <= 0) {
-                await cleanupUploadedFile();
-                return res.status(400).json({ message: 'Ervenytelen csatorna.' });
-            }
-
-            if (!req.file) {
-                return res.status(400).json({ message: 'Nincs feltoltott fajl.' });
-            }
-
-            const channelResult = await db.query(
-                "SELECT id FROM discord_channels WHERE id = $1 AND type = 'text'",
-                [numericChannelId]
-            );
-            if (!channelResult.rows[0]) {
-                await cleanupUploadedFile();
-                return res.status(400).json({ message: 'Csak szoveges csatornaba kuldhetsz media uzenetet.' });
-            }
-
-            const attachmentKind = getDiscord2MessageAttachmentKindFromFile(req.file);
-            if (!attachmentKind) {
-                await cleanupUploadedFile();
-                return res.status(400).json({ message: 'Csak kep vagy lejatszhato video toltheto fel.' });
-            }
-
-            const message = await insertDiscord2Message({
-                channelId: numericChannelId,
-                userId: user.userId,
-                authorName: user.username,
-                content: normalizedContent,
-                attachment: {
-                    kind: attachmentKind,
-                    filename: req.file.filename,
-                    originalName: req.file.originalname,
-                    mimeType: req.file.mimetype,
-                    sizeBytes: req.file.size,
-                },
-            });
-
-            if (!message) {
-                await cleanupUploadedFile();
-                return res.status(400).json({ message: 'Ures uzenetet nem lehet kuldeni.' });
-            }
-
-            io.emit('discord2_message_created', message);
-            return res.status(201).json({ message: 'Discord 2 media uzenet elmentve.', createdMessage: message });
-        } catch (error) {
-            await cleanupUploadedFile();
-            console.error('Hiba a Discord 2 media feltoltesekor:', error);
-            return res.status(500).json({ message: 'Nem sikerult feltolteni a fajlt.' });
-        }
-    });
-});
-
-app.post('/api/discord2/server-logo', authenticateToken, isAdmin, (req, res) => {
-    uploadDiscord2ServerLogo(req, res, async (uploadErr) => {
-        if (uploadErr) {
-            if (uploadErr instanceof multer.MulterError) {
-                const message = uploadErr.code === 'LIMIT_FILE_SIZE'
-                    ? 'A kĂ©pfĂˇjl mĂ©rete nem haladhatja meg az 5MB-ot.'
-                    : 'FeltĂ¶ltĂ©si hiba.';
-                return res.status(400).json({ message });
-            }
-            return res.status(400).json({ message: uploadErr.message });
-        }
-
-        if (!req.file) {
-            return res.status(400).json({ message: 'Nincs fĂˇjl feltĂ¶ltve.' });
-        }
-
-        const oldFilename = normalizeDiscord2LogoFilename(app.settings?.[DISCORD2_SERVER_LOGO_KEY]);
-        const newFilename = normalizeDiscord2LogoFilename(req.file.filename);
-
-        try {
-            const payload = await updateDiscord2ServerSettings({ logoFilename: newFilename });
-
-            if (oldFilename && oldFilename !== newFilename) {
-                const oldPath = path.join(discord2UploadsDirectory, oldFilename);
-                fs.unlink(oldPath, (unlinkErr) => {
-                    if (unlinkErr && unlinkErr.code !== 'ENOENT') {
-                        console.error('Hiba a rĂ©gi Discord 2 szerverlogĂł tĂ¶rlĂ©sekor:', unlinkErr);
-                    }
-                });
-            }
-
-            res.status(200).json({
-                message: 'SzerverlogĂł sikeresen frissĂ­tve.',
-                ...payload,
-            });
-        } catch (err) {
-            console.error('Hiba a Discord 2 szerverlogĂł mentĂ©sekor:', err);
-            res.status(500).json({ message: 'Nem sikerĂĽlt menteni a szerverlogĂłt.' });
-        }
-    });
-});
+  registerDiscord2HttpRoutes({
+    app,
+    io,
+    db,
+    fs,
+    path,
+    multer,
+    authenticateToken,
+    isAdmin,
+    discord2UploadsDirectory,
+    messageUploadMaxBytes: DISCORD2_MESSAGE_UPLOAD_MAX_BYTES,
+    serverLogoSettingKey: DISCORD2_SERVER_LOGO_KEY,
+    getAttachmentKind: getDiscord2MessageAttachmentKindFromFile,
+    getAttachmentDirectory: getDiscord2MessageAttachmentDirectory,
+    normalizeLogoFilename: normalizeDiscord2LogoFilename,
+    fetchAuthorizedUserById: fetchDiscord2AuthorizedUserById,
+    insertMessage: insertDiscord2Message,
+    updateServerSettings: updateDiscord2ServerSettings,
+  });
 
 
   return {
