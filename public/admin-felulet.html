@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin felület</title>
     <link rel="icon" type="image/png" href="program_icons/oldal_logo.png" />
-    <link rel="stylesheet" href="css/video-kezeles-felulet.css?v=20260701-clip-analytics-1" />
+    <link rel="stylesheet" href="css/video-kezeles-felulet.css?v=20260703-archive-pager-1" />
   </head>
   <body>
     <a href="/" class="back-link"><span>←</span> Vissza a főoldalra</a>
@@ -48,10 +48,15 @@
           <div class="analytics-window">
             <div class="process-window__header">
               <div>
-                <h2>Klip nézettségi statisztika</h2>
-                <p class="process-window__subtitle">Megtekintések időrendben, felhasználók és klipek szerinti bontásban.</p>
+                <h2 id="analyticsTitle">Klip nézettségi statisztika</h2>
+                <p id="analyticsSubtitle" class="process-window__subtitle">Megtekintések időrendben, felhasználók és klipek szerinti bontásban.</p>
               </div>
               <button id="clipAnalyticsRefreshBtn" class="process-window__refresh" type="button">Frissítés</button>
+            </div>
+
+            <div class="analytics-subtabs" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 12px;">
+              <button id="clipAnalyticsSubtabBtn" class="manager__tab manager__tab--active" type="button" style="padding: 6px 12px; font-size: 13px;">Klippek nézettsége</button>
+              <button id="archiveAnalyticsSubtabBtn" class="manager__tab" type="button" style="padding: 6px 12px; font-size: 13px;">Archívum nézettség</button>
             </div>
 
             <div class="analytics-controls">
@@ -90,7 +95,7 @@
             <div class="analytics-summary">
               <div class="analytics-summary__card"><span>Megtekintések</span><strong id="analyticsTotalViews">0</strong></div>
               <div class="analytics-summary__card"><span>Nézők</span><strong id="analyticsTotalUsers">0</strong></div>
-              <div class="analytics-summary__card"><span>Megnézett klipek</span><strong id="analyticsTotalClips">0</strong></div>
+              <div class="analytics-summary__card"><span id="analyticsTotalClipsLabel">Megnézett klipek</span><strong id="analyticsTotalClips">0</strong></div>
             </div>
 
             <div class="analytics-chart-card">
@@ -103,11 +108,11 @@
                 <div id="analyticsTopUsers"></div>
               </div>
               <div class="analytics-table-card">
-                <h3>Legnézettebb klipek</h3>
+                <h3 id="analyticsTopVideosLabel">Legnézettebb klipek</h3>
                 <div id="analyticsTopVideos"></div>
               </div>
               <div class="analytics-table-card analytics-table-card--wide">
-                <h3>Ki milyen klipeket nézett</h3>
+                <h3 id="analyticsUserVideosLabel">Ki milyen klipeket nézett</h3>
                 <div id="analyticsUserVideos"></div>
               </div>
               <div class="analytics-table-card analytics-table-card--wide">
@@ -199,7 +204,7 @@
             <div class="process-window__header">
               <div>
                 <h2>Archívum Metadata Szerkesztő</h2>
-                <p class="process-window__subtitle">Navigálj a mappákban (dupla kattintással), és módosítsd a videók metaadat dátumát.</p>
+                <p class="process-window__subtitle">Navigálj a mappákban (dupla kattintással), és módosítsd a videók metaadat dátumát vagy mappáját.</p>
               </div>
               <div class="archive-meta-controls">
                 <button id="archiveMetaBackBtn" class="process-window__refresh" style="display: none;" type="button">Vissza a mappákhoz</button>
@@ -214,18 +219,24 @@
                 <table class="clip-window__table" id="archiveMetaTable">
                   <thead>
                     <tr>
-                      <th style="width: 50%;">Név</th>
-                      <th style="width: 15%;">Típus</th>
-                      <th style="width: 20%;">Metadata dátum</th>
-                      <th style="width: 15%;">Művelet</th>
+                      <th style="width: 38%;">Név</th>
+                      <th style="width: 10%;">Típus</th>
+                      <th style="width: 18%;">Metadata dátum</th>
+                      <th style="width: 18%;">Célmappa</th>
+                      <th style="width: 16%;">Művelet</th>
                     </tr>
                   </thead>
                   <tbody id="archiveMetaBody">
                     <tr>
-                      <td colspan="4" class="clip-window__status">Mappák betöltése folyamatban...</td>
+                      <td colspan="5" class="clip-window__status">Mappák betöltése folyamatban...</td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+              <div id="archiveMetaPager" class="archive-meta-pager" style="display: none;">
+                <button id="archiveMetaPrevPageBtn" class="archive-meta-btn" type="button">Előző</button>
+                <span id="archiveMetaPageInfo" class="archive-meta-pager__info"></span>
+                <button id="archiveMetaNextPageBtn" class="archive-meta-btn" type="button">Következő</button>
               </div>
             </div>
           </div>
@@ -235,6 +246,6 @@
 
     <script src="js/admin/core.js?v=20260701-clip-analytics-1"></script>
     <script src="js/admin/users.js?v=20260624-refactor-1"></script>
-    <script src="js/admin-felulet.js?v=20260701-clip-analytics-1"></script>
+    <script src="js/admin-felulet.js?v=20260704-archive-views-1"></script>
   </body>
 </html>

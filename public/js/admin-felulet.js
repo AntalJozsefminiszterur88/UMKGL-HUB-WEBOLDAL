@@ -33,6 +33,13 @@
         const analyticsTopVideos = document.getElementById("analyticsTopVideos");
         const analyticsUserVideos = document.getElementById("analyticsUserVideos");
         const analyticsRecentViews = document.getElementById("analyticsRecentViews");
+        const clipAnalyticsSubtabBtn = document.getElementById("clipAnalyticsSubtabBtn");
+        const archiveAnalyticsSubtabBtn = document.getElementById("archiveAnalyticsSubtabBtn");
+        const analyticsTitle = document.getElementById("analyticsTitle");
+        const analyticsSubtitle = document.getElementById("analyticsSubtitle");
+        const analyticsTotalClipsLabel = document.getElementById("analyticsTotalClipsLabel");
+        const analyticsTopVideosLabel = document.getElementById("analyticsTopVideosLabel");
+        const analyticsUserVideosLabel = document.getElementById("analyticsUserVideosLabel");
         const tabs = document.querySelectorAll(".manager__tab[data-target]");
         const sections = document.querySelectorAll(".manager__section");
         const VARIANT_STORAGE_KEY = "clipWindowVariant";
@@ -49,7 +56,14 @@
         let archiveCurrentFolder = null;
         let archiveFolders = [];
         let archiveVideos = [];
+        const ARCHIVE_META_PAGE_SIZE = 80;
+        let archiveMetaPagination = {
+          totalItems: 0,
+          totalPages: 0,
+          currentPage: 1
+        };
         let clipAnalyticsLoaded = false;
+        let activeAnalyticsTab = "clips";
         const analyticsNumberFormatter = new Intl.NumberFormat("hu-HU");
 
         function handleSortChange(key) {
@@ -398,27 +412,29 @@
           if (analyticsTotalUsers) analyticsTotalUsers.textContent = formatAnalyticsNumber(totals.total_users);
           if (analyticsTotalClips) analyticsTotalClips.textContent = formatAnalyticsNumber(totals.total_clips);
 
+          const isArchive = activeAnalyticsTab === "archive";
+
           renderAnalyticsChart(data?.timeline, data?.period);
           renderAnalyticsTable(analyticsTopUsers, [
             { label: "Felhasználó", key: "username" },
             { label: "Megtekintés", format: (row) => formatAnalyticsNumber(row.views) },
-            { label: "Klipek", format: (row) => formatAnalyticsNumber(row.unique_clips) },
+            { label: isArchive ? "Videók" : "Klipek", format: (row) => formatAnalyticsNumber(row.unique_clips) },
           ], data?.topUsers);
           renderAnalyticsTable(analyticsTopVideos, [
-            { label: "Klip", key: "title" },
+            { label: isArchive ? "Videó" : "Klip", key: "title" },
             { label: "Megtekintés", format: (row) => formatAnalyticsNumber(row.views) },
             { label: "Nézők", format: (row) => formatAnalyticsNumber(row.unique_users) },
           ], data?.topVideos);
           renderAnalyticsTable(analyticsUserVideos, [
             { label: "Felhasználó", key: "username" },
-            { label: "Klip", key: "title" },
+            { label: isArchive ? "Videó" : "Klip", key: "title" },
             { label: "Megtekintés", format: (row) => formatAnalyticsNumber(row.views) },
             { label: "Utolsó nézés", format: (row) => formatAnalyticsDate(row.last_viewed_at) },
           ], data?.userVideos);
           renderAnalyticsTable(analyticsRecentViews, [
             { label: "Időpont", format: (row) => formatAnalyticsDate(row.viewed_at) },
             { label: "Felhasználó", key: "username" },
-            { label: "Klip", key: "title" },
+            { label: isArchive ? "Videó" : "Klip", key: "title" },
           ], data?.recentViews);
         }
 
@@ -438,19 +454,20 @@
           }
 
           try {
-            const response = await fetch(`/api/admin/clip-analytics?${params.toString()}`, {
+            const apiEndpoint = activeAnalyticsTab === "archive" ? "/api/admin/archive-analytics" : "/api/admin/clip-analytics";
+            const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
               headers: buildAuthHeaders(),
             });
             const data = await response.json().catch(() => null);
             if (!response.ok) {
-              throw new Error(data?.message || "Nem sikerült lekérdezni a klip statisztikát.");
+              throw new Error(data?.message || "Nem sikerült lekérdezni a statisztikát.");
             }
             renderClipAnalytics(data);
             clipAnalyticsLoaded = true;
             clipAnalyticsStatus.textContent = "Statisztika frissítve.";
           } catch (error) {
-            console.error("Klip statisztika hiba:", error);
-            clipAnalyticsStatus.textContent = error.message || "Nem sikerült lekérdezni a klip statisztikát.";
+            console.error("Statisztika lekérdezési hiba:", error);
+            clipAnalyticsStatus.textContent = error.message || "Nem sikerült lekérdezni a statisztikát.";
           } finally {
             if (clipAnalyticsRefreshBtn) {
               clipAnalyticsRefreshBtn.disabled = false;
@@ -708,6 +725,7 @@
           const tableBody = document.getElementById("archiveMetaBody");
           const currentPathEl = document.getElementById("archiveMetaCurrentPath");
           const backBtn = document.getElementById("archiveMetaBackBtn");
+          renderArchiveMetaPager();
           
           if (!tableBody) return;
           tableBody.innerHTML = "";
@@ -715,9 +733,11 @@
           if (archiveCurrentFolder === null) {
             if (currentPathEl) currentPathEl.innerHTML = "📁 Gyökér (Mappák)";
             if (backBtn) backBtn.style.display = "none";
+            archiveMetaPagination = { totalItems: 0, totalPages: 0, currentPage: 1 };
+            renderArchiveMetaPager();
             
             if (archiveFolders.length === 0) {
-              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Nincs elérhető mappa az archívumban.</td></tr>`;
+              tableBody.innerHTML = `<tr><td colspan="5" class="clip-window__status">Nincs elérhető mappa az archívumban.</td></tr>`;
               return;
             }
             
@@ -736,6 +756,10 @@
               const dateCell = document.createElement("td");
               dateCell.textContent = "-";
               row.appendChild(dateCell);
+
+              const folderCell = document.createElement("td");
+              folderCell.textContent = "-";
+              row.appendChild(folderCell);
               
               const actionCell = document.createElement("td");
               const openBtn = document.createElement("button");
@@ -760,7 +784,7 @@
             if (backBtn) backBtn.style.display = "inline-block";
             
             if (archiveVideos.length === 0) {
-              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Nincsenek videók ebben a mappában.</td></tr>`;
+              tableBody.innerHTML = `<tr><td colspan="5" class="clip-window__status">Nincsenek videók ebben a mappában.</td></tr>`;
               return;
             }
             
@@ -780,6 +804,12 @@
               dateSpan.textContent = formatDateTime(video.content_created_at);
               dateCell.appendChild(dateSpan);
               row.appendChild(dateCell);
+
+              const folderCell = document.createElement("td");
+              const folderSpan = document.createElement("span");
+              folderSpan.textContent = video.folder_name || archiveCurrentFolder || "-";
+              folderCell.appendChild(folderSpan);
+              row.appendChild(folderCell);
               
               const actionCell = document.createElement("td");
               const editBtn = document.createElement("button");
@@ -787,11 +817,18 @@
               editBtn.className = "archive-meta-btn";
               editBtn.textContent = "✏️ Szerkesztés";
               actionCell.appendChild(editBtn);
+
+              const moveBtn = document.createElement("button");
+              moveBtn.type = "button";
+              moveBtn.className = "archive-meta-btn";
+              moveBtn.textContent = "📁 Áthelyezés";
+              actionCell.appendChild(moveBtn);
               row.appendChild(actionCell);
               
               editBtn.addEventListener("click", () => {
                 dateSpan.style.display = "none";
                 editBtn.style.display = "none";
+                moveBtn.style.display = "none";
                 
                 const dateInput = document.createElement("input");
                 dateInput.type = "text";
@@ -799,6 +836,22 @@
                 dateInput.style.width = "180px";
                 dateInput.value = formatDateTime(video.content_created_at);
                 dateCell.appendChild(dateInput);
+
+                const folderSelect = document.createElement("select");
+                folderSelect.className = "archive-meta-folder-select";
+                const folderOptions = new Set(archiveFolders);
+                if (archiveCurrentFolder) {
+                  folderOptions.add(archiveCurrentFolder);
+                }
+                folderOptions.forEach((folderName) => {
+                  const option = document.createElement("option");
+                  option.value = folderName;
+                  option.textContent = folderName;
+                  option.selected = folderName === (video.folder_name || archiveCurrentFolder);
+                  folderSelect.appendChild(option);
+                });
+                folderSpan.style.display = "none";
+                folderCell.appendChild(folderSelect);
                 
                 const saveBtn = document.createElement("button");
                 saveBtn.type = "button";
@@ -815,10 +868,13 @@
                 
                 cancelBtn.addEventListener("click", () => {
                   dateInput.remove();
+                  folderSelect.remove();
                   saveBtn.remove();
                   cancelBtn.remove();
                   dateSpan.style.display = "inline";
+                  folderSpan.style.display = "inline";
                   editBtn.style.display = "inline";
+                  moveBtn.style.display = "inline";
                 });
                 
                 saveBtn.addEventListener("click", async () => {
@@ -828,20 +884,29 @@
                     alert("Kérlek adj meg egy érvényes dátumot ebben a formátumban: ÉÉÉÉ. HH. NN. ÓÓ:PP (pl. 2018. 12. 17. 03:02)");
                     return;
                   }
+                  const selectedFolder = folderSelect.value;
+                  if (!selectedFolder) {
+                    alert("Kérlek válassz célmappát.");
+                    return;
+                  }
                   
                   dateInput.disabled = true;
+                  folderSelect.disabled = true;
                   saveBtn.disabled = true;
                   cancelBtn.disabled = true;
                   saveBtn.textContent = "Mentés...";
                   
                   try {
-                    const response = await fetch(`/api/archive/videos/${video.id}/metadata-date`, {
+                    const response = await fetch(`/api/archive/videos/${video.id}/metadata`, {
                       method: "PATCH",
                       headers: {
                         "Content-Type": "application/json",
                         ...buildAuthHeaders()
                       },
-                      body: JSON.stringify({ date: parsedDate.toISOString() })
+                      body: JSON.stringify({
+                        date: parsedDate.toISOString(),
+                        folderName: selectedFolder
+                      })
                     });
                     
                     const result = await response.json().catch(() => null);
@@ -850,13 +915,106 @@
                     }
                     
                     alert(result.message || "Sikeres mentés!");
-                    await loadArchiveVideos(archiveCurrentFolder);
+                    await loadArchiveVideos(archiveCurrentFolder, archiveMetaPagination.currentPage);
                   } catch (error) {
                     alert(error.message || "Hiba történt a mentés során.");
                     dateInput.disabled = false;
+                    folderSelect.disabled = false;
                     saveBtn.disabled = false;
                     cancelBtn.disabled = false;
                     saveBtn.textContent = "Mentés";
+                  }
+                });
+              });
+
+              moveBtn.addEventListener("click", () => {
+                editBtn.style.display = "none";
+                moveBtn.style.display = "none";
+                folderSpan.style.display = "none";
+
+                const folderSelect = document.createElement("select");
+                folderSelect.className = "archive-meta-folder-select";
+                const folderOptions = new Set(archiveFolders);
+                if (archiveCurrentFolder) {
+                  folderOptions.add(archiveCurrentFolder);
+                }
+                folderOptions.forEach((folderName) => {
+                  const option = document.createElement("option");
+                  option.value = folderName;
+                  option.textContent = folderName;
+                  option.selected = folderName === (video.folder_name || archiveCurrentFolder);
+                  folderSelect.appendChild(option);
+                });
+                folderCell.appendChild(folderSelect);
+
+                const saveMoveBtn = document.createElement("button");
+                saveMoveBtn.type = "button";
+                saveMoveBtn.className = "archive-meta-btn archive-meta-btn--save";
+                saveMoveBtn.textContent = "Áthelyez";
+
+                const cancelMoveBtn = document.createElement("button");
+                cancelMoveBtn.type = "button";
+                cancelMoveBtn.className = "archive-meta-btn archive-meta-btn--cancel";
+                cancelMoveBtn.textContent = "Mégse";
+
+                actionCell.appendChild(saveMoveBtn);
+                actionCell.appendChild(cancelMoveBtn);
+
+                const closeMoveEditor = () => {
+                  folderSelect.remove();
+                  saveMoveBtn.remove();
+                  cancelMoveBtn.remove();
+                  folderSpan.style.display = "inline";
+                  editBtn.style.display = "inline";
+                  moveBtn.style.display = "inline";
+                };
+
+                cancelMoveBtn.addEventListener("click", closeMoveEditor);
+
+                saveMoveBtn.addEventListener("click", async () => {
+                  const selectedFolder = folderSelect.value;
+                  if (!selectedFolder) {
+                    alert("Kérlek válassz célmappát.");
+                    return;
+                  }
+
+                  const currentDate = new Date(video.content_created_at);
+                  if (Number.isNaN(currentDate.getTime())) {
+                    alert("A videó jelenlegi dátuma érvénytelen, előbb javítsd a metadata dátumot.");
+                    return;
+                  }
+
+                  folderSelect.disabled = true;
+                  saveMoveBtn.disabled = true;
+                  cancelMoveBtn.disabled = true;
+                  saveMoveBtn.textContent = "Áthelyezés...";
+
+                  try {
+                    const response = await fetch(`/api/archive/videos/${video.id}/metadata`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                        ...buildAuthHeaders()
+                      },
+                      body: JSON.stringify({
+                        date: currentDate.toISOString(),
+                        folderName: selectedFolder
+                      })
+                    });
+
+                    const result = await response.json().catch(() => null);
+                    if (!response.ok) {
+                      throw new Error(result?.message || "Nem sikerült áthelyezni a videót.");
+                    }
+
+                    alert(result.message || "Sikeres áthelyezés!");
+                    await loadArchiveVideos(archiveCurrentFolder, archiveMetaPagination.currentPage);
+                  } catch (error) {
+                    alert(error.message || "Hiba történt az áthelyezés során.");
+                    folderSelect.disabled = false;
+                    saveMoveBtn.disabled = false;
+                    cancelMoveBtn.disabled = false;
+                    saveMoveBtn.textContent = "Áthelyez";
                   }
                 });
               });
@@ -866,11 +1024,30 @@
           }
         }
 
+        function renderArchiveMetaPager() {
+          const pager = document.getElementById("archiveMetaPager");
+          const info = document.getElementById("archiveMetaPageInfo");
+          const prevBtn = document.getElementById("archiveMetaPrevPageBtn");
+          const nextBtn = document.getElementById("archiveMetaNextPageBtn");
+          if (!pager || !info || !prevBtn || !nextBtn) return;
+
+          const totalPages = archiveMetaPagination.totalPages || 0;
+          const totalItems = archiveMetaPagination.totalItems || 0;
+          const currentPage = archiveMetaPagination.currentPage || 1;
+          const shouldShow = archiveCurrentFolder !== null && totalItems > ARCHIVE_META_PAGE_SIZE;
+          pager.style.display = shouldShow ? "flex" : "none";
+          if (!shouldShow) return;
+
+          info.textContent = `${currentPage}. oldal / ${totalPages} (${totalItems} videó)`;
+          prevBtn.disabled = currentPage <= 1;
+          nextBtn.disabled = currentPage >= totalPages;
+        }
+
         async function loadArchiveFolders() {
           console.log("loadArchiveFolders meghívva");
           const tableBody = document.getElementById("archiveMetaBody");
           if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Mappák betöltése folyamatban...</td></tr>`;
+              tableBody.innerHTML = `<tr><td colspan="5" class="clip-window__status">Mappák betöltése folyamatban...</td></tr>`;
           }
           
           try {
@@ -886,19 +1063,23 @@
           } catch (error) {
             console.error("Archívum mappák betöltési hiba:", error);
             if (tableBody) {
-              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status" style="color: #ffc9c9;">Hiba: ${error.message}</td></tr>`;
+              tableBody.innerHTML = `<tr><td colspan="5" class="clip-window__status" style="color: #ffc9c9;">Hiba: ${error.message}</td></tr>`;
             }
           }
         }
 
-        async function loadArchiveVideos(folder) {
+        async function loadArchiveVideos(folder, page = 1) {
           const tableBody = document.getElementById("archiveMetaBody");
           if (tableBody) {
-            tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status">Videók betöltése folyamatban...</td></tr>`;
+              tableBody.innerHTML = `<tr><td colspan="5" class="clip-window__status">Videók betöltése folyamatban...</td></tr>`;
+          }
+          const pager = document.getElementById("archiveMetaPager");
+          if (pager) {
+            pager.style.display = "none";
           }
           
           try {
-            const response = await fetch(`/api/archive/videos/folders/${encodeURIComponent(folder)}?limit=80&sort=newest`, {
+            const response = await fetch(`/api/archive/videos/folders/${encodeURIComponent(folder)}?limit=${ARCHIVE_META_PAGE_SIZE}&page=${encodeURIComponent(page)}&sort=newest`, {
               headers: buildAuthHeaders(),
             });
             const result = await response.json().catch(() => null);
@@ -906,22 +1087,30 @@
               throw new Error(result?.message || "Nem sikerült lekérdezni a videókat.");
             }
             archiveVideos = Array.isArray(result?.data) ? result.data : [];
+            archiveMetaPagination = {
+              totalItems: Number(result?.pagination?.totalItems || archiveVideos.length || 0),
+              totalPages: Number(result?.pagination?.totalPages || 1),
+              currentPage: Number(result?.pagination?.currentPage || page || 1)
+            };
             renderArchiveMetaTable();
           } catch (error) {
             console.error("Archívum videók betöltési hiba:", error);
             if (tableBody) {
-              tableBody.innerHTML = `<tr><td colspan="4" class="clip-window__status" style="color: #ffc9c9;">Hiba: ${error.message}</td></tr>`;
+              tableBody.innerHTML = `<tr><td colspan="5" class="clip-window__status" style="color: #ffc9c9;">Hiba: ${error.message}</td></tr>`;
             }
           }
         }
 
         function openFolder(folder) {
           archiveCurrentFolder = folder;
-          loadArchiveVideos(folder);
+          archiveMetaPagination = { totalItems: 0, totalPages: 0, currentPage: 1 };
+          loadArchiveVideos(folder, 1);
         }
 
         function goBackToFolders() {
           archiveCurrentFolder = null;
+          archiveMetaPagination = { totalItems: 0, totalPages: 0, currentPage: 1 };
+          renderArchiveMetaPager();
           loadArchiveFolders();
         }
 
@@ -929,7 +1118,7 @@
           if (archiveCurrentFolder === null) {
             await loadArchiveFolders();
           } else {
-            await loadArchiveVideos(archiveCurrentFolder);
+            await loadArchiveVideos(archiveCurrentFolder, archiveMetaPagination.currentPage);
           }
         }
 
@@ -1044,6 +1233,39 @@
           });
         }
 
+        if (clipAnalyticsSubtabBtn && archiveAnalyticsSubtabBtn) {
+          const switchAnalyticsTab = (tab) => {
+            if (activeAnalyticsTab === tab) return;
+            activeAnalyticsTab = tab;
+            clipAnalyticsLoaded = false;
+
+            if (tab === "archive") {
+              clipAnalyticsSubtabBtn.classList.remove("manager__tab--active");
+              archiveAnalyticsSubtabBtn.classList.add("manager__tab--active");
+
+              if (analyticsTitle) analyticsTitle.textContent = "Archívum nézettségi statisztika";
+              if (analyticsSubtitle) analyticsSubtitle.textContent = "Megtekintések időrendben, felhasználók és archív videók szerinti bontásban.";
+              if (analyticsTotalClipsLabel) analyticsTotalClipsLabel.textContent = "Megnézett videók";
+              if (analyticsTopVideosLabel) analyticsTopVideosLabel.textContent = "Legnézettebb videók";
+              if (analyticsUserVideosLabel) analyticsUserVideosLabel.textContent = "Ki milyen videókat nézett";
+            } else {
+              archiveAnalyticsSubtabBtn.classList.remove("manager__tab--active");
+              clipAnalyticsSubtabBtn.classList.add("manager__tab--active");
+
+              if (analyticsTitle) analyticsTitle.textContent = "Klip nézettségi statisztika";
+              if (analyticsSubtitle) analyticsSubtitle.textContent = "Megtekintések időrendben, felhasználók és klipek szerinti bontásban.";
+              if (analyticsTotalClipsLabel) analyticsTotalClipsLabel.textContent = "Megnézett klipek";
+              if (analyticsTopVideosLabel) analyticsTopVideosLabel.textContent = "Legnézettebb klipek";
+              if (analyticsUserVideosLabel) analyticsUserVideosLabel.textContent = "Ki milyen klipeket nézett";
+            }
+
+            loadClipAnalytics();
+          };
+
+          clipAnalyticsSubtabBtn.addEventListener("click", () => switchAnalyticsTab("clips"));
+          archiveAnalyticsSubtabBtn.addEventListener("click", () => switchAnalyticsTab("archive"));
+        }
+
         if (radnaiTestBtn) {
           radnaiTestBtn.addEventListener("click", () => {
             triggerRadnaiTestAlert();
@@ -1058,6 +1280,8 @@
 
         const archiveMetaBackBtn = document.getElementById("archiveMetaBackBtn");
         const archiveMetaRefreshBtn = document.getElementById("archiveMetaRefreshBtn");
+        const archiveMetaPrevPageBtn = document.getElementById("archiveMetaPrevPageBtn");
+        const archiveMetaNextPageBtn = document.getElementById("archiveMetaNextPageBtn");
 
         if (archiveMetaBackBtn) {
           archiveMetaBackBtn.addEventListener("click", () => {
@@ -1068,6 +1292,22 @@
         if (archiveMetaRefreshBtn) {
           archiveMetaRefreshBtn.addEventListener("click", () => {
             loadArchiveMetadata();
+          });
+        }
+
+        if (archiveMetaPrevPageBtn) {
+          archiveMetaPrevPageBtn.addEventListener("click", () => {
+            if (archiveCurrentFolder && archiveMetaPagination.currentPage > 1) {
+              loadArchiveVideos(archiveCurrentFolder, archiveMetaPagination.currentPage - 1);
+            }
+          });
+        }
+
+        if (archiveMetaNextPageBtn) {
+          archiveMetaNextPageBtn.addEventListener("click", () => {
+            if (archiveCurrentFolder && archiveMetaPagination.currentPage < archiveMetaPagination.totalPages) {
+              loadArchiveVideos(archiveCurrentFolder, archiveMetaPagination.currentPage + 1);
+            }
           });
         }
 

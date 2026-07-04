@@ -1046,6 +1046,94 @@ function buildArchiveVideoResolutionOutputPaths(video, targetHeight) {
     return { outputDir, outputPath, outputFilename, targetLabel };
 }
 
+function buildArchiveOriginalRelativeFilename(folderName, filename) {
+    const safeFolderName = normalizeArchiveFolderName(folderName);
+    const basename = path.posix.basename(String(filename || '').replace(/\\/g, '/'));
+    if (!safeFolderName || !basename || basename === '.' || basename === '..') {
+        return null;
+    }
+    return path.posix.join('archivum', 'videok', 'eredeti', safeFolderName, basename);
+}
+
+async function moveArchiveVideoFiles(video, targetFolderName) {
+    const sourceFolderName = resolveArchiveVideoFolder(video);
+    if (sourceFolderName === targetFolderName) {
+        return video.filename;
+    }
+
+    const newRelativeFilename = buildArchiveOriginalRelativeFilename(targetFolderName, video.filename);
+    if (!newRelativeFilename) {
+        throw new Error('Érvénytelen videó útvonal.');
+    }
+
+    const sourceOriginalPath = path.join(uploadsRootDirectory, video.filename);
+    const targetOriginalPath = path.join(uploadsRootDirectory, newRelativeFilename);
+    if (!sourceOriginalPath.startsWith(uploadsRootDirectory) || !targetOriginalPath.startsWith(uploadsRootDirectory)) {
+        throw new Error('Érvénytelen videó útvonal.');
+    }
+
+    const targetOriginalDir = path.dirname(targetOriginalPath);
+    await fs.promises.mkdir(targetOriginalDir, { recursive: true });
+    try {
+        await fs.promises.access(targetOriginalPath, fs.constants.F_OK);
+        throw new Error('A célmappában már létezik ilyen nevű videófájl.');
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            throw err;
+        }
+    }
+
+    const source720 = buildArchiveVideoResolutionOutputPaths(video, 720);
+    const targetVideoFor720 = { ...video, folder_name: targetFolderName, filename: newRelativeFilename };
+    const target720 = buildArchiveVideoResolutionOutputPaths(targetVideoFor720, 720);
+
+    let movedOriginal = false;
+    let moved720 = false;
+    try {
+        await fs.promises.rename(sourceOriginalPath, targetOriginalPath);
+        movedOriginal = true;
+
+        try {
+            await fs.promises.access(source720.outputPath, fs.constants.F_OK);
+            await fs.promises.mkdir(target720.outputDir, { recursive: true });
+            try {
+                await fs.promises.access(target720.outputPath, fs.constants.F_OK);
+                throw new Error('A célmappában már létezik ilyen nevű 720p videófájl.');
+            } catch (err) {
+                if (err.code !== 'ENOENT') {
+                    throw err;
+                }
+            }
+            await fs.promises.rename(source720.outputPath, target720.outputPath);
+            moved720 = true;
+        } catch (err) {
+            if (err.code !== 'ENOENT') {
+                throw err;
+            }
+        }
+    } catch (err) {
+        if (moved720) {
+            try {
+                await fs.promises.mkdir(source720.outputDir, { recursive: true });
+                await fs.promises.rename(target720.outputPath, source720.outputPath);
+            } catch (rollbackErr) {
+                console.error('Hiba a 720p videó mozgatásának visszagörgetésekor:', rollbackErr);
+            }
+        }
+        if (movedOriginal) {
+            try {
+                await fs.promises.mkdir(path.dirname(sourceOriginalPath), { recursive: true });
+                await fs.promises.rename(targetOriginalPath, sourceOriginalPath);
+            } catch (rollbackErr) {
+                console.error('Hiba az archív videó mozgatásának visszagörgetésekor:', rollbackErr);
+            }
+        }
+        throw err;
+    }
+
+    return newRelativeFilename;
+}
+
 async function deleteArchiveVideoRecord(video) {
     if (!video || !video.id) {
         return;
@@ -4208,6 +4296,81 @@ app.patch('/api/archive/videos/:id/metadata-date', authenticateToken, isAdmin, a
     }
 });
 
+app.patch('/api/archive/videos/:id/metadata', authenticateToken, isAdmin, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videó azonosító.' });
+    }
+
+    const newDate = req.body?.date;
+    if (!newDate) {
+        return res.status(400).json({ message: 'A dátum megadása kötelező.' });
+    }
+
+    const parsedDate = new Date(newDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'Érvénytelen dátum formátum.' });
+    }
+
+    const targetFolderName = normalizeArchiveFolderName(req.body?.folderName);
+    if (!targetFolderName) {
+        return res.status(400).json({ message: 'Érvénytelen célmappa.' });
+    }
+
+    const isoDate = parsedDate.toISOString();
+
+    try {
+        const targetFolderPath = resolveArchiveFolderPath(archiveCategoryMap.videok, targetFolderName);
+        if (!targetFolderPath) {
+            return res.status(400).json({ message: 'Érvénytelen célmappa.' });
+        }
+        try {
+            const targetFolderStat = await fs.promises.stat(targetFolderPath);
+            if (!targetFolderStat.isDirectory()) {
+                return res.status(404).json({ message: 'A célmappa nem található.' });
+            }
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                return res.status(404).json({ message: 'A célmappa nem található.' });
+            }
+            throw err;
+        }
+
+        const { rows } = await db.query(
+            'SELECT id, filename, folder_name, has_720p FROM archive_videos WHERE id = $1',
+            [videoId]
+        );
+        const video = rows[0];
+        if (!video) {
+            return res.status(404).json({ message: 'A videó nem található.' });
+        }
+
+        const movedFilename = await moveArchiveVideoFiles(video, targetFolderName);
+
+        await db.query(
+            'UPDATE archive_videos SET content_created_at = $1, folder_name = $2, filename = $3 WHERE id = $4',
+            [isoDate, targetFolderName, movedFilename, videoId]
+        );
+
+        const updatedVideo = { ...video, folder_name: targetFolderName, filename: movedFilename };
+        pendingMetadataWrites.set(videoId, isoDate);
+        runBackgroundMetadataWrite(videoId, updatedVideo).catch(err => {
+            console.error(`[BG-METADATA] Worker crash for ID ${videoId}:`, err);
+        });
+
+        return res.status(200).json({
+            message: 'A videó metaadatai frissítve, az áthelyezés megtörtént. A videófájlok fejlécének átírása folyamatban van a háttérben.',
+            id: videoId,
+            content_created_at: isoDate,
+            folder_name: targetFolderName,
+            filename: movedFilename
+        });
+    } catch (err) {
+        console.error('Hiba az archív videó metadata frissítésekor:', err);
+        return res.status(500).json({ message: err.message || 'Nem sikerült frissíteni az archív videó metaadatait.' });
+    }
+});
+
 app.post('/api/archive/videos/:id/thumbnail/custom', authenticateToken, isAdmin, (req, res, next) => {
     const uploader = uploadArchiveThumbnailImage.single('thumbnail');
     uploader(req, res, (err) => {
@@ -4443,6 +4606,50 @@ app.post('/api/videos/:id/view', authenticateToken, ensureClipViewPermission, as
         }
     } catch (err) {
         console.error('Hiba a klip megtekintés rögzítésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült rögzíteni a megtekintést.' });
+    }
+});
+
+app.post('/api/archive/videos/:id/view', authenticateToken, ensureArchiveViewPermission, async (req, res) => {
+    const videoId = Number.parseInt(req.params.id, 10);
+
+    if (!Number.isFinite(videoId)) {
+        return res.status(400).json({ message: 'Érvénytelen videóazonosító.' });
+    }
+
+    const userId = Number.parseInt(req.user?.id, 10);
+
+    try {
+        const client = await db.pool.connect();
+        try {
+            await client.query('BEGIN');
+            const { rows } = await client.query(
+                `UPDATE archive_videos
+                 SET view_count = COALESCE(view_count, 0) + 1
+                 WHERE id = $1
+                 RETURNING COALESCE(view_count, 0)::int AS view_count`,
+                [videoId]
+            );
+
+            if (!rows[0]) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ message: 'A videó nem található.' });
+            }
+
+            await client.query(
+                'INSERT INTO archive_views (video_id, user_id) VALUES ($1, $2)',
+                [videoId, Number.isFinite(userId) ? userId : null]
+            );
+            await client.query('COMMIT');
+            return res.status(200).json({ view_count: rows[0].view_count });
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        console.error('Hiba az archívum videó megtekintés rögzítésekor:', err);
         return res.status(500).json({ message: 'Nem sikerült rögzíteni a megtekintést.' });
     }
 });
@@ -4915,6 +5122,136 @@ app.get('/api/admin/clip-analytics', authenticateToken, isAdmin, async (req, res
     } catch (err) {
         console.error('Hiba a klip statisztika lekérdezésekor:', err);
         return res.status(500).json({ message: 'Nem sikerült lekérdezni a klip statisztikát.' });
+    }
+});
+
+app.get('/api/admin/archive-analytics', authenticateToken, isAdmin, async (req, res) => {
+    const now = new Date();
+    const requestedYear = Number.parseInt(req.query.year, 10);
+    const requestedMonth = Number.parseInt(req.query.month, 10);
+    const period = req.query.period === 'yearly' ? 'yearly' : 'monthly';
+    const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
+        ? requestedYear
+        : now.getFullYear();
+    const month = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12
+        ? requestedMonth
+        : now.getMonth() + 1;
+
+    const pad = (value) => String(value).padStart(2, '0');
+    const start = period === 'yearly'
+        ? `${year}-01-01T00:00:00.000Z`
+        : `${year}-${pad(month)}-01T00:00:00.000Z`;
+    const endYear = period === 'yearly' ? year + 1 : month === 12 ? year + 1 : year;
+    const endMonth = period === 'yearly' ? 1 : month === 12 ? 1 : month + 1;
+    const end = period === 'yearly'
+        ? `${year + 1}-01-01T00:00:00.000Z`
+        : `${endYear}-${pad(endMonth)}-01T00:00:00.000Z`;
+    const bucketUnit = period === 'yearly' ? 'month' : 'day';
+    const bucketStep = period === 'yearly' ? '1 month' : '1 day';
+
+    try {
+        const [timelineResult, topUsersResult, topVideosResult, userVideosResult, recentViewsResult, totalsResult] = await Promise.all([
+            db.query(
+                `WITH buckets AS (
+                   SELECT generate_series($1::timestamptz, $2::timestamptz - $3::interval, $3::interval) AS bucket
+                 )
+                 SELECT buckets.bucket AS period_start,
+                        COUNT(archive_views.id)::int AS views
+                 FROM buckets
+                 LEFT JOIN archive_views
+                   ON date_trunc('${bucketUnit}', archive_views.viewed_at) = buckets.bucket
+                  AND archive_views.viewed_at >= $1::timestamptz
+                  AND archive_views.viewed_at < $2::timestamptz
+                 GROUP BY buckets.bucket
+                 ORDER BY buckets.bucket`,
+                [start, end, bucketStep]
+            ),
+            db.query(
+                `SELECT COALESCE(users.id, 0)::int AS user_id,
+                        COALESCE(users.username, 'Torolt felhasznalo') AS username,
+                        COUNT(*)::int AS views,
+                        COUNT(DISTINCT archive_views.video_id)::int AS unique_clips
+                 FROM archive_views
+                 LEFT JOIN users ON users.id = archive_views.user_id
+                 WHERE archive_views.viewed_at >= $1::timestamptz
+                   AND archive_views.viewed_at < $2::timestamptz
+                 GROUP BY users.id, users.username
+                 ORDER BY views DESC, unique_clips DESC, username ASC
+                 LIMIT 25`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT archive_videos.id::int AS video_id,
+                        COALESCE(archive_videos.original_name, archive_videos.filename, 'Ismeretlen archiv video') AS title,
+                        COUNT(*)::int AS views,
+                        COUNT(DISTINCT archive_views.user_id)::int AS unique_users
+                 FROM archive_views
+                 JOIN archive_videos ON archive_videos.id = archive_views.video_id
+                 WHERE archive_views.viewed_at >= $1::timestamptz
+                   AND archive_views.viewed_at < $2::timestamptz
+                 GROUP BY archive_videos.id, archive_videos.original_name, archive_videos.filename
+                 ORDER BY views DESC, unique_users DESC, title ASC
+                 LIMIT 25`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT COALESCE(users.id, 0)::int AS user_id,
+                        COALESCE(users.username, 'Torolt felhasznalo') AS username,
+                        archive_videos.id::int AS video_id,
+                        COALESCE(archive_videos.original_name, archive_videos.filename, 'Ismeretlen archiv video') AS title,
+                        COUNT(*)::int AS views,
+                        MAX(archive_views.viewed_at) AS last_viewed_at
+                 FROM archive_views
+                 LEFT JOIN users ON users.id = archive_views.user_id
+                 JOIN archive_videos ON archive_videos.id = archive_views.video_id
+                 WHERE archive_views.viewed_at >= $1::timestamptz
+                   AND archive_views.viewed_at < $2::timestamptz
+                 GROUP BY users.id, users.username, archive_videos.id, archive_videos.original_name, archive_videos.filename
+                 ORDER BY username ASC, views DESC, last_viewed_at DESC
+                 LIMIT 200`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT archive_views.id::int AS id,
+                        archive_views.viewed_at,
+                        COALESCE(users.username, 'Torolt felhasznalo') AS username,
+                        archive_videos.id::int AS video_id,
+                        COALESCE(archive_videos.original_name, archive_videos.filename, 'Ismeretlen archiv video') AS title
+                 FROM archive_views
+                 LEFT JOIN users ON users.id = archive_views.user_id
+                 JOIN archive_videos ON archive_videos.id = archive_views.video_id
+                 WHERE archive_views.viewed_at >= $1::timestamptz
+                   AND archive_views.viewed_at < $2::timestamptz
+                 ORDER BY archive_views.viewed_at DESC
+                 LIMIT 100`,
+                [start, end]
+            ),
+            db.query(
+                `SELECT COUNT(*)::int AS total_views,
+                        COUNT(DISTINCT user_id)::int AS total_users,
+                        COUNT(DISTINCT video_id)::int AS total_clips
+                 FROM archive_views
+                 WHERE viewed_at >= $1::timestamptz
+                   AND viewed_at < $2::timestamptz`,
+                [start, end]
+            ),
+        ]);
+
+        return res.status(200).json({
+            period,
+            year,
+            month,
+            range: { start, end },
+            totals: totalsResult.rows[0] || { total_views: 0, total_users: 0, total_clips: 0 },
+            timeline: timelineResult.rows || [],
+            topUsers: topUsersResult.rows || [],
+            topVideos: topVideosResult.rows || [],
+            userVideos: userVideosResult.rows || [],
+            recentViews: recentViewsResult.rows || [],
+        });
+    } catch (err) {
+        console.error('Hiba az archivum statisztika lekérdezésekor:', err);
+        return res.status(500).json({ message: 'Nem sikerült lekérdezni az archívum statisztikát.' });
     }
 });
 

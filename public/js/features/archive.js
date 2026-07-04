@@ -3012,6 +3012,17 @@
         const resolvedSource = src || sourceFromGrid || originalSrc;
 
         setModalVideoSource(resolvedSource, originalSrc);
+        const modalLikeBtn = document.getElementById("modalLikeBtn");
+        const modalViewsSpan = videoPlayerModal?.querySelector(".video-modal__views");
+        if (modalLikeBtn) {
+          modalLikeBtn.style.display = "none";
+        }
+        if (modalViewsSpan) {
+          modalViewsSpan.style.display = "none";
+        }
+        if (typeof startClipViewProgressTracking === "function") {
+          startClipViewProgressTracking(activeVideo);
+        }
 
         videoPlayerModal.classList.add("open");
         videoPlayerModal.setAttribute("aria-hidden", "false");

@@ -1,5 +1,5 @@
 
-    const CLIENT_BUILD_VERSION = "20260624-refactor-1";
+    const CLIENT_BUILD_VERSION = "20260703-title-dot-1";
     console.info(`[UMKGL] client build ${CLIENT_BUILD_VERSION}`);
 
 
@@ -2966,6 +2966,11 @@
       function cleanVideoTitle(rawTitle) {
         if (!rawTitle) return "";
 
+        const stripKnownVideoExtension = (value) => {
+          const title = String(value || "").trim();
+          return title.replace(/\.(mp4|mkv|mov|webm|ogg|avi|m4v)$/i, "").trim();
+        };
+
         const trimmed = rawTitle.trim();
         const looksLikeMojibake = /[\u00C3\u00C2]/.test(trimmed);
         if (looksLikeMojibake) {
@@ -2973,11 +2978,11 @@
             Uint8Array.from(trimmed.split("").map((char) => char.charCodeAt(0)))
           );
           if (decoded && !decoded.includes("\uFFFD")) {
-            return decoded.replace(/\.[^.]+$/i, "").trim();
+            return stripKnownVideoExtension(decoded);
           }
         }
 
-        return trimmed.replace(/\.[^.]+$/i, "").trim();
+        return stripKnownVideoExtension(trimmed);
       }
 
       const CLIP_NAME_TAGS = ["Dávid", "Balázs"];
@@ -3097,6 +3102,25 @@
         }
       }
 
+      async function recordArchiveVideoView(video) {
+        if (!video || !Number.isFinite(Number(video.id))) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/archive/videos/${video.id}/view`, {
+            method: "POST",
+            headers: buildAuthHeaders(),
+          });
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error(data?.message || "Nem sikerült rögzíteni az archívum megtekintést.");
+          }
+        } catch (error) {
+          console.error("Archívum megtekintés rögzítési hiba:", error);
+        }
+      }
+
       function resetClipViewProgressTracking() {
         pendingClipViewState = null;
       }
@@ -3108,7 +3132,7 @@
       }
 
       function handleClipViewProgress() {
-        if (activeVideoModalContext !== "clips" || !pendingClipViewState || !modalVideoPlayer) {
+        if ((activeVideoModalContext !== "clips" && activeVideoModalContext !== "archive") || !pendingClipViewState || !modalVideoPlayer) {
           return;
         }
 
@@ -3138,7 +3162,11 @@
 
         const viewedVideo = pendingClipViewState.video;
         resetClipViewProgressTracking();
-        recordClipView(viewedVideo);
+        if (activeVideoModalContext === "archive") {
+          recordArchiveVideoView(viewedVideo);
+        } else {
+          recordClipView(viewedVideo);
+        }
       }
 
       async function toggleClipLike(video, button) {
@@ -3730,6 +3758,13 @@
         const resolvedSource = src || sourceFromGrid || originalSrc;
 
         setModalVideoSource(resolvedSource, originalSrc);
+        if (modalLikeBtn) {
+          modalLikeBtn.style.display = "inline-flex";
+        }
+        const modalViewsSpan = videoPlayerModal?.querySelector(".video-modal__views");
+        if (modalViewsSpan) {
+          modalViewsSpan.style.display = "inline-flex";
+        }
         startClipViewProgressTracking(activeVideo);
         updateModalClipStats(activeVideo);
 

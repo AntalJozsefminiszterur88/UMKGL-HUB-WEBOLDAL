@@ -286,6 +286,28 @@ async function initializeDatabase() {
     await client.query(
       'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS processing_error TEXT'
     );
+    await client.query(
+      'ALTER TABLE archive_videos ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0'
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS archive_views (
+        id SERIAL PRIMARY KEY,
+        video_id INTEGER NOT NULL REFERENCES archive_videos(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        viewed_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_archive_views_viewed_at ON archive_views(viewed_at)'
+    );
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_archive_views_video_id ON archive_views(video_id)'
+    );
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_archive_views_user_id ON archive_views(user_id)'
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS archive_tags (
