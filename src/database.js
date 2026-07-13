@@ -113,6 +113,24 @@ async function initializeDatabase() {
     await client.query(
       'ALTER TABLE videos ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0'
     );
+    await client.query(
+      "ALTER TABLE videos ADD COLUMN IF NOT EXISTS discord_share_status TEXT DEFAULT 'sent'"
+    );
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS discord_share_queued_at TIMESTAMPTZ'
+    );
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS discord_share_sent_at TIMESTAMPTZ'
+    );
+    await client.query(
+      'ALTER TABLE videos ADD COLUMN IF NOT EXISTS discord_share_error TEXT'
+    );
+    await client.query(
+      "UPDATE videos SET discord_share_status = 'sent' WHERE discord_share_status IS NULL"
+    );
+    await client.query(
+      'CREATE INDEX IF NOT EXISTS idx_videos_discord_share_queue ON videos(discord_share_status, content_created_at, id)'
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS discord_categories (

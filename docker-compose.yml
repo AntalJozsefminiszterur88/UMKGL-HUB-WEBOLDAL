@@ -14,6 +14,8 @@ services:
       - DB_STARTUP_MAX_RETRIES=120
       - DB_STARTUP_RETRY_DELAY_MS=5000
       - BOT_API_URL=http://music_bot:5050/share-video
+      - DISCORD_SHARE_GRACE_PERIOD_MS=120000
+      - DISCORD_SHARE_RETRY_DELAY_MS=300000
       - BASE_URL=https://umkgl.online 
       - UPLOADS_DIR=/usr/src/app/public/uploads
     depends_on:

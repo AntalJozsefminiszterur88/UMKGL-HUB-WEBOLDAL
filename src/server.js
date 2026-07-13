@@ -95,6 +95,14 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000; // A port, amin a szerver figyelni fog
 const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const BOT_API_URL = process.env.BOT_API_URL;
+const DISCORD_SHARE_GRACE_PERIOD_MS = Math.max(
+    0,
+    Number.parseInt(process.env.DISCORD_SHARE_GRACE_PERIOD_MS || '120000', 10) || 0
+);
+const DISCORD_SHARE_RETRY_DELAY_MS = Math.max(
+    1000,
+    Number.parseInt(process.env.DISCORD_SHARE_RETRY_DELAY_MS || '300000', 10) || 300000
+);
 const DEFAULT_UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
 const RADNAI_URL = 'https://radnaimark.hu/';
 const BOT_RADNAI_ALERT_URL = process.env.BOT_RADNAI_ALERT_URL;
@@ -150,6 +158,8 @@ ensureDirectoryExists(thumbnailsDirectory);
 
 let isProcessing = false;
 let isArchiveProcessing = false;
+let isDiscordSharing = false;
+let discordShareTimer = null;
 let cachedMovies = [];
 let lastRadnaiHash = null;
 let lastRadnaiCheck = null;
@@ -6305,6 +6315,162 @@ function build720pOutputPaths(video) {
     return buildResolutionOutputPaths(video, 720);
 }
 
+function scheduleDiscordShareQueue(delayMs = 0) {
+    if (!BOT_API_URL) {
+        return;
+    }
+
+    if (discordShareTimer) {
+        clearTimeout(discordShareTimer);
+    }
+
+    discordShareTimer = setTimeout(() => {
+        discordShareTimer = null;
+        processDiscordShareQueue().catch((err) => {
+            console.error('[DISCORD SHARE QUEUE] Nem sikerult futtatni a Discord kuldesi sort:', err);
+        });
+    }, Math.max(0, delayMs));
+}
+
+async function queueVideoForDiscordShare(videoId) {
+    if (!BOT_API_URL || !videoId) {
+        return;
+    }
+
+    await db.query(
+        `UPDATE videos
+         SET discord_share_status = 'queued',
+             discord_share_queued_at = NOW(),
+             discord_share_error = NULL
+         WHERE id = $1
+           AND discord_share_status IS DISTINCT FROM 'sent'`,
+        [videoId]
+    );
+    scheduleDiscordShareQueue(DISCORD_SHARE_GRACE_PERIOD_MS);
+}
+
+async function processDiscordShareQueue() {
+    if (!BOT_API_URL || isDiscordSharing) {
+        return;
+    }
+
+    isDiscordSharing = true;
+
+    try {
+        while (true) {
+            const { rows } = await db.query(
+                `SELECT v.id, v.filename, v.original_name, v.content_created_at, u.username
+                 FROM videos v
+                 LEFT JOIN users u ON v.uploader_id = u.id
+                 WHERE v.processing_status = 'done'
+                   AND v.discord_share_status = 'queued'
+                   AND v.discord_share_queued_at <= NOW()
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM videos recent
+                       WHERE recent.discord_share_status IN ('pending', 'queued', 'sending')
+                         AND recent.uploaded_at > NOW() - ($1 * INTERVAL '1 millisecond')
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM videos earlier
+                       WHERE (earlier.content_created_at, earlier.id) < (v.content_created_at, v.id)
+                         AND earlier.discord_share_status IN ('pending', 'queued', 'sending')
+                   )
+                 ORDER BY v.content_created_at ASC, v.id ASC
+                 LIMIT 1`,
+                [DISCORD_SHARE_GRACE_PERIOD_MS]
+            );
+
+            const video = rows[0];
+            if (!video) {
+                break;
+            }
+
+            const claimResult = await db.query(
+                `UPDATE videos
+                 SET discord_share_status = 'sending',
+                     discord_share_error = NULL
+                 WHERE id = $1
+                   AND discord_share_status = 'queued'
+                 RETURNING id`,
+                [video.id]
+            );
+
+            if (!claimResult.rowCount) {
+                continue;
+            }
+
+            const publicUrl = `${BASE_URL}/uploads/${video.filename}`;
+            const payload = {
+                url: publicUrl,
+                title: video.original_name || video.filename,
+                uploader: video.username || 'Rendszer',
+                sourceVideoId: video.id,
+                contentCreatedAt: video.content_created_at,
+            };
+
+            try {
+                const botResponse = await fetch(BOT_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                const responseBody = await botResponse.text().catch(() => '');
+                if (!botResponse.ok) {
+                    throw new Error(`Bot API ${botResponse.status}: ${responseBody || botResponse.statusText}`);
+                }
+
+                await db.query(
+                    `UPDATE videos
+                     SET discord_share_status = 'sent',
+                         discord_share_sent_at = NOW(),
+                         discord_share_error = NULL
+                     WHERE id = $1`,
+                    [video.id]
+                );
+                console.log(`[AUTOMATIC SHARE] Video ${video.id} (${payload.title}) sent to Discord bot.`);
+            } catch (botErr) {
+                const errorMessage = normalizeProcessingErrorMessage(botErr, 'Discord bot kuldesi hiba.');
+                await db.query(
+                    `UPDATE videos
+                     SET discord_share_status = 'queued',
+                         discord_share_queued_at = NOW() + ($2 * INTERVAL '1 millisecond'),
+                         discord_share_error = $3
+                     WHERE id = $1`,
+                    [video.id, DISCORD_SHARE_RETRY_DELAY_MS, errorMessage]
+                );
+                console.error(`[AUTOMATIC SHARE] Failed to send video ${video.id} to Discord bot:`, botErr);
+                scheduleDiscordShareQueue(DISCORD_SHARE_RETRY_DELAY_MS);
+                break;
+            }
+        }
+    } catch (err) {
+        console.error('[DISCORD SHARE QUEUE] Hiba a Discord kuldesi sor kezelese soran:', err);
+    } finally {
+        isDiscordSharing = false;
+    }
+
+    if (BOT_API_URL) {
+        const { rows } = await db.query(
+            `SELECT MIN(discord_share_queued_at) AS next_queued_at,
+                    MAX(uploaded_at) AS newest_upload_at
+             FROM videos
+             WHERE discord_share_status IN ('pending', 'queued', 'sending')`
+        );
+        const nextQueuedAt = rows[0]?.next_queued_at ? new Date(rows[0].next_queued_at).getTime() : null;
+        const newestUploadAt = rows[0]?.newest_upload_at ? new Date(rows[0].newest_upload_at).getTime() : null;
+        if (Number.isFinite(nextQueuedAt) || Number.isFinite(newestUploadAt)) {
+            const queueReadyIn = Number.isFinite(nextQueuedAt) ? nextQueuedAt - Date.now() : 0;
+            const batchReadyIn = Number.isFinite(newestUploadAt)
+                ? newestUploadAt + DISCORD_SHARE_GRACE_PERIOD_MS - Date.now()
+                : 0;
+            scheduleDiscordShareQueue(Math.max(1000, queueReadyIn, batchReadyIn));
+        }
+    }
+}
+
 async function processVideoQueue() {
     if (isProcessing) {
         return;
@@ -6407,29 +6573,13 @@ async function processVideoQueue() {
             );
 
             await db.query("UPDATE videos SET processing_status = 'done' WHERE id = $1", [currentVideo.id]);
-
-            // AUTOMATIC DISCORD SHARE
-            if (BOT_API_URL) {
-                try {
-                    const publicUrl = `${BASE_URL}/uploads/${currentVideo.filename}`;
-                    const payload = {
-                        url: publicUrl,
-                        title: currentVideo.original_name || currentVideo.filename,
-                        uploader: currentVideo.username || "Rendszer",
-                    };
-                    await fetch(BOT_API_URL, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload),
-                    });
-                    console.log(`[AUTOMATIC SHARE] Video ${currentVideo.id} (${payload.title}) sent to Discord bot.`);
-                } catch (botErr) {
-                    console.error(`[AUTOMATIC SHARE] Failed to send video ${currentVideo.id} to Discord bot:`, botErr);
-                }
-            }
+            await queueVideoForDiscordShare(currentVideo.id);
         } catch (processErr) {
             console.error(`Hiba a(z) ${currentVideo?.id} videó feldolgozása során:`, processErr);
-            await db.query("UPDATE videos SET processing_status = 'error' WHERE id = $1", [currentVideo.id]);
+            await db.query(
+                "UPDATE videos SET processing_status = 'error', discord_share_status = 'failed', discord_share_error = $2 WHERE id = $1",
+                [currentVideo.id, normalizeProcessingErrorMessage(processErr, 'Video feldolgozasi hiba.')]
+            );
         }
     } catch (err) {
         console.error("Hiba a feldolgozási sor kezelése során:", err);
@@ -6569,10 +6719,16 @@ async function resetInterruptedVideoProcessing() {
         const { rowCount: resetArchiveCount } = await db.query(
             "UPDATE archive_videos SET processing_status = 'pending' WHERE processing_status = 'processing'"
         );
+        const { rowCount: resetDiscordShareCount } = await db.query(
+            `UPDATE videos
+             SET discord_share_status = 'queued',
+                 discord_share_queued_at = NOW()
+             WHERE discord_share_status = 'sending'`
+        );
 
-        if (resetClipCount || resetArchiveCount) {
+        if (resetClipCount || resetArchiveCount || resetDiscordShareCount) {
             console.log(
-                `Megszakitott feldolgozasok visszaallitva: klipek=${resetClipCount || 0}, archiv=${resetArchiveCount || 0}`
+                `Megszakitott feldolgozasok visszaallitva: klipek=${resetClipCount || 0}, archiv=${resetArchiveCount || 0}, discord=${resetDiscordShareCount || 0}`
             );
         }
     } catch (err) {
@@ -6714,10 +6870,10 @@ app.post('/upload',  (req, res, next) => next(), (req, res, next) => next(), (re
 
             const storedFilename = path.posix.join('klippek', 'eredeti', folderName, filename);
             const contentCreatedAt = await getVideoCreationDate(targetFilePath, lastModified);
-            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at, file_hash, processing_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`;
+            const insertVideoQuery = `INSERT INTO videos (filename, original_name, uploader_id, content_created_at, file_hash, processing_status, discord_share_status) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`;
             let insertResult;
             try {
-                insertResult = await client.query(insertVideoQuery, [storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt, fileHash, 'pending']);
+                insertResult = await client.query(insertVideoQuery, [storedFilename, sanitizedOriginalName, uploaderId, contentCreatedAt, fileHash, 'pending', BOT_API_URL ? 'pending' : 'sent']);
             } catch (err) {
                 if (err.code === '23505') {
                     await safeUnlink(targetFilePath);
@@ -8014,6 +8170,7 @@ async function startServer() {
             setImmediate(() => {
                 processVideoQueue();
                 processArchiveVideoQueue();
+                scheduleDiscordShareQueue(DISCORD_SHARE_GRACE_PERIOD_MS);
                 startRadnaiMonitor();
             });
         });
